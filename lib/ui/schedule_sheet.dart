@@ -1,5 +1,5 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 
 import '../data/notes_repository.dart';
 import '../data/reminders.dart';
@@ -8,18 +8,28 @@ import 'format.dart';
 import 'theme.dart';
 import 'urgency.dart';
 
-/// Hoja para convertir una nota en temporal: fecha límite, desde cuándo
-/// avisar y atajos rápidos. Los avisos se programan solos al guardar.
+/// Hoja para poner las fechas de una nota temporal: un calendario pequeño
+/// para marcar el día de inicio y el de fin, y una rueda para la hora.
 Future<void> showScheduleSheet(
     BuildContext context, NotesRepository repo, String noteId,
     {DateTime? initialDue}) {
   return showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
-    constraints: const BoxConstraints(maxWidth: 560),
+    constraints: const BoxConstraints(maxWidth: 520),
     builder: (_) =>
         _ScheduleSheet(repo: repo, noteId: noteId, initialDue: initialDue),
   );
+}
+
+enum _Edge { start, end }
+
+DateTime _d(DateTime x) => DateTime(x.year, x.month, x.day);
+
+/// Redondea a múltiplos de 5 min (lo exige la rueda de la hora).
+DateTime _round5(DateTime x) {
+  final m = (x.minute / 5).round() * 5;
+  return DateTime(x.year, x.month, x.day, x.hour).add(Duration(minutes: m));
 }
 
 class _ScheduleSheet extends StatefulWidget {
@@ -34,63 +44,48 @@ class _ScheduleSheet extends StatefulWidget {
 }
 
 class _ScheduleSheetState extends State<_ScheduleSheet> {
-  DateTime? _start; // local
-  DateTime? _due; // local
+  late DateTime _start; // local
+  late DateTime _end; // local
+  _Edge _editing = _Edge.end;
+  late DateTime _month;
 
   @override
   void initState() {
     super.initState();
     final n = widget.repo.byId(widget.noteId);
-    _start = n?.remindAt?.toLocal();
-    _due = n?.dueAt?.toLocal() ?? widget.initialDue;
-    if (_due != null && _start == null && n?.dueAt == null) {
-      _start = DateTime.now();
-    }
+    final now = DateTime.now();
+    _start = _round5(n?.remindAt?.toLocal() ?? now);
+    _end = _round5(n?.dueAt?.toLocal() ??
+        widget.initialDue ??
+        DateTime(now.year, now.month, now.day + 1, 20));
+    if (_end.isBefore(_start)) _end = _start.add(const Duration(hours: 1));
+    _month = DateTime(_end.year, _end.month);
   }
 
-  DateTime _at(DateTime day, int h, [int m = 0]) =>
-      DateTime(day.year, day.month, day.day, h, m);
+  DateTime get _current => _editing == _Edge.start ? _start : _end;
 
-  void _preset(Duration offset, {int? hour}) {
-    final now = DateTime.now();
-    var d = now.add(offset);
-    if (hour != null) d = _at(d, hour);
+  void _setCurrent(DateTime v) {
     setState(() {
-      _due = d;
-      _start ??= now;
+      if (_editing == _Edge.start) {
+        _start = v;
+        if (_end.isBefore(_start)) _end = _start.add(const Duration(hours: 1));
+      } else {
+        _end = v;
+        if (_end.isBefore(_start)) _start = _end;
+      }
     });
   }
 
-  Future<DateTime?> _pick(DateTime? current) async {
-    final range = calendarRange();
-    final now = DateTime.now();
-    var initial = current ?? now;
-    if (initial.isBefore(range.first)) initial = range.first;
-    if (initial.isAfter(range.last)) initial = range.last;
-    final day = await showDatePicker(
-      context: context,
-      initialDate: initial,
-      firstDate: range.first,
-      lastDate: range.last,
-      helpText: 'Elige el día',
-    );
-    if (day == null || !mounted) return null;
-    final time = await showTimePicker(
-      context: context,
-      initialTime: TimeOfDay.fromDateTime(current ?? _at(now, 20)),
-      helpText: 'Elige la hora',
-    );
-    if (!mounted) return null;
-    final t = time ?? const TimeOfDay(hour: 20, minute: 0);
-    return _at(day, t.hour, t.minute);
+  void _pickDay(DateTime day) {
+    final c = _current;
+    _setCurrent(DateTime(day.year, day.month, day.day, c.hour, c.minute));
+    // Tras elegir el inicio, pasamos directamente a elegir el fin.
+    if (_editing == _Edge.start) setState(() => _editing = _Edge.end);
   }
 
   void _save() {
-    var start = _start;
-    final due = _due;
-    if (due != null && start != null && start.isAfter(due)) start = due;
-    widget.repo.setSchedule(widget.noteId, remindAt: start, dueAt: due);
-    if (due != null) Reminders.instance.askPermission();
+    widget.repo.setSchedule(widget.noteId, remindAt: _start, dueAt: _end);
+    Reminders.instance.askPermission();
     Navigator.pop(context);
   }
 
@@ -99,153 +94,98 @@ class _ScheduleSheetState extends State<_ScheduleSheet> {
     Navigator.pop(context);
   }
 
-  Widget _row({
-    required IconData icon,
-    required String label,
-    required DateTime? value,
-    required VoidCallback onTap,
-    VoidCallback? onClear,
-  }) {
-    final accent = Palette.accent(context);
-    return Bouncy(
-      pressedScale: 0.98,
-      child: Material(
-        color: Palette.background(context),
-        borderRadius: BorderRadius.circular(14),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(14),
-          onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-            child: Row(
-              children: [
-                Icon(icon, color: accent),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(label,
-                          style: TextStyle(
-                              fontSize: 12, color: Palette.secondary(context))),
-                      AnimatedSwitcher(
-                        duration: Anim.fast,
-                        child: Text(
-                          value == null
-                              ? 'Sin fecha'
-                              : fechaLarga(value.toUtc()),
-                          key: ValueKey(value),
-                          style: const TextStyle(
-                              fontSize: 15, fontWeight: FontWeight.w600),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                if (value != null && onClear != null)
-                  IconButton(
-                      tooltip: 'Quitar',
-                      onPressed: onClear,
-                      icon: const Icon(Icons.close, size: 18)),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final hadSchedule = widget.repo.byId(widget.noteId)?.dueAt != null;
-    final presets = <(String, VoidCallback)>[
-      ('Hoy 20:00', () => _preset(Duration.zero, hour: 20)),
-      ('Mañana 9:00', () => _preset(const Duration(days: 1), hour: 9)),
-      ('En 3 días', () => _preset(const Duration(days: 3), hour: 20)),
-      ('En 1 semana', () => _preset(const Duration(days: 7), hour: 20)),
-      ('En 1 mes', () => _preset(const Duration(days: 30), hour: 20)),
-    ];
+    final accent = Palette.accent(context);
 
     return SafeArea(
-      child: Padding(
-        padding: EdgeInsets.fromLTRB(
-            20, 0, 20, 16 + MediaQuery.viewInsetsOf(context).bottom),
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Text('Nota temporal',
-                style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800)),
-            const SizedBox(height: 4),
-            Text(
-              'Te aviso al empezar, 1 hora antes y cuando se acabe el tiempo.',
-              style: TextStyle(color: Palette.secondary(context)),
-            ),
-            const SizedBox(height: 16),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
+            const Text('Fechas',
+                style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800)),
+            const SizedBox(height: 14),
+            // Inicio / fin: tocar uno para editarlo.
+            Row(
               children: [
-                for (var i = 0; i < presets.length; i++)
-                  ActionChip(
-                    label: Text(presets[i].$1),
-                    avatar: const Icon(Icons.bolt, size: 16),
-                    onPressed: presets[i].$2,
-                  )
-                      .animate(delay: (40 * i).ms)
-                      .fadeIn(duration: Anim.medium)
-                      .slideX(begin: 0.2, curve: Anim.curve),
+                Expanded(
+                  child: _EdgeCard(
+                    label: 'Empieza',
+                    icon: Icons.play_arrow_rounded,
+                    value: _start,
+                    active: _editing == _Edge.start,
+                    color: fuseStops.first,
+                    onTap: () => setState(() {
+                      _editing = _Edge.start;
+                      _month = DateTime(_start.year, _start.month);
+                    }),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  child: Icon(Icons.arrow_forward_rounded,
+                      size: 18, color: Palette.secondary(context)),
+                ),
+                Expanded(
+                  child: _EdgeCard(
+                    label: 'Termina',
+                    icon: Icons.flag_rounded,
+                    value: _end,
+                    active: _editing == _Edge.end,
+                    color: fuseStops.last,
+                    onTap: () => setState(() {
+                      _editing = _Edge.end;
+                      _month = DateTime(_end.year, _end.month);
+                    }),
+                  ),
+                ),
               ],
             ),
-            const SizedBox(height: 16),
-            _row(
-              icon: Icons.flag_outlined,
-              label: 'Fecha límite',
-              value: _due,
-              onTap: () async {
-                final d = await _pick(_due);
-                if (d != null) {
-                  setState(() {
-                    _due = d;
-                    _start ??= DateTime.now();
-                  });
-                }
-              },
+            const SizedBox(height: 14),
+            _MiniCalendar(
+              month: _month,
+              start: _d(_start),
+              end: _d(_end),
+              accent: accent,
+              onMonth: (m) => setState(() => _month = m),
+              onPick: _pickDay,
             ),
             const SizedBox(height: 10),
-            _row(
-              icon: Icons.notifications_active_outlined,
-              label: 'Empieza / avisar desde',
-              value: _start,
-              onTap: () async {
-                final d = await _pick(_start);
-                if (d != null) setState(() => _start = d);
-              },
-              onClear: () => setState(() => _start = null),
+            _TimeWheel(
+              key: ValueKey(_editing),
+              value: _current,
+              onChanged: (t) => _setCurrent(DateTime(_current.year,
+                  _current.month, _current.day, t.hour, t.minute)),
             ),
             const SizedBox(height: 14),
-            AnimatedSize(
-              duration: Anim.medium,
-              curve: Anim.curve,
-              child: _due == null
-                  ? const SizedBox(width: double.infinity)
-                  : _Preview(start: _start, due: _due!),
-            ),
-            const SizedBox(height: 16),
+            _Preview(start: _start, end: _end),
+            const SizedBox(height: 14),
             Row(
               children: [
                 if (hadSchedule)
                   TextButton.icon(
                     onPressed: _clear,
-                    icon: const Icon(Icons.event_busy_outlined),
+                    style: TextButton.styleFrom(
+                        foregroundColor: Palette.secondary(context)),
+                    icon: const Icon(Icons.event_busy_outlined, size: 18),
                     label: const Text('Quitar fechas'),
                   ),
                 const Spacer(),
                 Bouncy(
-                  child: FilledButton.icon(
-                    onPressed: _due == null ? null : _save,
-                    icon: const Icon(Icons.check),
-                    label: const Text('Guardar'),
+                  child: FilledButton(
+                    onPressed: _save,
+                    style: FilledButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 26, vertical: 14),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14)),
+                    ),
+                    child: const Text('Guardar',
+                        style: TextStyle(fontWeight: FontWeight.w700)),
                   ),
                 ),
               ],
@@ -257,46 +197,309 @@ class _ScheduleSheetState extends State<_ScheduleSheet> {
   }
 }
 
-/// Vista previa de la barra de tiempo con las fechas elegidas.
+class _EdgeCard extends StatelessWidget {
+  const _EdgeCard({
+    required this.label,
+    required this.icon,
+    required this.value,
+    required this.active,
+    required this.color,
+    required this.onTap,
+  });
+
+  final String label;
+  final IconData icon;
+  final DateTime value;
+  final bool active;
+  final Color color;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final d = value;
+    final fecha = '${d.day} ${mesesNombre[d.month - 1].substring(0, 3)}';
+    final hora = '${d.hour}:${d.minute.toString().padLeft(2, '0')}';
+    return Bouncy(
+      pressedScale: 0.97,
+      child: GestureDetector(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: Anim.medium,
+          curve: Anim.curve,
+          padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+          decoration: BoxDecoration(
+            color: active
+                ? color.withValues(alpha: 0.12)
+                : Palette.background(context),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+                color: active ? color : Colors.transparent, width: 1.5),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(icon, size: 15, color: color),
+                  const SizedBox(width: 4),
+                  Text(label.toUpperCase(),
+                      style: TextStyle(
+                          fontSize: 10.5,
+                          letterSpacing: 1,
+                          fontWeight: FontWeight.w700,
+                          color: Palette.secondary(context))),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Text(fecha,
+                  style: const TextStyle(
+                      fontSize: 17, fontWeight: FontWeight.w800)),
+              Text(hora,
+                  style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: active ? color : Palette.secondary(context))),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Calendario compacto con el rango inicio→fin resaltado.
+class _MiniCalendar extends StatelessWidget {
+  const _MiniCalendar({
+    required this.month,
+    required this.start,
+    required this.end,
+    required this.accent,
+    required this.onMonth,
+    required this.onPick,
+  });
+
+  final DateTime month;
+  final DateTime start;
+  final DateTime end;
+  final Color accent;
+  final void Function(DateTime) onMonth;
+  final void Function(DateTime) onPick;
+
+  @override
+  Widget build(BuildContext context) {
+    final range = calendarRange();
+    final firstMonth = DateTime(range.first.year, range.first.month);
+    final lastMonth = DateTime(range.last.year, range.last.month);
+    final canPrev = month.isAfter(firstMonth);
+    final canNext = month.isBefore(lastMonth);
+    final first = DateTime(month.year, month.month, 1);
+    final gridStart = first.subtract(Duration(days: first.weekday - 1));
+    final today = _d(DateTime.now());
+    final name = mesesNombre[month.month - 1];
+    const dias = ['L', 'M', 'X', 'J', 'V', 'S', 'D'];
+    final rangeColor = accent.withValues(alpha: 0.14);
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(8, 4, 8, 8),
+      decoration: BoxDecoration(
+        color: Palette.background(context),
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  '${name[0].toUpperCase()}${name.substring(1)} ${month.year}',
+                  style: const TextStyle(
+                      fontSize: 15, fontWeight: FontWeight.w700),
+                ),
+              ),
+              IconButton(
+                visualDensity: VisualDensity.compact,
+                onPressed: canPrev
+                    ? () => onMonth(DateTime(month.year, month.month - 1))
+                    : null,
+                icon: const Icon(Icons.chevron_left),
+              ),
+              IconButton(
+                visualDensity: VisualDensity.compact,
+                onPressed: canNext
+                    ? () => onMonth(DateTime(month.year, month.month + 1))
+                    : null,
+                icon: const Icon(Icons.chevron_right),
+              ),
+            ],
+          ),
+          Row(
+            children: [
+              for (final d in dias)
+                Expanded(
+                  child: Center(
+                    child: Text(d,
+                        style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: Palette.secondary(context))),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          for (var w = 0; w < 6; w++)
+            Row(
+              children: [
+                for (var i = 0; i < 7; i++)
+                  Expanded(
+                    child: Builder(builder: (context) {
+                      final day = DateTime(gridStart.year, gridStart.month,
+                          gridStart.day + w * 7 + i);
+                      final inMonth = day.month == month.month;
+                      final inWindow = !day.isBefore(_d(range.first)) &&
+                          !day.isAfter(_d(range.last));
+                      final isStart = day == start;
+                      final isEnd = day == end;
+                      final inRange =
+                          !day.isBefore(start) && !day.isAfter(end);
+                      final edge = isStart || isEnd;
+                      return GestureDetector(
+                        onTap: inWindow ? () => onPick(day) : null,
+                        child: SizedBox(
+                          height: 38,
+                          child: Stack(
+                            alignment: Alignment.center,
+                            children: [
+                              // Franja del rango (une inicio y fin).
+                              if (inRange && start != end)
+                                Positioned.fill(
+                                  top: 5,
+                                  bottom: 5,
+                                  left: isStart ? 19 : 0,
+                                  right: isEnd ? 19 : 0,
+                                  child: ColoredBox(color: rangeColor),
+                                ),
+                              AnimatedContainer(
+                                duration: Anim.fast,
+                                width: 32,
+                                height: 32,
+                                alignment: Alignment.center,
+                                decoration: BoxDecoration(
+                                  color: edge ? accent : Colors.transparent,
+                                  shape: BoxShape.circle,
+                                  border: day == today && !edge
+                                      ? Border.all(color: accent, width: 1.2)
+                                      : null,
+                                ),
+                                child: Text(
+                                  '${day.day}',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: edge || day == today
+                                        ? FontWeight.w800
+                                        : FontWeight.w500,
+                                    color: edge
+                                        ? Palette.of(context).onAccent
+                                        : (!inWindow
+                                            ? Palette.secondary(context)
+                                                .withValues(alpha: 0.25)
+                                            : (inMonth
+                                                ? null
+                                                : Palette.secondary(context)
+                                                    .withValues(alpha: 0.5))),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    }),
+                  ),
+              ],
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Selector de hora tipo rueda (24 h, de 5 en 5 minutos).
+class _TimeWheel extends StatelessWidget {
+  const _TimeWheel({super.key, required this.value, required this.onChanged});
+  final DateTime value;
+  final void Function(DateTime) onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final fg = dark ? Colors.white : const Color(0xFF111111);
+    return Container(
+      height: 128,
+      decoration: BoxDecoration(
+        color: Palette.background(context),
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: CupertinoTheme(
+        data: CupertinoThemeData(
+          brightness: dark ? Brightness.dark : Brightness.light,
+          textTheme: CupertinoTextThemeData(
+            dateTimePickerTextStyle: TextStyle(
+                fontSize: 22, fontWeight: FontWeight.w600, color: fg),
+          ),
+        ),
+        child: CupertinoDatePicker(
+          mode: CupertinoDatePickerMode.time,
+          use24hFormat: true,
+          minuteInterval: 5,
+          initialDateTime: _round5(value),
+          onDateTimeChanged: onChanged,
+        ),
+      ),
+    );
+  }
+}
+
+/// Vista previa de la mecha con las fechas elegidas.
 class _Preview extends StatelessWidget {
-  const _Preview({required this.start, required this.due});
-  final DateTime? start;
-  final DateTime due;
+  const _Preview({required this.start, required this.end});
+  final DateTime start;
+  final DateTime end;
 
   @override
   Widget build(BuildContext context) {
     final now = DateTime.now();
-    final s = start ?? now;
-    final total = due.difference(s).inSeconds;
+    final total = end.difference(start).inSeconds;
     final p = total <= 0
         ? 1.0
-        : (now.difference(s).inSeconds / total).clamp(0.0, 1.0);
-    final color = p >= 1
-        ? const Color(0xFFE5484D)
-        : (p < 0.5
-            ? const Color(0xFF30A46C)
-            : (p < 0.8 ? const Color(0xFFF5A524) : const Color(0xFFF76B15)));
+        : (now.difference(start).inSeconds / total).clamp(0.0, 1.0);
+    final dur = end.difference(start);
+    final durTxt = dur.inDays >= 1
+        ? '${dur.inDays} d ${dur.inHours % 24} h'
+        : '${dur.inHours} h ${dur.inMinutes % 60} min';
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.10),
-        borderRadius: BorderRadius.circular(14),
+        color: Palette.background(context),
+        borderRadius: BorderRadius.circular(16),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(tiempoRestante(due.toUtc()),
-              style: TextStyle(color: color, fontWeight: FontWeight.w700)),
-          const SizedBox(height: 8),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(99),
-            child: LinearProgressIndicator(
-              value: p,
-              minHeight: 8,
-              color: color,
-              backgroundColor: color.withValues(alpha: 0.2),
-            ),
+          Row(
+            children: [
+              Text(tiempoRestante(end.toUtc()),
+                  style: TextStyle(
+                      color: fuseColor(p), fontWeight: FontWeight.w700)),
+              const Spacer(),
+              Text('dura $durTxt',
+                  style: TextStyle(
+                      color: Palette.secondary(context), fontSize: 12.5)),
+            ],
           ),
+          const SizedBox(height: 6),
+          FuseBar(progress: p, height: 7, spark: p > 0 && p < 1),
         ],
       ),
     );

@@ -35,8 +35,8 @@ class Reminders {
       const settings = InitializationSettings(
         android: AndroidInitializationSettings('@mipmap/ic_launcher'),
         windows: WindowsInitializationSettings(
-          appName: 'Notas',
-          appUserModelId: 'Rafa.Notas',
+          appName: 'BabuNotes',
+          appUserModelId: 'Rafa.BabuNotes',
           guid: '6f1c3a52-8e4b-4f6a-9d2e-7c5b1a9e3f40',
         ),
       );

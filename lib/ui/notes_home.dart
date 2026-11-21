@@ -15,6 +15,7 @@ import 'folders.dart';
 import 'format.dart';
 import 'note_editor.dart';
 import 'schedule_sheet.dart';
+import 'split.dart';
 import 'theme.dart';
 import 'theme_picker.dart';
 import 'urgency.dart';
@@ -286,31 +287,29 @@ class _NotesHomeState extends State<NotesHome> {
               final wide = c.maxWidth >= _wideBreakpoint;
 
               if (wide) {
-                final listWidth = (c.maxWidth * 0.34).clamp(300.0, 400.0);
                 return Scaffold(
-                  body: Row(
-                    children: [
-                      SizedBox(width: listWidth, child: _list(context, true)),
-                      VerticalDivider(
-                          width: 1, color: Palette.separator(context)),
-                      Expanded(
-                        child: AnimatedSwitcher(
-                          duration: Anim.medium,
-                          switchInCurve: Anim.curve,
-                          switchOutCurve: Curves.easeIn,
-                          transitionBuilder: fadeThrough,
-                          child: hasOpen
-                              ? _editor(showBack: false)
-                              : (_filter == 'calendario'
-                                  ? RepaintBoundary(
-                                      key: const ValueKey('cal'),
-                                      child: _calendar())
-                                  : _EmptyPane(
-                                      key: const ValueKey('vacio'),
-                                      onNew: _newNote)),
-                        ),
-                      ),
-                    ],
+                  body: ResizableSplit(
+                    storageKey: 'lista',
+                    initialFraction: 0.32,
+                    minLeft: 300,
+                    maxLeft: 560,
+                    minRight: 380,
+                    left: _list(context, true),
+                    right: AnimatedSwitcher(
+                      duration: Anim.medium,
+                      switchInCurve: Anim.curve,
+                      switchOutCurve: Curves.easeIn,
+                      transitionBuilder: fadeThrough,
+                      child: hasOpen
+                          ? _editor(showBack: false)
+                          : (_filter == 'calendario'
+                              ? RepaintBoundary(
+                                  key: const ValueKey('cal'),
+                                  child: _calendar())
+                              : _EmptyPane(
+                                  key: const ValueKey('vacio'),
+                                  onNew: _newNote)),
+                    ),
                   ),
                 );
               }
@@ -392,7 +391,9 @@ class _NotesHomeState extends State<NotesHome> {
       appBar: AppBar(
         centerTitle: false,
         titleSpacing: 20,
-        title: const WaveTitle().animate().fadeIn(duration: Anim.slow),
+        title: const WaveTitle(text: 'babunotes', fontSize: 30)
+            .animate()
+            .fadeIn(duration: Anim.slow),
         actions: [
           _SyncIndicator(repo: repo),
           PopupMenuButton<String>(
@@ -614,7 +615,7 @@ class _NotesHomeState extends State<NotesHome> {
         key: ValueKey('titulo-$title'),
         padding: const EdgeInsets.fromLTRB(4, 14, 4, 8),
         child: Text(title,
-            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
+            style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
       ),
       AnimatedSize(
         key: ValueKey('seccion-$title'),

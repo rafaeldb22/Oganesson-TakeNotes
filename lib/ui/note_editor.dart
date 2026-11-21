@@ -8,6 +8,7 @@ import 'package:flutter_quill/flutter_quill.dart';
 import '../data/notes_repository.dart';
 import '../models/note.dart';
 import 'anim.dart';
+import 'editor_toolbar.dart';
 import 'format.dart';
 import 'schedule_sheet.dart';
 import 'theme.dart';
@@ -136,6 +137,44 @@ class _NoteEditorState extends State<NoteEditor> {
     _focus.dispose();
     _scroll.dispose();
     super.dispose();
+  }
+
+  /// Tipografía del editor: títulos claros, texto cómodo de leer y citas
+  /// con el color del tema.
+  DefaultStyles _styles(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final fg = dark ? Colors.white : const Color(0xFF151515);
+    const h0 = HorizontalSpacing(0, 0);
+    const v0 = VerticalSpacing(0, 0);
+    DefaultTextBlockStyle block(double size, FontWeight w, double top,
+            double bottom, {double height = 1.3}) =>
+        DefaultTextBlockStyle(
+          TextStyle(fontSize: size, fontWeight: w, height: height, color: fg),
+          h0,
+          VerticalSpacing(top, bottom),
+          v0,
+          null,
+        );
+    return DefaultStyles(
+      h1: block(28, FontWeight.w800, 12, 6, height: 1.2),
+      h2: block(22, FontWeight.w700, 10, 4, height: 1.25),
+      h3: block(18, FontWeight.w700, 8, 2),
+      paragraph: block(16.5, FontWeight.w400, 2, 2, height: 1.55),
+      quote: DefaultTextBlockStyle(
+        TextStyle(
+            fontSize: 16.5,
+            height: 1.55,
+            fontStyle: FontStyle.italic,
+            color: fg.withValues(alpha: 0.75)),
+        h0,
+        const VerticalSpacing(6, 6),
+        v0,
+        BoxDecoration(
+          border: Border(
+              left: BorderSide(color: Palette.accent(context), width: 3)),
+        ),
+      ),
+    );
   }
 
   Widget _iconAction({
@@ -267,30 +306,7 @@ class _NoteEditorState extends State<NoteEditor> {
               curve: Anim.curve,
               alignment: Alignment.topCenter,
               child: _toolbarOpen
-                  ? Container(
-                      width: double.infinity,
-                      decoration: BoxDecoration(
-                        border: Border(
-                            bottom:
-                                BorderSide(color: Palette.separator(context))),
-                      ),
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
-                      child: QuillSimpleToolbar(
-                        controller: _ctrl,
-                        config: const QuillSimpleToolbarConfig(
-                          multiRowsDisplay: false,
-                          showFontFamily: false,
-                          showSearchButton: false,
-                          showSubscript: false,
-                          showSuperscript: false,
-                          showDirection: false,
-                          showClipboardCut: false,
-                          showClipboardCopy: false,
-                          showClipboardPaste: false,
-                          showInlineCode: false,
-                        ),
-                      ),
-                    )
+                  ? EditorToolbar(controller: _ctrl)
                   : const SizedBox(width: double.infinity),
             ),
             Expanded(
@@ -330,6 +346,7 @@ class _NoteEditorState extends State<NoteEditor> {
                               autoFocus: widget.autofocus,
                               expands: true,
                               padding: const EdgeInsets.only(bottom: 40),
+                              customStyles: _styles(context),
                             ),
                           ),
                         ),

@@ -15,8 +15,5 @@ if [[ "$PLAT" == *android* ]]; then
   python3 scripts/parchear_android.py
 fi
 
-if [[ "$PLAT" == *windows* && -f windows/runner/main.cpp ]]; then
-  sed -i 's/L"notas"/L"Notas"/' windows/runner/main.cpp
-fi
-
 flutter pub get
+dart run flutter_launcher_icons

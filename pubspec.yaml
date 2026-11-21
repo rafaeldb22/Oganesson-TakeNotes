@@ -20,6 +20,20 @@ dependencies:
   flutter_local_notifications: '>=19.4.0 <20.0.0'
   timezone: '>=0.10.0 <0.11.0'
 
+dev_dependencies:
+  flutter_launcher_icons: '>=0.14.0 <0.15.0'
+
+flutter_launcher_icons:
+  android: true
+  image_path: "assets/icon/icon.png"
+  adaptive_icon_background: "#17141F"
+  adaptive_icon_foreground: "assets/icon/foreground.png"
+  min_sdk_android: 21
+  windows:
+    generate: true
+    image_path: "assets/icon/icon.png"
+    icon_size: 256
+
 flutter:
   uses-material-design: true
   fonts:

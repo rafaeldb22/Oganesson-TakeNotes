@@ -5,14 +5,19 @@ import '../data/notes_repository.dart';
 import '../models/note.dart';
 import 'anim.dart';
 import 'format.dart';
+import 'split.dart';
 import 'theme.dart';
 import 'urgency.dart';
 
 DateTime _day(DateTime d) => DateTime(d.year, d.month, d.day);
 
+const _diasSemana = [
+  'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado', 'domingo'
+];
+
 /// Calendario mensual: este mes, los 3 anteriores y los 3 siguientes.
-/// Cada nota temporal se dibuja como una barra desde que empieza hasta su
-/// fecha límite, con el color según el tiempo que queda.
+/// Cada nota temporal es una barra desde que empieza hasta su fecha límite,
+/// coloreada como la mecha (menta → rojo) según el punto del periodo.
 class CalendarView extends StatefulWidget {
   const CalendarView({
     super.key,
@@ -32,15 +37,14 @@ class CalendarView extends StatefulWidget {
 }
 
 class _CalendarViewState extends State<CalendarView> {
-  static const _monthsBefore = 3;
-  late final PageController _pages =
-      PageController(initialPage: _monthsBefore);
-  int _page = _monthsBefore;
+  static const _before = 3;
+  late final PageController _pages = PageController(initialPage: _before);
+  int _page = _before;
   DateTime _selected = _day(DateTime.now());
 
   DateTime _monthAt(int page) {
     final now = DateTime.now();
-    return DateTime(now.year, now.month - _monthsBefore + page, 1);
+    return DateTime(now.year, now.month - _before + page, 1);
   }
 
   @override
@@ -49,16 +53,119 @@ class _CalendarViewState extends State<CalendarView> {
     super.dispose();
   }
 
-  void _goTo(int page) {
-    _pages.animateToPage(page,
-        duration: Anim.slow, curve: Curves.easeInOutCubic);
-  }
+  void _goTo(int page) => _pages.animateToPage(page,
+      duration: Anim.slow, curve: Curves.easeInOutCubic);
 
-  List<Note> _activeOn(List<Note> notes, DateTime day) => notes.where((n) {
+  static List<Note> activeOn(List<Note> notes, DateTime day) => notes.where((n) {
         final s = _day(n.periodStart.toLocal());
         final e = _day(n.dueAt!.toLocal());
         return !day.isBefore(s) && !day.isAfter(e);
       }).toList();
+
+  Widget _header(BuildContext context) {
+    final month = _monthAt(_page);
+    final name = mesesNombre[month.month - 1];
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 16, 12, 8),
+      child: Row(
+        children: [
+          Expanded(
+            child: AnimatedSwitcher(
+              duration: Anim.medium,
+              transitionBuilder: (c, a) => FadeTransition(
+                opacity: a,
+                child: SlideTransition(
+                  position: Tween(begin: const Offset(0, 0.3), end: Offset.zero)
+                      .animate(a),
+                  child: c,
+                ),
+              ),
+              child: RichText(
+                key: ValueKey(month),
+                text: TextSpan(
+                  style: DefaultTextStyle.of(context).style,
+                  children: [
+                    TextSpan(
+                      text: '${name[0].toUpperCase()}${name.substring(1)} ',
+                      style: const TextStyle(
+                          fontSize: 24, fontWeight: FontWeight.w800),
+                    ),
+                    TextSpan(
+                      text: '${month.year}',
+                      style: TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.w400,
+                          color: Palette.secondary(context)),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          AnimatedOpacity(
+            duration: Anim.fast,
+            opacity: _page == _before ? 0 : 1,
+            child: TextButton(
+              onPressed: _page == _before
+                  ? null
+                  : () {
+                      setState(() => _selected = _day(DateTime.now()));
+                      _goTo(_before);
+                    },
+              child: const Text('Hoy'),
+            ),
+          ),
+          const SizedBox(width: 4),
+          Container(
+            decoration: BoxDecoration(
+              color: Palette.searchFill(context),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IconButton(
+                  visualDensity: VisualDensity.compact,
+                  tooltip: 'Mes anterior',
+                  onPressed: _page > 0 ? () => _goTo(_page - 1) : null,
+                  icon: const Icon(Icons.chevron_left),
+                ),
+                IconButton(
+                  visualDensity: VisualDensity.compact,
+                  tooltip: 'Mes siguiente',
+                  onPressed: _page < _before * 2 ? () => _goTo(_page + 1) : null,
+                  icon: const Icon(Icons.chevron_right),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _weekdays(BuildContext context) {
+    const d = ['L', 'M', 'X', 'J', 'V', 'S', 'D'];
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      child: Row(
+        children: [
+          for (var i = 0; i < 7; i++)
+            Expanded(
+              child: Center(
+                child: Text(d[i],
+                    style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.5,
+                        color: Palette.secondary(context)
+                            .withValues(alpha: i >= 5 ? 0.6 : 1))),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -66,80 +173,30 @@ class _CalendarViewState extends State<CalendarView> {
       listenable: widget.repo,
       builder: (context, _) {
         final notes = widget.repo.temporales;
-        final month = _monthAt(_page);
         final accent = Palette.accent(context);
 
-        final header = Padding(
-          padding: const EdgeInsets.fromLTRB(16, 4, 8, 4),
-          child: Row(
-            children: [
-              Expanded(
-                child: AnimatedSwitcher(
-                  duration: Anim.medium,
-                  transitionBuilder: (c, a) => FadeTransition(
-                    opacity: a,
-                    child: SlideTransition(
-                      position: Tween(
-                              begin: const Offset(0, 0.4), end: Offset.zero)
-                          .animate(a),
-                      child: c,
-                    ),
-                  ),
-                  child: Text(
-                    nombreMes(month.month, month.year),
-                    key: ValueKey(month),
-                    style: const TextStyle(
-                        fontSize: 22, fontWeight: FontWeight.w800),
+        Widget grid({required double cellHeight}) => SizedBox(
+              height: cellHeight * 6,
+              child: PageView.builder(
+                controller: _pages,
+                itemCount: _before * 2 + 1,
+                onPageChanged: (p) => setState(() => _page = p),
+                itemBuilder: (context, p) => RepaintBoundary(
+                  child: _MonthGrid(
+                    month: _monthAt(p),
+                    notes: notes,
+                    selected: _selected,
+                    cellHeight: cellHeight,
+                    accent: accent,
+                    onSelect: (d) => setState(() => _selected = d),
                   ),
                 ),
               ),
-              if (_page != _monthsBefore)
-                TextButton(
-                  onPressed: () {
-                    setState(() => _selected = _day(DateTime.now()));
-                    _goTo(_monthsBefore);
-                  },
-                  child: const Text('Hoy'),
-                ).animate().fadeIn().scale(begin: const Offset(0.8, 0.8)),
-              IconButton(
-                tooltip: 'Mes anterior',
-                onPressed: _page > 0 ? () => _goTo(_page - 1) : null,
-                icon: const Icon(Icons.chevron_left),
-              ),
-              IconButton(
-                tooltip: 'Mes siguiente',
-                onPressed:
-                    _page < _monthsBefore * 2 ? () => _goTo(_page + 1) : null,
-                icon: const Icon(Icons.chevron_right),
-              ),
-            ],
-          ),
-        );
-
-        const dias = ['L', 'M', 'X', 'J', 'V', 'S', 'D'];
-        final weekdays = Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8),
-          child: Row(
-            children: [
-              for (final d in dias)
-                Expanded(
-                  child: Center(
-                    child: Text(d,
-                        style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700,
-                            color: Palette.secondary(context))),
-                  ),
-                ),
-            ],
-          ),
-        );
-
-        final selectedNotes = _activeOn(notes, _selected);
+            );
 
         final dayPanel = _DayPanel(
           day: _selected,
-          notes: selectedNotes,
+          notes: activeOn(notes, _selected),
           onOpen: widget.onOpenNote,
           onEditDates: widget.onEditDates,
           onNew: () => widget.onNewOnDay(_selected),
@@ -147,53 +204,60 @@ class _CalendarViewState extends State<CalendarView> {
         );
 
         return LayoutBuilder(builder: (context, c) {
-          final side = c.maxWidth >= 860;
-          final gridWidth = side ? c.maxWidth * 0.62 : c.maxWidth;
-          final cellH = ((gridWidth - 16) / 7 * 0.92).clamp(68.0, 104.0);
-          final gridHeight = cellH * 6 + 8;
-
-          final grid = SizedBox(
-            height: gridHeight,
-            child: PageView.builder(
-              controller: _pages,
-              itemCount: _monthsBefore * 2 + 1,
-              onPageChanged: (p) => setState(() => _page = p),
-              itemBuilder: (context, p) => RepaintBoundary(
-                child: _MonthGrid(
-                  month: _monthAt(p),
-                  notes: notes,
-                  selected: _selected,
-                  cellHeight: cellH,
-                  accent: accent,
-                  onSelect: (d) => setState(() => _selected = d),
-                ),
-              ),
-            ),
-          );
-
-          final calendar = Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [header, weekdays, const SizedBox(height: 4), grid],
-          );
+          final side = c.maxWidth >= 820;
 
           if (side) {
-            return Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                SizedBox(
-                    width: gridWidth,
-                    child: SingleChildScrollView(child: calendar)),
-                VerticalDivider(width: 1, color: Palette.separator(context)),
-                Expanded(child: dayPanel),
-              ],
+            // Calendario a la izquierda (llena el alto disponible) y las
+            // tareas del día a la derecha, con separador ajustable.
+            final calendar = LayoutBuilder(builder: (context, cc) {
+              final cellH = ((cc.maxHeight - 96) / 6).clamp(72.0, 130.0);
+              return SingleChildScrollView(
+                child: Column(
+                  children: [
+                    _header(context),
+                    _weekdays(context),
+                    const SizedBox(height: 6),
+                    grid(cellHeight: cellH),
+                    const SizedBox(height: 8),
+                  ],
+                ),
+              );
+            });
+            return ColoredBox(
+              color: Palette.card(context),
+              child: ResizableSplit(
+                storageKey: 'calendario',
+                initialFraction: 0.64,
+                minLeft: 460,
+                maxLeft: 1100,
+                minRight: 280,
+                left: RepaintBoundary(child: calendar),
+                right: RepaintBoundary(child: dayPanel),
+              ),
             );
           }
+
+          // Estrecho: calendario arriba y tareas del día debajo.
+          final cellH = ((c.maxWidth - 24) / 7 * 0.95).clamp(70.0, 88.0);
           return CustomScrollView(
             slivers: [
-              SliverToBoxAdapter(child: calendar),
               SliverToBoxAdapter(
-                  child: Divider(height: 1, color: Palette.separator(context))),
-              SliverFillRemaining(hasScrollBody: true, child: dayPanel),
+                child: Column(
+                  children: [
+                    _header(context),
+                    _weekdays(context),
+                    const SizedBox(height: 6),
+                    grid(cellHeight: cellH),
+                  ],
+                ),
+              ),
+              SliverFillRemaining(
+                hasScrollBody: true,
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: dayPanel,
+                ),
+              ),
             ],
           );
         });
@@ -219,6 +283,8 @@ class _MonthGrid extends StatelessWidget {
   final Color accent;
   final void Function(DateTime) onSelect;
 
+  static const _maxLanes = 3;
+
   @override
   Widget build(BuildContext context) {
     final first = DateTime(month.year, month.month, 1);
@@ -226,8 +292,8 @@ class _MonthGrid extends StatelessWidget {
     final gridEnd = gridStart.add(const Duration(days: 41));
     final today = _day(DateTime.now());
 
-    // Carriles: cada nota ocupa siempre la misma fila de barras para que
-    // la barra se vea continua de un día a otro.
+    // Carriles: cada nota ocupa siempre la misma fila para que su barra
+    // se vea continua de un día a otro.
     final visible = notes.where((n) {
       final s = _day(n.periodStart.toLocal());
       final e = _day(n.dueAt!.toLocal());
@@ -248,10 +314,9 @@ class _MonthGrid extends StatelessWidget {
       }
       lanes[n.id] = lane;
     }
-    const maxLanes = 3;
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12),
       child: Column(
         children: [
           for (var w = 0; w < 6; w++)
@@ -261,82 +326,92 @@ class _MonthGrid extends StatelessWidget {
                 children: [
                   for (var d = 0; d < 7; d++)
                     Expanded(
-                      child: Builder(builder: (context) {
-                        final day = DateTime(gridStart.year, gridStart.month,
-                            gridStart.day + w * 7 + d);
-                        final inMonth = day.month == month.month;
-                        final isToday = day == today;
-                        final isSel = day == selected;
-                        final dayNotes = visible.where((n) {
-                          final s = _day(n.periodStart.toLocal());
-                          final e = _day(n.dueAt!.toLocal());
-                          return !day.isBefore(s) && !day.isAfter(e);
-                        }).toList();
-                        final extra = dayNotes
-                            .where((n) => (lanes[n.id] ?? 0) >= maxLanes)
-                            .length;
-
-                        return GestureDetector(
-                          behavior: HitTestBehavior.opaque,
-                          onTap: () => onSelect(day),
-                          child: AnimatedContainer(
-                            duration: Anim.fast,
-                            margin: const EdgeInsets.all(1.5),
-                            decoration: BoxDecoration(
-                              color: isSel
-                                  ? accent.withValues(alpha: 0.14)
-                                  : Colors.transparent,
-                              borderRadius: BorderRadius.circular(10),
-                              border: isSel
-                                  ? Border.all(color: accent, width: 1.5)
-                                  : null,
-                            ),
-                            child: Column(
-                              children: [
-                                const SizedBox(height: 4),
-                                Container(
-                                  width: 26,
-                                  height: 26,
-                                  alignment: Alignment.center,
-                                  decoration: BoxDecoration(
-                                    color: isToday ? accent : null,
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: Text(
-                                    '${day.day}',
-                                    style: TextStyle(
-                                      fontSize: 13,
-                                      fontWeight: isToday || isSel
-                                          ? FontWeight.w800
-                                          : FontWeight.w500,
-                                      color: isToday
-                                          ? Palette.of(context).onAccent
-                                          : (inMonth
-                                              ? null
-                                              : Palette.secondary(context)
-                                                  .withValues(alpha: 0.5)),
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(height: 3),
-                                for (var lane = 0; lane < maxLanes; lane++)
-                                  _laneBar(context, day, dayNotes, lanes, lane,
-                                      inMonth),
-                                if (extra > 0)
-                                  Text('+$extra',
-                                      style: TextStyle(
-                                          fontSize: 9,
-                                          color: Palette.secondary(context))),
-                              ],
-                            ),
-                          ),
-                        );
-                      }),
+                      child: _cell(
+                        context,
+                        DateTime(gridStart.year, gridStart.month,
+                            gridStart.day + w * 7 + d),
+                        today,
+                        visible,
+                        lanes,
+                      ),
                     ),
                 ],
               ),
             ),
         ],
+      ),
+    );
+  }
+
+  Widget _cell(BuildContext context, DateTime day, DateTime today,
+      List<Note> visible, Map<String, int> lanes) {
+    final inMonth = day.month == month.month;
+    final isToday = day == today;
+    final isSel = day == selected;
+    final dayNotes = _CalendarViewState.activeOn(visible, day);
+    final extra =
+        dayNotes.where((n) => (lanes[n.id] ?? 0) >= _maxLanes).length;
+    final weekend = day.weekday >= 6;
+
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => onSelect(day),
+      child: AnimatedContainer(
+        duration: Anim.fast,
+        margin: const EdgeInsets.all(2),
+        decoration: BoxDecoration(
+          color: isSel
+              ? accent.withValues(alpha: 0.12)
+              : (weekend && inMonth
+                  ? Palette.secondary(context).withValues(alpha: 0.04)
+                  : Colors.transparent),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isSel ? accent.withValues(alpha: 0.7) : Colors.transparent,
+            width: 1.5,
+          ),
+        ),
+        child: Column(
+          children: [
+            const SizedBox(height: 6),
+            AnimatedContainer(
+              duration: Anim.fast,
+              width: 28,
+              height: 28,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: isToday ? accent : Colors.transparent,
+                shape: BoxShape.circle,
+              ),
+              child: Text(
+                '${day.day}',
+                style: TextStyle(
+                  fontSize: 13.5,
+                  fontWeight:
+                      isToday || isSel ? FontWeight.w800 : FontWeight.w500,
+                  color: isToday
+                      ? Palette.of(context).onAccent
+                      : (inMonth
+                          ? null
+                          : Palette.secondary(context).withValues(alpha: 0.45)),
+                ),
+              ),
+            ),
+            const Spacer(),
+            for (var lane = 0; lane < _maxLanes; lane++)
+              _laneBar(context, day, dayNotes, lanes, lane, inMonth),
+            SizedBox(
+              height: 12,
+              child: extra > 0
+                  ? Text('+$extra',
+                      style: TextStyle(
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.w700,
+                          color: Palette.secondary(context)))
+                  : null,
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -352,17 +427,19 @@ class _MonthGrid extends StatelessWidget {
     final e = _day(n.dueAt!.toLocal());
     final isStart = day == s || day.weekday == DateTime.monday;
     final isEnd = day == e || day.weekday == DateTime.sunday;
-    final color = urgencyColor(context, n);
-    // Parte ya consumida en tono fuerte, lo que queda más suave.
-    final passed = day.isBefore(_day(DateTime.now()));
+    final total = e.difference(s).inDays;
+    final t = total <= 0 ? 1.0 : day.difference(s).inDays / total;
+    final passed = !day.isAfter(_day(DateTime.now()));
+    final color = n.done ? Palette.secondary(context) : fuseColor(t);
     return Padding(
       padding: EdgeInsets.only(
-          left: isStart ? 3 : 0, right: isEnd ? 3 : 0, bottom: 2),
+          left: isStart ? 4 : 0, right: isEnd ? 4 : 0, bottom: 2),
       child: Container(
         height: 5,
         decoration: BoxDecoration(
+          // Lo ya consumido en color pleno, lo que queda más suave.
           color: color.withValues(
-              alpha: (passed ? 0.95 : 0.45) * (inMonth ? 1 : 0.5)),
+              alpha: (passed ? 0.95 : 0.38) * (inMonth ? 1 : 0.45)),
           borderRadius: BorderRadius.horizontal(
             left: Radius.circular(isStart ? 3 : 0),
             right: Radius.circular(isEnd ? 3 : 0),
@@ -392,28 +469,49 @@ class _DayPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final label =
-        '${day.day} de ${mesesNombre[day.month - 1]}${day.year != DateTime.now().year ? ' de ${day.year}' : ''}';
+    final year = day.year != DateTime.now().year ? ' de ${day.year}' : '';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 14, 8, 6),
+          padding: const EdgeInsets.fromLTRB(20, 20, 16, 4),
           child: Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Expanded(
-                child: Text(label,
-                    style: const TextStyle(
-                        fontSize: 18, fontWeight: FontWeight.w700)),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(_diasSemana[day.weekday - 1].toUpperCase(),
+                        style: TextStyle(
+                            fontSize: 11.5,
+                            letterSpacing: 1.2,
+                            fontWeight: FontWeight.w700,
+                            color: Palette.accent(context))),
+                    const SizedBox(height: 2),
+                    Text('${day.day} de ${mesesNombre[day.month - 1]}$year',
+                        style: const TextStyle(
+                            fontSize: 20, fontWeight: FontWeight.w800)),
+                  ],
+                ),
               ),
               Bouncy(
                 child: FilledButton.tonalIcon(
                   onPressed: onNew,
-                  icon: const Icon(Icons.add_alarm, size: 18),
-                  label: const Text('Nueva'),
+                  icon: const Icon(Icons.add, size: 18),
+                  label: const Text('Tarea'),
                 ),
               ),
             ],
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 2, 20, 10),
+          child: Text(
+            notes.isEmpty
+                ? 'Sin tareas'
+                : (notes.length == 1 ? '1 tarea' : '${notes.length} tareas'),
+            style: TextStyle(color: Palette.secondary(context), fontSize: 13),
           ),
         ),
         Expanded(
@@ -422,15 +520,26 @@ class _DayPanel extends StatelessWidget {
             child: notes.isEmpty
                 ? Center(
                     key: ValueKey('vacio-$day'),
-                    child: Text('Nada pendiente este día',
-                        style: TextStyle(color: Palette.secondary(context))),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.event_available_outlined,
+                            size: 44,
+                            color: Palette.secondary(context)
+                                .withValues(alpha: 0.5)),
+                        const SizedBox(height: 8),
+                        Text('Día libre',
+                            style:
+                                TextStyle(color: Palette.secondary(context))),
+                      ],
+                    ),
                   )
                 : ListView.separated(
                     key: ValueKey('lista-$day'),
-                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
                     itemCount: notes.length,
                     separatorBuilder: (_, __) => const SizedBox(height: 10),
-                    itemBuilder: (context, i) => _TempCard(
+                    itemBuilder: (context, i) => TempCard(
                       note: notes[i],
                       onOpen: () => onOpen(notes[i].id),
                       onEditDates: () => onEditDates(notes[i].id),
@@ -438,7 +547,7 @@ class _DayPanel extends StatelessWidget {
                     )
                         .animate(delay: (40 * i).ms)
                         .fadeIn(duration: Anim.medium)
-                        .slideY(begin: 0.15, curve: Anim.curve),
+                        .slideY(begin: 0.12, curve: Anim.curve),
                   ),
           ),
         ),
@@ -447,7 +556,7 @@ class _DayPanel extends StatelessWidget {
   }
 }
 
-/// Tarjeta de una nota temporal con su barra de tiempo.
+/// Tarjeta de una nota temporal con su mecha de tiempo.
 class TempCard extends StatelessWidget {
   const TempCard({
     super.key,
@@ -463,44 +572,20 @@ class TempCard extends StatelessWidget {
   final VoidCallback onToggleDone;
 
   @override
-  Widget build(BuildContext context) => _TempCard(
-      note: note,
-      onOpen: onOpen,
-      onEditDates: onEditDates,
-      onToggleDone: onToggleDone);
-}
-
-class _TempCard extends StatelessWidget {
-  const _TempCard({
-    required this.note,
-    required this.onOpen,
-    required this.onEditDates,
-    required this.onToggleDone,
-  });
-
-  final Note note;
-  final VoidCallback onOpen;
-  final VoidCallback onEditDates;
-  final VoidCallback onToggleDone;
-
-  @override
   Widget build(BuildContext context) {
     final color = urgencyColor(context, note);
     return Bouncy(
-      pressedScale: 0.98,
+      pressedScale: 0.985,
       child: Material(
-        color: Palette.card(context),
-        borderRadius: BorderRadius.circular(14),
+        color: Palette.background(context),
+        borderRadius: BorderRadius.circular(16),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
           onTap: onOpen,
           onLongPress: onEditDates,
           onSecondaryTap: onEditDates,
-          child: Container(
-            decoration: BoxDecoration(
-              border: Border(left: BorderSide(color: color, width: 4)),
-            ),
-            padding: const EdgeInsets.fromLTRB(8, 10, 12, 12),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(6, 10, 10, 12),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -523,20 +608,22 @@ class _TempCard extends StatelessWidget {
                     ),
                   ),
                 ),
-                const SizedBox(width: 4),
+                const SizedBox(width: 2),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      const SizedBox(height: 4),
                       Text(
                         note.title,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
-                          fontSize: 16,
+                          fontSize: 15.5,
                           fontWeight: FontWeight.w600,
                           decoration:
                               note.done ? TextDecoration.lineThrough : null,
+                          color: note.done ? Palette.secondary(context) : null,
                         ),
                       ),
                       const SizedBox(height: 8),
@@ -549,7 +636,7 @@ class _TempCard extends StatelessWidget {
                   tooltip: 'Cambiar fechas',
                   onPressed: onEditDates,
                   icon: Icon(Icons.edit_calendar_outlined,
-                      color: Palette.secondary(context), size: 20),
+                      color: Palette.secondary(context), size: 19),
                 ),
               ],
             ),

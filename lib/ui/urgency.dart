@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../models/note.dart';
@@ -15,17 +17,30 @@ import 'theme.dart';
   );
 }
 
-/// Verde → ámbar → rojo según el tiempo consumido.
-Color urgencyColor(BuildContext context, Note n) {
-  if (n.done) return Palette.secondary(context);
-  if (n.isOverdue()) return const Color(0xFFE5484D);
-  final p = n.progress();
-  if (p < 0.5) return const Color(0xFF30A46C);
-  if (p < 0.8) return const Color(0xFFF5A524);
-  return const Color(0xFFF76B15);
+/// Colores de la "mecha": menta → oro → naranja → rojo brasa.
+const fuseStops = <Color>[
+  Color(0xFF2DD4A7),
+  Color(0xFFFFC53D),
+  Color(0xFFFF8A3D),
+  Color(0xFFEF4444),
+];
+
+/// Color de la mecha en el punto t (0 = recién encendida, 1 = se acaba).
+Color fuseColor(double t) {
+  final x = t.clamp(0.0, 1.0) * (fuseStops.length - 1);
+  final i = x.floor().clamp(0, fuseStops.length - 2);
+  return Color.lerp(fuseStops[i], fuseStops[i + 1], x - i)!;
 }
 
-/// Barra de tiempo: cuánto se ha consumido y cuánto queda.
+/// Color representativo de una nota temporal según su tiempo consumido.
+Color urgencyColor(BuildContext context, Note n) {
+  if (n.done) return Palette.secondary(context);
+  if (n.isOverdue()) return fuseStops.last;
+  return fuseColor(n.progress());
+}
+
+/// Barra de tiempo con forma de mecha: el tramo consumido brilla con un
+/// degradado que va de menta a rojo, y en la punta hay una chispa que late.
 class TimeBar extends StatelessWidget {
   const TimeBar({super.key, required this.note, this.compact = false});
   final Note note;
@@ -35,39 +50,26 @@ class TimeBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final color = urgencyColor(context, note);
     final p = note.done ? 1.0 : note.progress();
+    final burning = !note.done && !note.isOverdue();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        ClipRRect(
-          borderRadius: BorderRadius.circular(99),
-          child: Stack(
-            children: [
-              Container(
-                height: compact ? 4 : 6,
-                color: color.withValues(alpha: 0.18),
-              ),
-              TweenAnimationBuilder<double>(
-                tween: Tween(begin: 0, end: p),
-                duration: Anim.slow,
-                curve: Anim.curve,
-                builder: (context, v, _) => FractionallySizedBox(
-                  widthFactor: v.clamp(0.0, 1.0),
-                  child: Container(height: compact ? 4 : 6, color: color),
-                ),
-              ),
-            ],
-          ),
+        FuseBar(
+          progress: p,
+          height: compact ? 4 : 6,
+          spark: burning,
+          dimmed: note.done,
         ),
         if (!compact) ...[
-          const SizedBox(height: 4),
+          const SizedBox(height: 6),
           Row(
             children: [
               Icon(
                 note.done
                     ? Icons.check_circle
                     : (note.isOverdue()
-                        ? Icons.warning_amber_rounded
+                        ? Icons.local_fire_department
                         : Icons.timer_outlined),
                 size: 14,
                 color: color,
@@ -91,4 +93,154 @@ class TimeBar extends StatelessWidget {
       ],
     );
   }
+}
+
+class FuseBar extends StatefulWidget {
+  const FuseBar({
+    super.key,
+    required this.progress,
+    this.height = 6,
+    this.spark = true,
+    this.dimmed = false,
+  });
+
+  final double progress;
+  final double height;
+  final bool spark;
+  final bool dimmed;
+
+  @override
+  State<FuseBar> createState() => _FuseBarState();
+}
+
+class _FuseBarState extends State<FuseBar> with TickerProviderStateMixin {
+  late final AnimationController _flicker = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1100),
+  );
+  late final AnimationController _grow = AnimationController(
+    vsync: this,
+    duration: Anim.slow,
+  )..forward();
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.spark) _flicker.repeat(reverse: true);
+  }
+
+  @override
+  void didUpdateWidget(FuseBar old) {
+    super.didUpdateWidget(old);
+    if (widget.spark && !_flicker.isAnimating) {
+      _flicker.repeat(reverse: true);
+    } else if (!widget.spark && _flicker.isAnimating) {
+      _flicker.stop();
+    }
+  }
+
+  @override
+  void dispose() {
+    _flicker.dispose();
+    _grow.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final track = Palette.secondary(context).withValues(alpha: 0.16);
+    // Espacio extra arriba y abajo para que la chispa no se corte.
+    final pad = widget.spark ? widget.height * 0.9 : 0.0;
+    return RepaintBoundary(
+      child: SizedBox(
+        height: widget.height + pad * 2,
+        width: double.infinity,
+        child: CustomPaint(
+          painter: _FusePainter(
+            progress: widget.progress,
+            barHeight: widget.height,
+            track: track,
+            flicker: _flicker,
+            grow: CurvedAnimation(parent: _grow, curve: Anim.curve),
+            spark: widget.spark,
+            dimmed: widget.dimmed,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _FusePainter extends CustomPainter {
+  _FusePainter({
+    required this.progress,
+    required this.barHeight,
+    required this.track,
+    required this.flicker,
+    required this.grow,
+    required this.spark,
+    required this.dimmed,
+  }) : super(repaint: Listenable.merge([flicker, grow]));
+
+  final double progress;
+  final double barHeight;
+  final Color track;
+  final Animation<double> flicker;
+  final Animation<double> grow;
+  final bool spark;
+  final bool dimmed;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final y = size.height / 2;
+    final r = Radius.circular(barHeight / 2);
+    final full = RRect.fromLTRBR(0, y - barHeight / 2, size.width,
+        y + barHeight / 2, r);
+
+    // Cordón que queda por quemar.
+    canvas.drawRRect(full, Paint()..color = track);
+
+    final p = progress.clamp(0.0, 1.0) * grow.value;
+    final x = size.width * p;
+    if (x <= 0.5) return;
+
+    // Tramo consumido con el degradado de la mecha a lo largo de toda la barra.
+    final shader = LinearGradient(
+      colors: dimmed
+          ? fuseStops.map((c) => c.withValues(alpha: 0.35)).toList()
+          : fuseStops,
+    ).createShader(Rect.fromLTWH(0, 0, size.width, size.height));
+    canvas.save();
+    canvas.clipRect(Rect.fromLTWH(0, 0, x, size.height));
+    canvas.drawRRect(full, Paint()..shader = shader);
+    canvas.restore();
+
+    if (!spark) return;
+    // Chispa: halo + núcleo que laten.
+    final c = fuseColor(p);
+    final f = flicker.value;
+    final glowR = barHeight * (1.25 + 0.45 * f);
+    canvas.drawCircle(
+      Offset(x, y),
+      glowR,
+      Paint()
+        ..shader = RadialGradient(colors: [
+          c.withValues(alpha: 0.75),
+          c.withValues(alpha: 0.0),
+        ]).createShader(Rect.fromCircle(center: Offset(x, y), radius: glowR)),
+    );
+    canvas.drawCircle(
+      Offset(x, y),
+      barHeight * (0.42 + 0.12 * math.sin(f * math.pi)),
+      Paint()..color = Color.lerp(c, Colors.white, 0.65)!,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_FusePainter old) =>
+      old.progress != progress ||
+      old.track != track ||
+      old.spark != spark ||
+      old.dimmed != dimmed ||
+      old.barHeight != barHeight;
 }

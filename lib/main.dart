@@ -27,7 +27,7 @@ Future<void> main() async {
       size: Size(1100, 720),
       minimumSize: Size(380, 560),
       center: true,
-      title: 'Notas',
+      title: 'BabuNotes',
     );
     windowManager.waitUntilReadyToShow(options, () async {
       await windowManager.show();
@@ -100,7 +100,7 @@ class NotasApp extends StatelessWidget {
     return ListenableBuilder(
       listenable: themeSettings,
       builder: (context, _) => MaterialApp(
-      title: 'Notas',
+      title: 'BabuNotes',
       debugShowCheckedModeBanner: false,
       theme: buildTheme(themeSettings.theme, Brightness.light),
       darkTheme: buildTheme(themeSettings.theme, Brightness.dark),

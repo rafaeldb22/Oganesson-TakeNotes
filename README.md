@@ -1,4 +1,4 @@
-# Notas — Android + Windows sincronizadas
+# BabuNotes — Android + Windows sincronizadas
 
 App de notas estilo iPhone hecha con **Flutter**. Las notas se guardan en tu propia base de datos gratuita de **Supabase**: lo que escribes en el móvil aparece solo en el PC (y al revés) en uno o dos segundos. Funciona también sin internet: los cambios se suben al volver la conexión.
 
@@ -66,3 +66,13 @@ scripts/preparar.sh          genera android/ y windows/ con flutter create
 
 Con Flutter instalado: `bash scripts/preparar.sh` y luego
 `flutter run --dart-define=SUPABASE_URL=... --dart-define=SUPABASE_ANON_KEY=...`
+
+
+## Seguir con Claude Code en tu PC
+
+1. Instala [Flutter](https://docs.flutter.dev/get-started/install/windows), Git y
+   Visual Studio 2022 con "Desarrollo para el escritorio con C++".
+2. Instala Claude Code y, en una terminal: `git clone https://github.com/rafaeldb22/BabuNotes`
+   y luego `cd BabuNotes` y `claude`.
+3. Pídele: *"prepara y ejecuta la app en Windows"*. Claude Code lee `CLAUDE.md`
+   y sabe cómo compilarla (`./scripts/preparar_windows.ps1` y `flutter run -d windows`).

@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'anim.dart';
 import 'theme.dart';
+import 'wave_title.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -123,12 +124,8 @@ class _LoginScreenState extends State<LoginScreen> {
                         .rotate(begin: -0.08, duration: 700.ms, curve: Curves.elasticOut),
                     const SizedBox(height: 12),
                     ...<Widget>[
-                    const Text(
-                      'Notas',
-                      textAlign: TextAlign.center,
-                      style:
-                          TextStyle(fontSize: 34, fontWeight: FontWeight.w800),
-                    ),
+                    const Center(
+                        child: WaveTitle(text: 'babunotes', fontSize: 40)),
                     const SizedBox(height: 8),
                     Text(
                       'Usa la misma cuenta en el móvil y en el PC para que '

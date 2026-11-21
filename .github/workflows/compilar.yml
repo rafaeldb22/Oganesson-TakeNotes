@@ -1,4 +1,4 @@
-name: Compilar Notas
+name: Compilar BabuNotes
 
 on:
   push:
@@ -41,12 +41,12 @@ jobs:
           flutter build apk --release
           --build-number=${{ github.run_number }}
 
-      - run: cp build/app/outputs/flutter-apk/app-release.apk Notas.apk
+      - run: cp build/app/outputs/flutter-apk/app-release.apk BabuNotes.apk
 
       - uses: actions/upload-artifact@v4
         with:
           name: android
-          path: Notas.apk
+          path: BabuNotes.apk
 
   windows:
     name: App de Windows
@@ -61,11 +61,7 @@ jobs:
 
       - name: Preparar proyecto Windows
         shell: pwsh
-        run: |
-          flutter create --org com.rafa --project-name notas --platforms=windows .
-          if (Test-Path test) { Remove-Item -Recurse -Force test }
-          (Get-Content windows\runner\main.cpp) -replace 'L"notas"', 'L"Notas"' | Set-Content windows\runner\main.cpp
-          flutter pub get
+        run: ./scripts/preparar_windows.ps1
 
       - name: Compilar
         shell: pwsh
@@ -81,12 +77,12 @@ jobs:
             $src = Join-Path $env:WINDIR "System32\$dll"
             if (Test-Path $src) { Copy-Item $src $out }
           }
-          Compress-Archive -Path "$out\*" -DestinationPath Notas-Windows.zip
+          Compress-Archive -Path "$out\*" -DestinationPath BabuNotes-Windows.zip
 
       - uses: actions/upload-artifact@v4
         with:
           name: windows
-          path: Notas-Windows.zip
+          path: BabuNotes-Windows.zip
 
   publicar:
     name: Publicar descarga
@@ -101,10 +97,10 @@ jobs:
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ github.run_number }}
-          name: Notas v${{ github.run_number }}
+          name: BabuNotes v${{ github.run_number }}
           body: |
-            - **Notas.apk** → instálalo en el móvil.
-            - **Notas-Windows.zip** → descomprímelo y abre `notas.exe`.
+            - **BabuNotes.apk** → instálalo en el móvil.
+            - **BabuNotes-Windows.zip** → descomprímelo y abre `BabuNotes.exe`.
           files: |
-            dist/Notas.apk
-            dist/Notas-Windows.zip
+            dist/BabuNotes.apk
+            dist/BabuNotes-Windows.zip

@@ -65,10 +65,11 @@ class FilterChips extends StatelessWidget {
     ];
 
     return SizedBox(
-      height: 46,
+      height: 48,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.fromLTRB(16, 2, 16, 6),
+        clipBehavior: Clip.none,
+        padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
         itemCount: chips.length,
         separatorBuilder: (_, __) => const SizedBox(width: 8),
         itemBuilder: (_, i) => chips[i]
@@ -100,17 +101,16 @@ class FilterChips extends StatelessWidget {
         child: AnimatedContainer(
           duration: Anim.medium,
           curve: Anim.curve,
+          // Sin sombras: un tinte suave del color y borde fino al elegirlo.
           decoration: BoxDecoration(
-            color: sel ? c : Palette.searchFill(context),
+            color: sel
+                ? c.withValues(alpha: 0.16)
+                : Palette.searchFill(context).withValues(alpha: 0.7),
             borderRadius: BorderRadius.circular(20),
-            boxShadow: sel
-                ? [
-                    BoxShadow(
-                        color: c.withValues(alpha: 0.35),
-                        blurRadius: 10,
-                        offset: const Offset(0, 3))
-                  ]
-                : const [],
+            border: Border.all(
+              color: sel ? c.withValues(alpha: 0.55) : Colors.transparent,
+              width: 1.2,
+            ),
           ),
           child: Material(
             type: MaterialType.transparency,
@@ -124,12 +124,12 @@ class FilterChips extends StatelessWidget {
                   children: [
                     Icon(icon,
                         size: 16,
-                        color: sel ? _on(c) : (color ?? Palette.secondary(context))),
+                        color: sel ? c : (color ?? Palette.secondary(context))),
                     const SizedBox(width: 6),
                     Text(label,
                         style: TextStyle(
                             fontWeight: FontWeight.w600,
-                            color: sel ? _on(c) : null)),
+                            color: sel ? c : null)),
                     if (badge != null) ...[
                       const SizedBox(width: 6),
                       Container(
@@ -138,7 +138,7 @@ class FilterChips extends StatelessWidget {
                         decoration: BoxDecoration(
                           color: badgeColor ??
                               (sel
-                                  ? _on(c).withValues(alpha: 0.25)
+                                  ? c.withValues(alpha: 0.22)
                                   : Palette.separator(context)),
                           borderRadius: BorderRadius.circular(10),
                         ),
@@ -148,7 +148,7 @@ class FilterChips extends StatelessWidget {
                                 fontWeight: FontWeight.w700,
                                 color: badgeColor != null
                                     ? Colors.white
-                                    : (sel ? _on(c) : null))),
+                                    : (sel ? c : null))),
                       ),
                     ],
                   ],
@@ -161,8 +161,6 @@ class FilterChips extends StatelessWidget {
     );
   }
 
-  static Color _on(Color c) =>
-      c.computeLuminance() > 0.5 ? Colors.black : Colors.white;
 }
 
 /// Crear o editar una carpeta (nombre + color). Devuelve la carpeta.
