@@ -6,6 +6,7 @@ import '../data/notes_repository.dart';
 import '../models/note.dart';
 import 'anim.dart';
 import 'i18n.dart';
+import 'text_menu.dart';
 import 'theme.dart';
 
 /// Elegir con qué notas está enlazada [noteId] (casillas). Marca las que ya
@@ -94,6 +95,7 @@ class _LinkPickerState extends State<_LinkPicker> {
                 ),
               ),
             TextField(
+              contextMenuBuilder: textFieldMenu,
               controller: _query,
               autofocus: true,
               onChanged: (_) => setState(() {}),

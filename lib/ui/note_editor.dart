@@ -16,6 +16,7 @@ import 'format.dart';
 import 'link_picker.dart';
 import 'schedule_sheet.dart';
 import 'smooth_scroll.dart';
+import 'text_menu.dart';
 import 'theme.dart';
 import 'urgency.dart';
 import 'i18n.dart';
@@ -453,6 +454,11 @@ class _NoteEditorState extends State<NoteEditor> {
                               expands: true,
                               padding: const EdgeInsets.only(bottom: 40),
                               customStyles: _styles(context),
+                              // Menú de cortar/copiar/pegar con el estilo de la app.
+                              contextMenuBuilder: (context, state) => buildTextMenu(
+                                  context,
+                                  state.contextMenuButtonItems,
+                                  state.contextMenuAnchors),
                             ),
                           ),
                         ),

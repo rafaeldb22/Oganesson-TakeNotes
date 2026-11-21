@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'toast.dart';
+import 'text_menu.dart';
 import 'i18n.dart';
 
 /// Cambiar la contraseña de la cuenta escribiendo la actual.
@@ -100,6 +101,7 @@ class _AccountPasswordDialogState extends State<_AccountPasswordDialog> {
           mainAxisSize: MainAxisSize.min,
           children: [
             TextField(
+              contextMenuBuilder: textFieldMenu,
               controller: _old,
               autofocus: true,
               obscureText: !_show,
@@ -116,6 +118,7 @@ class _AccountPasswordDialogState extends State<_AccountPasswordDialog> {
             ),
             const SizedBox(height: 10),
             TextField(
+              contextMenuBuilder: textFieldMenu,
               controller: _a,
               obscureText: !_show,
               enabled: !_busy,
@@ -123,6 +126,7 @@ class _AccountPasswordDialogState extends State<_AccountPasswordDialog> {
             ),
             const SizedBox(height: 10),
             TextField(
+              contextMenuBuilder: textFieldMenu,
               controller: _b,
               obscureText: !_show,
               enabled: !_busy,

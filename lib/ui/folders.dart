@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../data/notes_repository.dart';
 import '../models/note.dart';
 import 'anim.dart';
+import 'text_menu.dart';
 import 'i18n.dart';
 
 /// Colores para las carpetas.
@@ -35,6 +36,7 @@ Future<Folder?> editFolderDialog(BuildContext context, NotesRepository repo,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               TextField(
+                contextMenuBuilder: textFieldMenu,
                 controller: name,
                 autofocus: true,
                 textCapitalization: TextCapitalization.sentences,

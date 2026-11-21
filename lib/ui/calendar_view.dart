@@ -403,61 +403,75 @@ class _MonthGrid extends StatelessWidget {
     final dayNotes = _CalendarViewState.activeOn(visible, day);
     final extra = dayNotes.where((n) => (lanes[n.id] ?? 0) >= _maxLanes).length;
 
+    // Las barras de las tareas van de borde a borde de la celda (sin el
+    // margen de la selección), así se unen con el día anterior y el
+    // siguiente formando una línea continua.
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: () => onSelect(day),
-      child: AnimatedContainer(
-        duration: Anim.fast,
-        margin: const EdgeInsets.all(2),
-        decoration: BoxDecoration(
-          color: isSel ? accent.withValues(alpha: 0.12) : Colors.transparent,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: isSel ? accent.withValues(alpha: 0.7) : Colors.transparent,
-            width: 1.5,
-          ),
-        ),
-        child: Column(
-          children: [
-            const SizedBox(height: 4),
-            AnimatedContainer(
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: AnimatedContainer(
               duration: Anim.fast,
-              width: 28,
-              height: 28,
-              alignment: Alignment.center,
+              margin: const EdgeInsets.all(2),
               decoration: BoxDecoration(
-                color: isToday ? accent : Colors.transparent,
-                shape: BoxShape.circle,
-              ),
-              child: Text(
-                '${day.day}',
-                style: TextStyle(
-                  fontSize: 13.5,
-                  fontWeight:
-                      isToday || isSel ? FontWeight.w800 : FontWeight.w500,
-                  color: isToday
-                      ? Palette.of(context).onAccent
-                      : (inMonth
-                          ? null
-                          : Palette.secondary(context).withValues(alpha: 0.45)),
+                color:
+                    isSel ? accent.withValues(alpha: 0.12) : Colors.transparent,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: isSel
+                      ? accent.withValues(alpha: 0.7)
+                      : Colors.transparent,
+                  width: 1.5,
                 ),
               ),
             ),
-            const Spacer(),
-            for (var lane = 0; lane < _maxLanes; lane++)
-              _laneBar(context, day, dayNotes, lanes, lane, inMonth),
-            SizedBox(
-              height: 12,
-              child: extra > 0
-                  ? Text('+$extra',
-                      style: TextStyle(
-                          fontSize: 9.5,
-                          fontWeight: FontWeight.w700,
-                          color: Palette.secondary(context)))
-                  : null,
-            ),
-          ],
-        ),
+          ),
+          Column(
+            children: [
+              const SizedBox(height: 6),
+              AnimatedContainer(
+                duration: Anim.fast,
+                width: 28,
+                height: 28,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: isToday ? accent : Colors.transparent,
+                  shape: BoxShape.circle,
+                ),
+                child: Text(
+                  '${day.day}',
+                  style: TextStyle(
+                    fontSize: 13.5,
+                    fontWeight:
+                        isToday || isSel ? FontWeight.w800 : FontWeight.w500,
+                    color: isToday
+                        ? Palette.of(context).onAccent
+                        : (inMonth
+                            ? null
+                            : Palette.secondary(context)
+                                .withValues(alpha: 0.45)),
+                  ),
+                ),
+              ),
+              const Spacer(),
+              for (var lane = 0; lane < _maxLanes; lane++)
+                _laneBar(context, day, dayNotes, lanes, lane, inMonth),
+              SizedBox(
+                height: 12,
+                child: extra > 0
+                    ? Text('+$extra',
+                        style: TextStyle(
+                            fontSize: 9.5,
+                            fontWeight: FontWeight.w700,
+                            color: Palette.secondary(context)))
+                    : null,
+              ),
+              const SizedBox(height: 2),
+            ],
+          ),
+        ],
       ),
     );
   }

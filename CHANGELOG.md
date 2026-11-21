@@ -2,6 +2,23 @@
 
 All notable changes to Oganesson TakeNotes (formerly *Notas* / *BabuNotes*).
 
+## [1.3.1] — 2026-11-21
+
+### Fixed
+- **Android in-app update** failed with *"Permission denied: MANAGE_EXTERNAL_STORAGE"*: the APK
+  is now downloaded to the app's internal cache, which the installer can open without extra
+  permissions. If installing still fails, the update dialog offers *Download in the browser*.
+  (Phones on an older version must install this one manually once, from the Android download.)
+
+### Changed
+- New right-click menu for text (cut, copy, paste, select all) in the editor and every text
+  field: icons, keyboard shortcuts, hover highlight and an animated entrance.
+- Swipe backgrounds (delete / archive) use soft theme tints instead of bright red / accent.
+- Cleaner hover: note rows highlight as a rounded inset pill with a smooth fade.
+- Less space between the sort menu and *Fijadas*.
+- Calendar: task bars are continuous across consecutive days.
+- The colour sheet no longer shows the fuse preview.
+
 ## [1.3.0] — 2026-11-21
 
 ### Added

@@ -120,10 +120,10 @@ class Updater {
       {void Function(double)? onProgress}) async {
     final url = r.downloadUrl;
     if (url == null) throw StateError('La versión no incluye $_assetName');
-    final dir = Platform.isAndroid
-        ? (await getExternalCacheDirectories())?.first ??
-            await getTemporaryDirectory()
-        : await getTemporaryDirectory();
+    // Caché interna de la app (también en Android): open_filex solo abre
+    // sin permisos especiales archivos de la carpeta de la app; la caché
+    // externa (Android/data/…/cache) le exigía MANAGE_EXTERNAL_STORAGE.
+    final dir = await getTemporaryDirectory();
     final file = File('${dir.path}${Platform.pathSeparator}'
         '${_assetName.replaceFirst('.', '-${r.version}.')}');
 

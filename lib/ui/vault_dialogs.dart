@@ -6,6 +6,7 @@ import '../data/vault.dart';
 import 'anim.dart';
 import 'toast.dart';
 import 'i18n.dart';
+import 'text_menu.dart';
 import 'theme.dart';
 
 /// Se asegura de que el Vault esté abierto: lo crea la primera vez o pide la
@@ -101,6 +102,7 @@ class _PasswordFieldState extends State<_PasswordField> {
 
   @override
   Widget build(BuildContext context) => TextField(
+        contextMenuBuilder: textFieldMenu,
         controller: widget.controller,
         autofocus: widget.autofocus,
         enabled: widget.enabled,
@@ -457,6 +459,7 @@ class _ResetDialogState extends State<_ResetDialog> {
                           [mail])),
               if (_sent)
                 TextField(
+                  contextMenuBuilder: textFieldMenu,
                   controller: _code,
                   autofocus: true,
                   enabled: !_busy,

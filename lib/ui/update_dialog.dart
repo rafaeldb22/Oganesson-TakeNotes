@@ -139,6 +139,13 @@ class _UpdateDialogState extends State<_UpdateDialog> {
       actions: downloading
           ? const []
           : [
+              // Si la instalación falla: descargar desde el navegador.
+              if (_error != null)
+                TextButton(
+                  onPressed: () =>
+                      openLink(context, r.downloadUrl ?? r.pageUrl),
+                  child: Text(tr('Descargar en el navegador')),
+                ),
               TextButton(
                 onPressed: () {
                   Updater.instance.skip(r.version);

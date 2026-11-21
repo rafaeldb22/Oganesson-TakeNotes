@@ -3,6 +3,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'anim.dart';
+import 'text_menu.dart';
 import 'theme.dart';
 import 'wave_title.dart';
 import 'i18n.dart';
@@ -141,6 +142,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                       const SizedBox(height: 28),
                       TextField(
+                        contextMenuBuilder: textFieldMenu,
                         controller: _email,
                         keyboardType: TextInputType.emailAddress,
                         autofillHints: const [AutofillHints.email],
@@ -150,6 +152,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                       const SizedBox(height: 12),
                       TextField(
+                        contextMenuBuilder: textFieldMenu,
                         controller: _pass,
                         obscureText: true,
                         autofillHints: const [AutofillHints.password],

@@ -2,6 +2,13 @@
 /// código (con `{0}`, `{1}`… para los valores). Si falta una clave se
 /// muestra el texto en español.
 const enStrings = <String, String>{
+  // --- Menú de texto y actualizaciones
+  'Cortar': 'Cut',
+  'Copiar': 'Copy',
+  'Pegar': 'Paste',
+  'Seleccionar todo': 'Select all',
+  'Descargar en el navegador': 'Download in the browser',
+
   // --- Archivadas y orden
   'Archivar': 'Archive',
   'Archivadas': 'Archived',

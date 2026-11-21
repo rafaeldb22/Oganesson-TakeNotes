@@ -55,33 +55,6 @@ Future<void> showNoteColorSheet(
                               duration: Anim.slow),
                   ],
                 ),
-                const SizedBox(height: 20),
-                // Vista previa de la mecha con este color.
-                Container(
-                  padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
-                  decoration: BoxDecoration(
-                    color: Palette.background(context),
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(tr('VISTA PREVIA'),
-                          style: TextStyle(
-                              fontSize: 10.5,
-                              letterSpacing: 1,
-                              fontWeight: FontWeight.w700,
-                              color: Palette.secondary(context))),
-                      const SizedBox(height: 10),
-                      FuseBar(
-                        key: ValueKey(current),
-                        progress: 0.62,
-                        height: 8,
-                        colors: fusePalette(current),
-                      ),
-                    ],
-                  ),
-                ),
               ],
             ),
           ),

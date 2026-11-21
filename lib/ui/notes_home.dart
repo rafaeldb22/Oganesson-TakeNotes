@@ -37,6 +37,7 @@ import 'sort_menu.dart';
 import 'split.dart';
 import 'toast.dart';
 import 'smooth_scroll.dart';
+import 'text_menu.dart';
 import 'theme.dart';
 import 'theme_picker.dart';
 import 'trash_sheet.dart';
@@ -559,7 +560,7 @@ class _NotesHomeState extends State<NotesHome> {
             // Cabecera: solo el selector de orden.
             Padding(
               key: const ValueKey('cabecera-lista'),
-              padding: const EdgeInsets.fromLTRB(6, 6, 0, 2),
+              padding: const EdgeInsets.fromLTRB(6, 2, 0, 0),
               child: Row(
                 children: [
                   const Spacer(),
@@ -637,6 +638,7 @@ class _NotesHomeState extends State<NotesHome> {
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
             child: TextField(
+              contextMenuBuilder: textFieldMenu,
               controller: _search,
               onChanged: (v) => setState(() => _query = v),
               decoration: InputDecoration(
@@ -979,7 +981,7 @@ class _NotesHomeState extends State<NotesHome> {
     final header = title == null
         ? const SizedBox(height: 8)
         : Padding(
-            padding: const EdgeInsets.fromLTRB(6, 14, 4, 8),
+            padding: const EdgeInsets.fromLTRB(6, 8, 4, 6),
             child: Text(title,
                 style: TextStyle(
                     fontSize: 13,
@@ -1132,35 +1134,41 @@ class _NoteTileState extends State<_NoteTile> {
   @override
   Widget build(BuildContext context) {
     final n = widget.note;
+    // Resaltado limpio: una pastilla redondeada con margen (no toda la fila).
     final bg = widget.selected
         ? Palette.selected(context)
         : (_hover ? Palette.hover(context) : Palette.card(context));
 
     final scheme = Theme.of(context).colorScheme;
-    Widget swipeBg(Color color, IconData icon, String label, bool left) =>
+    // Fondo al deslizar: tinte suave del color de la acción sobre la
+    // tarjeta (en armonía con el tema), con el icono y el texto en ese color.
+    Widget swipeBg(Color color, IconData icon, String label, bool left) {
+      final content = [
         Container(
-          color: color,
-          alignment: left ? Alignment.centerLeft : Alignment.centerRight,
-          padding: const EdgeInsets.symmetric(horizontal: 22),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (!left) ...[
-                Text(label,
-                    style: const TextStyle(
-                        color: Colors.white, fontWeight: FontWeight.w700)),
-                const SizedBox(width: 8),
-              ],
-              Icon(icon, color: Colors.white),
-              if (left) ...[
-                const SizedBox(width: 8),
-                Text(label,
-                    style: const TextStyle(
-                        color: Colors.white, fontWeight: FontWeight.w700)),
-              ],
-            ],
+          width: 30,
+          height: 30,
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.18),
+            shape: BoxShape.circle,
           ),
-        );
+          child: Icon(icon, size: 17, color: color),
+        ),
+        const SizedBox(width: 10),
+        Text(label,
+            style: TextStyle(
+                color: color, fontWeight: FontWeight.w700, fontSize: 13.5)),
+      ];
+      return Container(
+        color: Color.alphaBlend(
+            color.withValues(alpha: 0.12), Palette.card(context)),
+        alignment: left ? Alignment.centerLeft : Alignment.centerRight,
+        padding: const EdgeInsets.symmetric(horizontal: 18),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: left ? content : content.reversed.toList(),
+        ),
+      );
+    }
 
     final tile = Dismissible(
       key: ValueKey('desliza-${n.id}'),
@@ -1180,103 +1188,114 @@ class _NoteTileState extends State<_NoteTile> {
         onExit: (_) => setState(() => _hover = false),
         child: Bouncy(
           pressedScale: 0.975,
-          child: AnimatedContainer(
-            duration: Anim.fast,
-            curve: Curves.easeOut,
-            color: bg,
-            child: InkWell(
-              // El fondo ya cambia con _hover: sin capa gris del InkWell.
-              hoverColor: Colors.transparent,
-              onTap: widget.onTap,
-              // En Android la pulsación larga arrastra la nota (si se suelta
-              // sin moverla, abre las opciones).
-              onLongPress: _touchDrag ? null : () => widget.onOptions(null),
-              onSecondaryTapUp: (d) => widget.onOptions(d.globalPosition),
-              child: Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
-                child: Row(
-                  children: [
-                    // Franja con el color elegido para la nota.
-                    AnimatedContainer(
-                      duration: Anim.medium,
-                      width: n.color == null ? 0 : 4,
-                      height: 38,
-                      margin: EdgeInsets.only(right: n.color == null ? 0 : 12),
-                      decoration: BoxDecoration(
-                        gradient: n.color == null
-                            ? null
-                            : LinearGradient(
-                                begin: Alignment.topCenter,
-                                end: Alignment.bottomCenter,
-                                colors: fusePalette(n.color)),
-                        borderRadius: BorderRadius.circular(2),
+          child: ColoredBox(
+            color: Palette.card(context),
+            child: AnimatedContainer(
+              duration: Anim.medium,
+              curve: Anim.curve,
+              margin: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
+              clipBehavior: Clip.antiAlias,
+              decoration: BoxDecoration(
+                color: bg,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: InkWell(
+                // El fondo ya cambia con _hover: sin capa gris del InkWell.
+                hoverColor: Colors.transparent,
+                borderRadius: BorderRadius.circular(10),
+                onTap: widget.onTap,
+                // En Android la pulsación larga arrastra la nota (si se suelta
+                // sin moverla, abre las opciones).
+                onLongPress: _touchDrag ? null : () => widget.onOptions(null),
+                onSecondaryTapUp: (d) => widget.onOptions(d.globalPosition),
+                child: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 11, vertical: 8),
+                  child: Row(
+                    children: [
+                      // Franja con el color elegido para la nota.
+                      AnimatedContainer(
+                        duration: Anim.medium,
+                        width: n.color == null ? 0 : 4,
+                        height: 38,
+                        margin:
+                            EdgeInsets.only(right: n.color == null ? 0 : 12),
+                        decoration: BoxDecoration(
+                          gradient: n.color == null
+                              ? null
+                              : LinearGradient(
+                                  begin: Alignment.topCenter,
+                                  end: Alignment.bottomCenter,
+                                  colors: fusePalette(n.color)),
+                          borderRadius: BorderRadius.circular(2),
+                        ),
                       ),
-                    ),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            n.title,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                                fontSize: 16, fontWeight: FontWeight.w600),
-                          ),
-                          const SizedBox(height: 3),
-                          Row(
-                            children: [
-                              Text(fechaCorta(n.updatedAt),
-                                  style: const TextStyle(fontSize: 14)),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  n.preview,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                      fontSize: 14,
-                                      color: Palette.secondary(context)),
-                                ),
-                              ),
-                            ],
-                          ),
-                          if (n.isTemporal) ...[
-                            const SizedBox(height: 7),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              n.title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                  fontSize: 16, fontWeight: FontWeight.w600),
+                            ),
+                            const SizedBox(height: 3),
                             Row(
                               children: [
-                                Icon(Icons.alarm,
-                                    size: 13, color: urgencyColor(context, n)),
-                                const SizedBox(width: 6),
-                                Expanded(
-                                    child: TimeBar(note: n, compact: true)),
+                                Text(fechaCorta(n.updatedAt),
+                                    style: const TextStyle(fontSize: 14)),
                                 const SizedBox(width: 8),
-                                Text(tiempoRestante(n.dueAt!, done: n.done),
+                                Expanded(
+                                  child: Text(
+                                    n.preview,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
                                     style: TextStyle(
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w600,
-                                        color: urgencyColor(context, n))),
+                                        fontSize: 14,
+                                        color: Palette.secondary(context)),
+                                  ),
+                                ),
                               ],
                             ),
+                            if (n.isTemporal) ...[
+                              const SizedBox(height: 7),
+                              Row(
+                                children: [
+                                  Icon(Icons.alarm,
+                                      size: 13,
+                                      color: urgencyColor(context, n)),
+                                  const SizedBox(width: 6),
+                                  Expanded(
+                                      child: TimeBar(note: n, compact: true)),
+                                  const SizedBox(width: 8),
+                                  Text(tiempoRestante(n.dueAt!, done: n.done),
+                                      style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w600,
+                                          color: urgencyColor(context, n))),
+                                ],
+                              ),
+                            ],
                           ],
-                        ],
+                        ),
                       ),
-                    ),
-                    AnimatedSwitcher(
-                      duration: Anim.medium,
-                      transitionBuilder: (c, a) =>
-                          ScaleTransition(scale: a, child: c),
-                      child: n.pinned
-                          ? Padding(
-                              key: const ValueKey('pin'),
-                              padding: const EdgeInsets.only(left: 8),
-                              child: Icon(Icons.push_pin,
-                                  size: 16, color: Palette.accent(context)),
-                            )
-                          : const SizedBox(key: ValueKey('nopin')),
-                    ),
-                  ],
+                      AnimatedSwitcher(
+                        duration: Anim.medium,
+                        transitionBuilder: (c, a) =>
+                            ScaleTransition(scale: a, child: c),
+                        child: n.pinned
+                            ? Padding(
+                                key: const ValueKey('pin'),
+                                padding: const EdgeInsets.only(left: 8),
+                                child: Icon(Icons.push_pin,
+                                    size: 16, color: Palette.accent(context)),
+                              )
+                            : const SizedBox(key: ValueKey('nopin')),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
