@@ -1,0 +1,15 @@
+# Se generan al compilar con scripts/preparar.sh
+/android/
+/windows/
+/test/
+/build/
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.metadata
+pubspec.lock
+analysis_options.yaml
+*.iml
+.idea/
+.vscode/

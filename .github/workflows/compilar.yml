@@ -1,0 +1,124 @@
+name: Compilar Notas
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  android:
+    name: APK de Android
+    runs-on: ubuntu-latest
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Comprobar secrets
+        run: |
+          if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_ANON_KEY" ]; then
+            echo "::error::Faltan los secrets SUPABASE_URL y/o SUPABASE_ANON_KEY (Settings → Secrets and variables → Actions)"
+            exit 1
+          fi
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Preparar proyecto Android
+        run: bash scripts/preparar.sh android
+
+      - name: Firma fija (para poder actualizar la app sin desinstalar)
+        run: |
+          mkdir -p ~/.android
+          cp plataforma/android/debug.keystore ~/.android/debug.keystore
+
+      - name: Compilar APK
+        run: >
+          flutter build apk --release
+          --build-number=${{ github.run_number }}
+          --dart-define=SUPABASE_URL="$SUPABASE_URL"
+          --dart-define=SUPABASE_ANON_KEY="$SUPABASE_ANON_KEY"
+
+      - run: cp build/app/outputs/flutter-apk/app-release.apk Notas.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android
+          path: Notas.apk
+
+  windows:
+    name: App de Windows
+    runs-on: windows-latest
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Preparar proyecto Windows
+        shell: pwsh
+        run: |
+          flutter create --org com.rafa --project-name notas --platforms=windows .
+          if (Test-Path test) { Remove-Item -Recurse -Force test }
+          (Get-Content windows\runner\main.cpp) -replace 'L"notas"', 'L"Notas"' | Set-Content windows\runner\main.cpp
+          flutter pub get
+
+      - name: Compilar
+        shell: pwsh
+        run: >
+          flutter build windows --release
+          --build-number=${{ github.run_number }}
+          "--dart-define=SUPABASE_URL=$env:SUPABASE_URL"
+          "--dart-define=SUPABASE_ANON_KEY=$env:SUPABASE_ANON_KEY"
+
+      - name: Empaquetar (con las DLL de Visual C++ incluidas)
+        shell: pwsh
+        run: |
+          $out = "build\windows\x64\runner\Release"
+          foreach ($dll in "msvcp140.dll", "vcruntime140.dll", "vcruntime140_1.dll") {
+            $src = Join-Path $env:WINDIR "System32\$dll"
+            if (Test-Path $src) { Copy-Item $src $out }
+          }
+          Compress-Archive -Path "$out\*" -DestinationPath Notas-Windows.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: Notas-Windows.zip
+
+  publicar:
+    name: Publicar descarga
+    needs: [android, windows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ github.run_number }}
+          name: Notas v${{ github.run_number }}
+          body: |
+            - **Notas.apk** → instálalo en el móvil.
+            - **Notas-Windows.zip** → descomprímelo y abre `notas.exe`.
+          files: |
+            dist/Notas.apk
+            dist/Notas-Windows.zip
