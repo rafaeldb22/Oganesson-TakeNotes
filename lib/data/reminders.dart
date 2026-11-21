@@ -102,7 +102,7 @@ class Reminders {
       final base = (n.id.hashCode & 0x0fffffff) * 4;
       final due = n.dueAt!;
       // Avisos solo cuando quedan menos de 7 días, menos de 3 y menos de 1.
-      final avisos = <(int, DateTime, String, String)>[
+      final avisos = <(int, DateTime, String)>[
         (base, due.subtract(const Duration(days: 7)), 'Quedan 7 días'),
         (base + 1, due.subtract(const Duration(days: 3)), 'Quedan 3 días'),
         (base + 2, due.subtract(const Duration(days: 1)), 'Queda 1 día'),
