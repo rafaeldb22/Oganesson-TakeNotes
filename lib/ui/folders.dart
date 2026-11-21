@@ -68,7 +68,6 @@ class FilterChips extends StatelessWidget {
       height: 48,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
-        clipBehavior: Clip.none,
         padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
         itemCount: chips.length,
         separatorBuilder: (_, __) => const SizedBox(width: 8),

@@ -204,7 +204,7 @@ class _CalendarViewState extends State<CalendarView> {
         );
 
         return LayoutBuilder(builder: (context, c) {
-          final side = c.maxWidth >= 820;
+          final side = c.maxWidth >= 700;
 
           if (side) {
             // Calendario a la izquierda (llena el alto disponible) y las
@@ -228,9 +228,9 @@ class _CalendarViewState extends State<CalendarView> {
               child: ResizableSplit(
                 storageKey: 'calendario',
                 initialFraction: 0.64,
-                minLeft: 460,
+                minLeft: 400,
                 maxLeft: 1100,
-                minRight: 280,
+                minRight: 260,
                 left: RepaintBoundary(child: calendar),
                 right: RepaintBoundary(child: dayPanel),
               ),
@@ -239,7 +239,9 @@ class _CalendarViewState extends State<CalendarView> {
 
           // Estrecho: calendario arriba y tareas del día debajo.
           final cellH = ((c.maxWidth - 24) / 7 * 0.95).clamp(70.0, 88.0);
-          return CustomScrollView(
+          return ColoredBox(
+            color: Palette.card(context),
+            child: CustomScrollView(
             slivers: [
               SliverToBoxAdapter(
                 child: Column(
@@ -259,6 +261,7 @@ class _CalendarViewState extends State<CalendarView> {
                 ),
               ),
             ],
+            ),
           );
         });
       },
@@ -351,7 +354,6 @@ class _MonthGrid extends StatelessWidget {
     final dayNotes = _CalendarViewState.activeOn(visible, day);
     final extra =
         dayNotes.where((n) => (lanes[n.id] ?? 0) >= _maxLanes).length;
-    final weekend = day.weekday >= 6;
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
@@ -360,11 +362,7 @@ class _MonthGrid extends StatelessWidget {
         duration: Anim.fast,
         margin: const EdgeInsets.all(2),
         decoration: BoxDecoration(
-          color: isSel
-              ? accent.withValues(alpha: 0.12)
-              : (weekend && inMonth
-                  ? Palette.secondary(context).withValues(alpha: 0.04)
-                  : Colors.transparent),
+          color: isSel ? accent.withValues(alpha: 0.12) : Colors.transparent,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
             color: isSel ? accent.withValues(alpha: 0.7) : Colors.transparent,
@@ -540,6 +538,7 @@ class _DayPanel extends StatelessWidget {
                     itemCount: notes.length,
                     separatorBuilder: (_, __) => const SizedBox(height: 10),
                     itemBuilder: (context, i) => TempCard(
+                      onCard: true,
                       note: notes[i],
                       onOpen: () => onOpen(notes[i].id),
                       onEditDates: () => onEditDates(notes[i].id),
@@ -564,6 +563,7 @@ class TempCard extends StatelessWidget {
     required this.onOpen,
     required this.onEditDates,
     required this.onToggleDone,
+    this.onCard = false,
   });
 
   final Note note;
@@ -571,13 +571,16 @@ class TempCard extends StatelessWidget {
   final VoidCallback onEditDates;
   final VoidCallback onToggleDone;
 
+  /// true si va encima de un panel blanco (calendario): se usa el gris suave.
+  final bool onCard;
+
   @override
   Widget build(BuildContext context) {
     final color = urgencyColor(context, note);
     return Bouncy(
       pressedScale: 0.985,
       child: Material(
-        color: Palette.background(context),
+        color: onCard ? Palette.background(context) : Palette.card(context),
         borderRadius: BorderRadius.circular(16),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
