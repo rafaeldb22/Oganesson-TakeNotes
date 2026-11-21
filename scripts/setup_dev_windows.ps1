@@ -13,6 +13,8 @@
 #
 # The repository is private: the clone step asks you to sign in to GitHub.
 
+param([switch]$StartClaude)
+
 $ErrorActionPreference = 'Stop'
 $develop = Join-Path $env:USERPROFILE 'develop'
 $flutterDir = Join-Path $develop 'flutter'
@@ -91,3 +93,11 @@ Write-Host "  cd `"$projectDir`""
 Write-Host '  flutter run -d windows     # run the app'
 Write-Host '  claude                     # start Claude Code in the project (first time: log in in the browser)'
 Write-Host "`nIf 'flutter' or 'claude' are not recognised, close this window and open a new PowerShell."
+
+# Optionally open Claude Code in the project, in a new window, with a first task.
+if ($StartClaude) {
+  Step 'Opening Claude Code in the project'
+  $prompt = 'Lee CLAUDE.md y su lista de "Open items". Ejecuta la app en Windows con flutter run -d windows, comprueba que funciona y sigue con los pendientes. Respóndeme en español.'
+  $cmd = "Set-Location '$projectDir'; claude '$prompt'"
+  Start-Process powershell -ArgumentList '-NoExit', '-ExecutionPolicy', 'Bypass', '-Command', $cmd
+}
