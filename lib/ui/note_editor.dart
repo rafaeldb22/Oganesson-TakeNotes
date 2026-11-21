@@ -172,13 +172,20 @@ class _NoteEditorState extends State<NoteEditor> {
   DefaultStyles _styles(BuildContext context) {
     final dark = Theme.of(context).brightness == Brightness.dark;
     final fg = dark ? Colors.white : const Color(0xFF151515);
+    // La fuente del tema, como el resto de la app.
+    final font = Theme.of(context).textTheme.bodyMedium?.fontFamily;
     const h0 = HorizontalSpacing(0, 0);
     const v0 = VerticalSpacing(0, 0);
     DefaultTextBlockStyle block(
             double size, FontWeight w, double top, double bottom,
             {double height = 1.3}) =>
         DefaultTextBlockStyle(
-          TextStyle(fontSize: size, fontWeight: w, height: height, color: fg),
+          TextStyle(
+              fontFamily: font,
+              fontSize: size,
+              fontWeight: w,
+              height: height,
+              color: fg),
           h0,
           VerticalSpacing(top, bottom),
           v0,
@@ -191,6 +198,7 @@ class _NoteEditorState extends State<NoteEditor> {
       paragraph: block(16.5, FontWeight.w400, 2, 2, height: 1.55),
       quote: DefaultTextBlockStyle(
         TextStyle(
+            fontFamily: font,
             fontSize: 16.5,
             height: 1.55,
             fontStyle: FontStyle.italic,

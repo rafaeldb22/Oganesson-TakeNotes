@@ -67,7 +67,7 @@ Path _rawGlyph() {
 /// Pinta el trazo del logo hasta [progress] (0..1), como si lo escribiera
 /// una pluma, con una chispa en la punta mientras se dibuja.
 class LogoStrokePainter extends CustomPainter {
-  LogoStrokePainter({required this.progress, this.glow = 0});
+  const LogoStrokePainter({required this.progress, this.glow = 0});
 
   final double progress;
 

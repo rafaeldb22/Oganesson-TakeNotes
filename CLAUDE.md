@@ -105,6 +105,9 @@ that it still arrives. On Windows, check toasts are enabled first:
   phone's status bar.
 - `tool/generate_icon_test.dart` — draws the logo with Flutter and writes `assets/icon/*.png`
   and `docs/icon.png` (`flutter test tool/generate_icon_test.dart`).
+- `tool/record_gifs_test.dart` — renders the README media from the real widgets in demo data
+  (`docs/banner.png`, `docs/screenshot-*.png`, `docs/startup.gif`, `docs/mobile.gif`,
+  `docs/themes.gif`) with real Roboto/Material Icons fonts. Re-run it after visible UI changes.
 - `.github/workflows/build.yml` — builds APK + Windows installer/zip and publishes a
   release (tag `v<pubspec version>`, notes taken from `CHANGELOG.md`).
 - `.github/workflows/window-test.yml` — opens the app on Windows (demo mode), resizes

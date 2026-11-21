@@ -1,8 +1,6 @@
 <p align="center">
-  <img src="docs/icon.png" width="120" alt="Oganesson icon">
+  <img src="docs/banner.png" alt="Oganesson TakeNotes" width="100%">
 </p>
-
-<h1 align="center">Oganesson TakeNotes</h1>
 
 <p align="center">
   Notes that live on your phone <b>and</b> your PC — synced in real time.<br>
@@ -12,15 +10,15 @@
 
 <p align="center">
   <a href="https://github.com/rafaeldb22/Oganesson-TakeNotes/releases/latest/download/Oganesson-Setup.exe">
-    <img src="https://img.shields.io/badge/Download-Windows%20installer-7C5CFF?style=for-the-badge&logo=windows&logoColor=white" alt="Download for Windows">
+    <img src="https://img.shields.io/badge/Download-Windows%20installer-C9993F?style=for-the-badge&logo=windows&logoColor=white" alt="Download for Windows">
   </a>
   &nbsp;
   <a href="https://github.com/rafaeldb22/Oganesson-TakeNotes/releases/latest/download/Oganesson.apk">
-    <img src="https://img.shields.io/badge/Download-Android%20APK-2DD4A7?style=for-the-badge&logo=android&logoColor=white" alt="Download for Android">
+    <img src="https://img.shields.io/badge/Download-Android%20APK-C9993F?style=for-the-badge&logo=android&logoColor=white" alt="Download for Android">
   </a>
   &nbsp;
   <a href="https://github.com/rafaeldb22/Oganesson-TakeNotes/releases/latest/download/Oganesson-Windows-portable.zip">
-    <img src="https://img.shields.io/badge/Download-Windows%20portable-555?style=for-the-badge&logo=windows&logoColor=white" alt="Windows portable zip">
+    <img src="https://img.shields.io/badge/Download-Windows%20portable-243049?style=for-the-badge&logo=windows&logoColor=white" alt="Windows portable zip">
   </a>
 </p>
 
@@ -31,16 +29,27 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/rafaeldb22/Oganesson-TakeNotes/releases/latest"><img src="https://img.shields.io/github/v/release/rafaeldb22/Oganesson-TakeNotes?label=latest&color=7C5CFF" alt="Latest release"></a>
-  <img src="https://img.shields.io/badge/platforms-Windows%20%7C%20Android-555" alt="Platforms">
+  <a href="https://github.com/rafaeldb22/Oganesson-TakeNotes/releases/latest"><img src="https://img.shields.io/github/v/release/rafaeldb22/Oganesson-TakeNotes?label=latest&color=C9993F" alt="Latest release"></a>
+  <img src="https://img.shields.io/badge/platforms-Windows%20%7C%20Android-243049" alt="Platforms">
   <img src="https://img.shields.io/badge/built%20with-Flutter-02569B?logo=flutter" alt="Flutter">
   <img src="https://img.shields.io/badge/sync-Supabase-3ECF8E?logo=supabase&logoColor=white" alt="Supabase">
 </p>
 
 <p align="center">
-  <img src="docs/screenshot-windows.png" width="49%" alt="Notes on Windows">
-  <img src="docs/screenshot-calendar.png" width="49%" alt="Calendar on Windows">
+  <img src="docs/screenshot-windows.png" width="49%" alt="Notes and calendar (dark)">
+  <img src="docs/screenshot-calendar.png" width="49%" alt="Note editor (Sepia light theme)">
 </p>
+
+## See it in action
+
+<table>
+  <tr>
+    <td align="center" width="34%"><img src="docs/mobile.gif" alt="Phone: notes, calendar and note network"><br><sub><b>On the phone</b> — notes, calendar, note network and swipe to archive</sub></td>
+    <td align="center"><img src="docs/startup.gif" alt="Startup animation"><br><sub><b>Startup</b> — the logo draws itself</sub><br><br><img src="docs/themes.gif" alt="Themes"><br><sub><b>14 themes</b>, each with a soft light mode and a dark mode</sub></td>
+  </tr>
+</table>
+
+<sub>The animations are recorded from the real app by `flutter test tool/record_gifs_test.dart` (demo notes).</sub>
 
 ---
 

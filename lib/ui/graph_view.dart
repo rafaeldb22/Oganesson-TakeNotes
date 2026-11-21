@@ -399,6 +399,10 @@ class _GraphViewState extends State<GraphView> with TickerProviderStateMixin {
                                 radius: _radius,
                                 colors: p,
                                 labelColor: onSurface,
+                                labelFont: Theme.of(context)
+                                    .textTheme
+                                    .bodyMedium
+                                    ?.fontFamily,
                                 textDirection: Directionality.of(context),
                               ),
                             ),
@@ -508,6 +512,7 @@ class _GraphPainter extends CustomPainter {
     required this.radius,
     required this.colors,
     required this.labelColor,
+    this.labelFont,
     required this.textDirection,
   });
 
@@ -523,6 +528,9 @@ class _GraphPainter extends CustomPainter {
   final double Function(String id) radius;
   final NotasColors colors;
   final Color labelColor;
+
+  /// Fuente de las etiquetas (la del tema, como el resto del texto).
+  final String? labelFont;
   final TextDirection textDirection;
 
   Offset _s(Offset world) => world * scale + offset;
@@ -609,6 +617,7 @@ class _GraphPainter extends CustomPainter {
         text: TextSpan(
           text: title,
           style: TextStyle(
+            fontFamily: labelFont,
             fontSize: isHover ? lerp(11.5, 13.5) : 11.5,
             fontWeight: isHover && t > 0.5 ? FontWeight.w700 : FontWeight.w500,
             color: labelColor.withValues(alpha: 0.92 * visible),

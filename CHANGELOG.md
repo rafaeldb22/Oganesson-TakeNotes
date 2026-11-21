@@ -2,6 +2,17 @@
 
 All notable changes to Oganesson TakeNotes (formerly *Notas* / *BabuNotes*).
 
+## [1.5.2] — 2026-11-21
+
+### Added
+- **New GitHub page**: banner with the gold logo, buttons in the logo colours, fresh screenshots
+  and animated previews (phone tour, startup animation, themes). They are recorded from the real
+  app with `flutter test tool/record_gifs_test.dart`.
+
+### Changed
+- Note network labels and the note editor use the theme font explicitly (same look as the rest
+  of the app).
+
 ## [1.5.1] — 2026-11-21
 
 ### Added
