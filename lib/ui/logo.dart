@@ -1,7 +1,10 @@
+import 'dart:io' show Platform;
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:window_manager/window_manager.dart';
 
 /// Logo de Oganesson: una línea dorada continua con dos bucles sobre azul
 /// marino. Lo usan la animación de inicio y el generador del icono
@@ -17,9 +20,26 @@ const logoGold = [Color(0xFFFBE6A8), Color(0xFFE2B866), Color(0xFFB07C2E)];
 /// Grosor del trazo respecto al lado del logo.
 const logoStroke = 0.043;
 
+/// Parte del cuadrado que ocupa el trazo (centrado según sus límites).
+const logoFill = 0.74;
+
 /// El trazo, en un cuadrado de lado [s]: una sola línea con dos bucles
-/// unidos por una curva (como una "e" doble manuscrita).
+/// unidos por una curva (como una "e" doble manuscrita). Se centra según
+/// sus límites reales y se escala para ocupar [logoFill] del cuadro.
 Path logoGlyphPath(Size s) {
+  final raw = _rawGlyph();
+  final b = raw.getBounds();
+  final scale = logoFill * s.width / math.max(b.width, b.height);
+  final m = Matrix4.identity()
+    ..translateByDouble(s.width / 2, s.height / 2, 0, 1)
+    ..scaleByDouble(scale, scale, 1, 1)
+    ..translateByDouble(-b.center.dx, -b.center.dy, 0, 1);
+  return raw.transform(m.storage);
+}
+
+/// El trazo en coordenadas de 0 a 1 (sin centrar).
+Path _rawGlyph() {
+  const s = Size(1, 1);
   final p = Path();
   Offset o(double x, double y) => Offset(x * s.width, y * s.height);
   void c(double x1, double y1, double x2, double y2, double x, double y) {
@@ -124,10 +144,48 @@ class _StartupSplashState extends State<StartupSplash>
   late final AnimationController _c = AnimationController(
     vsync: this,
     duration: const Duration(milliseconds: 1850),
-  )..forward().whenComplete(() {
-      if (mounted) setState(() => _done = true);
-    });
+  );
   bool _done = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _start();
+  }
+
+  /// En Windows la ventana aparece un poco después del primer dibujo:
+  /// se espera a que sea visible y opaca para que la animación se vea entera.
+  Future<void> _start() async {
+    if (!kIsWeb && Platform.isWindows) {
+      final until = DateTime.now().add(const Duration(seconds: 4));
+      while (mounted && DateTime.now().isBefore(until)) {
+        try {
+          // Con tiempo máximo: si la consulta no respondiera, la pantalla de
+          // inicio no se quedaría colgada.
+          final visible = await windowManager.isVisible().timeout(
+              const Duration(milliseconds: 300),
+              onTimeout: () => true);
+          // main.dart la enseña transparente y la vuelve opaca al tener imagen.
+          final opaque = visible &&
+              await windowManager.getOpacity().timeout(
+                      const Duration(milliseconds: 300),
+                      onTimeout: () => 1) >=
+                  1;
+          if (opaque) break;
+        } catch (_) {
+          break;
+        }
+        await Future<void>.delayed(const Duration(milliseconds: 40));
+      }
+      // Margen para que el primer fotograma ya esté en pantalla.
+      await Future<void>.delayed(const Duration(milliseconds: 120));
+    } else {
+      await Future<void>.delayed(const Duration(milliseconds: 120));
+    }
+    if (!mounted) return;
+    await _c.forward();
+    if (mounted) setState(() => _done = true);
+  }
 
   @override
   void dispose() {
@@ -185,7 +243,7 @@ class _StartupSplashState extends State<StartupSplash>
                           Opacity(
                             opacity: word,
                             child: Transform.translate(
-                              offset: Offset(0, -side * 0.16 + 10 * (1 - word)),
+                              offset: Offset(0, -side * 0.06 + 10 * (1 - word)),
                               child: Text(
                                 'oganesson',
                                 style: TextStyle(

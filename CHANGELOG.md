@@ -2,6 +2,24 @@
 
 All notable changes to Oganesson TakeNotes (formerly *Notas* / *BabuNotes*).
 
+## [1.5.1] — 2026-11-21
+
+### Added
+- **Mobile: Notes button** in the bottom bar, next to Network and Calendar, to go back to the note
+  list (on the phone the three views share the screen).
+
+### Changed
+- Bigger, centred logo in the startup animation and in the app icon.
+- Windows: the startup animation is now seen from the start. The window appears only once it has
+  something painted (no white flash) and the animation waits until it is visible; it also covers
+  the title bar.
+
+### Fixed
+- Mobile: bottom sheets (themes, schedule, trash, archived, completed…) stop below the status bar
+  and at most at 90 % of the screen, so they can always be dragged down.
+- Untranslated sync tooltips ("Sincronizando…", "Subiendo cambios…").
+- `scripts/prepare_windows.ps1` no longer deletes the `test/` folder.
+
 ## [1.5.0] — 2026-11-21
 
 ### Added

@@ -41,8 +41,11 @@ void main() {
       }
     }
 
-    // Al terminar desaparece y solo queda la app.
-    await tester.pumpAndSettle();
+    // Al terminar desaparece y solo queda la app. (Se avanza el reloj a
+    // mano: la espera a que la ventana sea visible usa temporizadores.)
+    for (var i = 0; i < 70; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
     expect(find.text('APP'), findsOneWidget);
     expect(
         find.byWidgetPredicate(

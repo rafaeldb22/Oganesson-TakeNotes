@@ -12,13 +12,14 @@ import 'i18n.dart';
 Future<void> showTrash(BuildContext context, NotesRepository repo) {
   return showModalBottomSheet<void>(
     context: context,
+    useSafeArea: true,
     isScrollControlled: true,
     constraints: const BoxConstraints(maxWidth: 620),
     builder: (_) => DraggableScrollableSheet(
       expand: false,
       initialChildSize: 0.7,
       minChildSize: 0.4,
-      maxChildSize: 0.95,
+      maxChildSize: 0.9,
       builder: (context, scroll) => ListenableBuilder(
         listenable: repo,
         builder: (context, _) {

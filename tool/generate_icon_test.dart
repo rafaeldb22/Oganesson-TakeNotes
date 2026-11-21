@@ -111,14 +111,14 @@ void main() {
     final preview = Platform.environment['ICON_PREVIEW'];
     if (preview != null) {
       await _save(tester, LogoPainter(), 512, '$preview/logo.png');
-      await _save(tester, LogoPainter(background: false, glyphScale: 0.70), 512,
+      await _save(tester, LogoPainter(background: false, glyphScale: 0.62), 512,
           '$preview/foreground.png');
       return;
     }
     await _save(tester, LogoPainter(), 1024, 'assets/icon/icon.png');
     await _save(tester, LogoPainter(), 512, 'docs/icon.png');
     // Icono adaptable: el trazo dentro de la zona segura (66 % central).
-    await _save(tester, LogoPainter(background: false, glyphScale: 0.70), 1024,
+    await _save(tester, LogoPainter(background: false, glyphScale: 0.62), 1024,
         'assets/icon/foreground.png');
     await _save(tester, _Background(), 1024, 'assets/icon/background.png');
   });

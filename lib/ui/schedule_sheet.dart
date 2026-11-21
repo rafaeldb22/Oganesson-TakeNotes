@@ -18,8 +18,10 @@ Future<void> showScheduleSheet(
     {DateTime? initialDue}) {
   return showModalBottomSheet<void>(
     context: context,
+    useSafeArea: true,
     isScrollControlled: true,
-    constraints: const BoxConstraints(maxWidth: 520),
+    constraints: BoxConstraints(
+        maxWidth: 520, maxHeight: MediaQuery.sizeOf(context).height * 0.9),
     builder: (_) =>
         _ScheduleSheet(repo: repo, noteId: noteId, initialDue: initialDue),
   );

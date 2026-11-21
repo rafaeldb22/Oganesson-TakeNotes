@@ -34,11 +34,12 @@ Future<void> main() async {
       title: 'Oganesson',
       // Sin la barra de Windows: la app dibuja la suya (como Chrome).
       titleBarStyle: TitleBarStyle.hidden,
+      // Mismo azul que la animación de inicio: sin destello blanco al abrir.
+      backgroundColor: logoNavyTop,
     );
-    windowManager.waitUntilReadyToShow(options, () async {
-      await windowManager.show();
-      await windowManager.focus();
-    });
+    // Se muestra cuando Flutter ya ha pintado (ver el final de main): así
+    // no se ve un fotograma blanco antes de la animación de inicio.
+    windowManager.waitUntilReadyToShow(options);
     windowManager.addListener(_RepaintOnWindowChange());
   }
 
@@ -57,6 +58,21 @@ Future<void> main() async {
     );
   }
   runApp(const NotasApp());
+  if (!kIsWeb && Platform.isWindows) {
+    // Se enseña transparente y se hace opaca cuando la superficie de dibujo
+    // ya tiene imagen: si no, Windows enseña la ventana en blanco un instante.
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await windowManager.setOpacity(0);
+      await windowManager.show();
+      await windowManager.focus();
+      for (var i = 0; i < 3; i++) {
+        WidgetsBinding.instance.scheduleFrame();
+        await WidgetsBinding.instance.endOfFrame;
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 60));
+      await windowManager.setOpacity(1);
+    });
+  }
 }
 
 /// Algunas gráficas en Windows dejan zonas negras o sin texto tras cambiar
@@ -134,17 +150,17 @@ class NotasApp extends StatelessWidget {
           FlutterQuillLocalizations.delegate,
         ],
         // En Windows, barra de título propia encima de todas las pantallas.
-        // Animación de inicio (el logo se dibuja) por encima de la app; en
-        // Windows la barra de título queda fuera para poder usarla.
-        builder: (context, child) => isDesktopWindows
-            ? Column(
-                children: [
-                  const AppTitleBar(),
-                  Expanded(
-                      child: StartupSplash(child: child ?? const SizedBox())),
-                ],
-              )
-            : StartupSplash(child: child ?? const SizedBox()),
+        // Animación de inicio (el logo se dibuja) por encima de toda la app.
+        builder: (context, child) => StartupSplash(
+          child: isDesktopWindows
+              ? Column(
+                  children: [
+                    const AppTitleBar(),
+                    Expanded(child: child ?? const SizedBox()),
+                  ],
+                )
+              : (child ?? const SizedBox()),
+        ),
         // Al cambiar de idioma se vuelve a montar la app con los textos nuevos.
         home: KeyedSubtree(
           key: ValueKey(appLanguage.code),

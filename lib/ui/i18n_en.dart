@@ -88,6 +88,8 @@ const enStrings = <String, String>{
   '{0} enlace': '{0} link',
   '{0} enlaces': '{0} links',
   'Todo sincronizado': 'All synced',
+  'Sincronizando…': 'Syncing…',
+  'Subiendo cambios…': 'Uploading changes…',
   'Sin conexión: los cambios se subirán al volver internet':
       'Offline: changes will upload when you are back online',
   'Nota movida a la papelera': 'Note moved to the trash',

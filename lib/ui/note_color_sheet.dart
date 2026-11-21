@@ -13,6 +13,7 @@ Future<void> showNoteColorSheet(
     BuildContext context, NotesRepository repo, String noteId) {
   return showModalBottomSheet<void>(
     context: context,
+    useSafeArea: true,
     constraints: const BoxConstraints(maxWidth: 520),
     builder: (_) => ListenableBuilder(
       listenable: repo,

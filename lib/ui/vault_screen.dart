@@ -111,6 +111,7 @@ class _VaultScreenState extends State<VaultScreen> {
     } else {
       choice = await showModalBottomSheet<String>(
         context: context,
+        useSafeArea: true,
         showDragHandle: true,
         builder: (ctx) => SafeArea(
           child: Column(mainAxisSize: MainAxisSize.min, children: [

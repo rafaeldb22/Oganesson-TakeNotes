@@ -8,8 +8,10 @@ import 'i18n.dart';
 Future<void> showThemePicker(BuildContext context) {
   return showModalBottomSheet<void>(
     context: context,
+    useSafeArea: true,
     isScrollControlled: true,
-    constraints: const BoxConstraints(maxWidth: 620),
+    constraints: BoxConstraints(
+        maxWidth: 620, maxHeight: MediaQuery.sizeOf(context).height * 0.9),
     builder: (_) => const _ThemePicker(),
   );
 }

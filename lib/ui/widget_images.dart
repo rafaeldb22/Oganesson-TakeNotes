@@ -207,8 +207,7 @@ class NextTaskWidgetImage extends StatelessWidget {
     }
     final stops = fusePalette(n.color);
     final p = n.progress();
-    final color = readableOn(
-        n.isOverdue() ? stops.last : paletteAt(stops, p),
+    final color = readableOn(n.isOverdue() ? stops.last : paletteAt(stops, p),
         light: !dark);
     final remaining = tiempoRestante(n.dueAt!);
 

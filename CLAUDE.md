@@ -97,8 +97,12 @@ that it still arrives. On Windows, check toasts are enabled first:
 - `supabase/migrations/` — schema, RLS, realtime, colour column, delete policy, `vaults`
   table (005). Migrations are run by hand in the Supabase SQL Editor.
 - `installer/oganesson.iss` — Inno Setup script for `Oganesson-Setup.exe`.
-- `lib/ui/logo.dart` — logo stroke/colours (`logoGlyphPath`) and the `StartupSplash` animation
-  (wraps the app in `main.dart`).
+- `lib/ui/logo.dart` — logo stroke/colours (`logoGlyphPath`, centred and scaled to `logoFill`)
+  and the `StartupSplash` animation (wraps the whole app in `main.dart`). On Windows the window
+  is shown from Dart, transparent, and made opaque after a few frames (no white flash);
+  `prepare_windows.ps1` removes the runner's own `Show()` for this.
+- Bottom sheets: pass `useSafeArea: true` and cap the height (≤ 90 %) so they never reach the
+  phone's status bar.
 - `tool/generate_icon_test.dart` — draws the logo with Flutter and writes `assets/icon/*.png`
   and `docs/icon.png` (`flutter test tool/generate_icon_test.dart`).
 - `.github/workflows/build.yml` — builds APK + Windows installer/zip and publishes a

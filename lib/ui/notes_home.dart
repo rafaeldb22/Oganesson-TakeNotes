@@ -311,6 +311,7 @@ class _NotesHomeState extends State<NotesHome> {
     } else {
       choice = await showModalBottomSheet<String>(
         context: context,
+        useSafeArea: true,
         showDragHandle: true,
         builder: (ctx) => SafeArea(
           child: Column(
@@ -775,6 +776,24 @@ class _NotesHomeState extends State<NotesHome> {
                     ? const SizedBox()
                     : Center(child: _statusText(context)),
               ),
+              // En el móvil la lista, el calendario y la red ocupan la misma
+              // pantalla: botón para volver a las notas.
+              if (!wide) ...[
+                _BarButton(
+                  tooltip: tr('Notas'),
+                  icon: _listShown(noteOpen)
+                      ? Icons.sticky_note_2
+                      : Icons.sticky_note_2_outlined,
+                  active: _listShown(noteOpen),
+                  onTap: () {
+                    if (noteOpen) _close();
+                    if (_filter == 'red' || _filter == 'calendario') {
+                      _setFilter('todas');
+                    }
+                  },
+                ),
+                const SizedBox(width: 4),
+              ],
               for (final (view, tip, on, off) in [
                 ('red', tr('Red de notas'), Icons.hub, Icons.hub_outlined),
                 (
@@ -924,6 +943,10 @@ class _NotesHomeState extends State<NotesHome> {
 
   /// ¿Se está viendo [view] (red o calendario)? En pantalla ancha el
   /// calendario se ve siempre que no haya nota abierta ni red elegida.
+  /// ¿Se ve la lista de notas? (móvil: ni nota abierta, ni calendario, ni red).
+  bool _listShown(bool noteOpen) =>
+      !noteOpen && _filter != 'red' && _filter != 'calendario';
+
   bool _viewShown(String view, bool wide, bool noteOpen) {
     if (noteOpen) return false;
     if (wide && view == 'calendario') return _filter != 'red';
@@ -971,6 +994,7 @@ class _NotesHomeState extends State<NotesHome> {
     } else {
       choice = await showModalBottomSheet<String>(
         context: context,
+        useSafeArea: true,
         showDragHandle: true,
         builder: (ctx) => SafeArea(
           child: Column(mainAxisSize: MainAxisSize.min, children: [
@@ -1594,7 +1618,7 @@ class _SyncIndicator extends StatelessWidget {
               width: 18,
               height: 18,
               child: CircularProgressIndicator(strokeWidth: 2)),
-          'Sincronizando…'
+          tr('Sincronizando…')
         ),
       SyncStatus.synced => (
           const Icon(Icons.cloud_done_outlined),
@@ -1602,7 +1626,7 @@ class _SyncIndicator extends StatelessWidget {
         ),
       SyncStatus.pending => (
           const Icon(Icons.cloud_upload_outlined),
-          'Subiendo cambios…'
+          tr('Subiendo cambios…')
         ),
       SyncStatus.offline => (
           const Icon(Icons.cloud_off_outlined),

@@ -113,6 +113,7 @@ Future<String?> pickFolder(
     BuildContext context, NotesRepository repo, String? current) {
   return showModalBottomSheet<String>(
     context: context,
+    useSafeArea: true,
     builder: (ctx) => SafeArea(
       child: ListView(
         shrinkWrap: true,
