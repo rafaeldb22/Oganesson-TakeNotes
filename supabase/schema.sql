@@ -30,6 +30,9 @@ create policy "notas_editar" on public.notes
   for update to authenticated
   using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
+-- Permite que la app (usuarios con sesión) acceda a la tabla por la API.
+grant select, insert, update on public.notes to authenticated;
+
 -- Activa el tiempo real (lo que hace que el PC se actualice solo).
 do $$
 begin
