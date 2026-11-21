@@ -6,7 +6,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
-import 'package:flutter_quill/flutter_quill.dart' show FlutterQuillLocalizations;
+import 'package:flutter_quill/flutter_quill.dart'
+    show FlutterQuillLocalizations;
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:window_manager/window_manager.dart';
 
@@ -14,6 +15,7 @@ import 'config.dart';
 import 'data/reminders.dart';
 import 'data/widget_bridge.dart';
 import 'ui/auth_gate.dart';
+import 'ui/i18n.dart';
 import 'ui/theme.dart';
 import 'ui/title_bar.dart';
 
@@ -40,7 +42,11 @@ Future<void> main() async {
   }
 
   await themeSettings.load();
+  await appLanguage.load();
   unawaited(Reminders.instance.init());
+  if (const bool.fromEnvironment('TEST_TOAST')) {
+    unawaited(Reminders.instance.scheduleTest(const Duration(minutes: 1)));
+  }
   themeSettings.onThemeChanged = WidgetBridge.refresh;
 
   if (AppConfig.isConfigured) {
@@ -93,34 +99,40 @@ class NotasApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      listenable: themeSettings,
+      listenable: Listenable.merge([themeSettings, appLanguage]),
       builder: (context, _) => MaterialApp(
-      title: 'Oganesson',
-      debugShowCheckedModeBanner: false,
-      theme: buildTheme(themeSettings.theme, Brightness.light),
-      darkTheme: buildTheme(themeSettings.theme, Brightness.dark),
-      themeMode: themeSettings.mode,
-      // Cambio de tema animado: los colores se funden en vez de saltar.
-      themeAnimationDuration: const Duration(milliseconds: 450),
-      themeAnimationCurve: Curves.easeInOutCubic,
-      locale: const Locale('es'),
-      supportedLocales: const [Locale('es'), Locale('en')],
-      localizationsDelegates: const [
-        GlobalMaterialLocalizations.delegate,
-        GlobalWidgetsLocalizations.delegate,
-        GlobalCupertinoLocalizations.delegate,
-        FlutterQuillLocalizations.delegate,
-      ],
-      // En Windows, barra de título propia encima de todas las pantallas.
-      builder: (context, child) => isDesktopWindows
-          ? Column(
-              children: [
-                const AppTitleBar(),
-                Expanded(child: child ?? const SizedBox()),
-              ],
-            )
-          : (child ?? const SizedBox()),
-      home: AppConfig.isConfigured ? const AuthGate() : const _MissingConfig(),
+        title: 'Oganesson',
+        debugShowCheckedModeBanner: false,
+        theme: buildTheme(themeSettings.theme, Brightness.light),
+        darkTheme: buildTheme(themeSettings.theme, Brightness.dark),
+        themeMode: themeSettings.mode,
+        // Cambio de tema animado: los colores se funden en vez de saltar.
+        themeAnimationDuration: const Duration(milliseconds: 450),
+        themeAnimationCurve: Curves.easeInOutCubic,
+        locale: appLanguage.locale,
+        supportedLocales: const [Locale('es'), Locale('en')],
+        localizationsDelegates: const [
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+          FlutterQuillLocalizations.delegate,
+        ],
+        // En Windows, barra de título propia encima de todas las pantallas.
+        builder: (context, child) => isDesktopWindows
+            ? Column(
+                children: [
+                  const AppTitleBar(),
+                  Expanded(child: child ?? const SizedBox()),
+                ],
+              )
+            : (child ?? const SizedBox()),
+        // Al cambiar de idioma se vuelve a montar la app con los textos nuevos.
+        home: KeyedSubtree(
+          key: ValueKey(appLanguage.code),
+          child: AppConfig.isConfigured
+              ? const AuthGate()
+              : const _MissingConfig(),
+        ),
       ),
     );
   }

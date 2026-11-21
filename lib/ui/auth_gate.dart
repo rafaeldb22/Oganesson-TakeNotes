@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../config.dart';
 import '../data/notes_repository.dart';
 import '../data/reminders.dart';
+import '../data/vault.dart';
 import 'login_screen.dart';
 import 'notes_home.dart';
 
@@ -42,18 +43,24 @@ class NotesShell extends StatefulWidget {
 class _NotesShellState extends State<NotesShell> with WidgetsBindingObserver {
   late final NotesRepository repo =
       NotesRepository(Supabase.instance.client, widget.userId);
+  late final VaultLock vault = VaultLock.forUser(widget.userId);
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    // Las notas del Vault solo se ven con el Vault abierto.
+    repo.vaultUnlocked = () => vault.unlocked;
+    vault.addListener(repo.vaultChanged);
+    vault.load();
     repo.addListener(_reprogramar);
     repo.start().then((_) {
       if (AppConfig.demo) repo.seedDemo();
     });
   }
 
-  void _reprogramar() => Reminders.instance.schedule(repo.notes);
+  // Todas las notas, también las del Vault (sus avisos no muestran el título).
+  void _reprogramar() => Reminders.instance.schedule(repo.allActive);
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
@@ -63,6 +70,8 @@ class _NotesShellState extends State<NotesShell> with WidgetsBindingObserver {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    vault.removeListener(repo.vaultChanged);
+    vault.lock();
     repo.removeListener(_reprogramar);
     repo.dispose();
     super.dispose();

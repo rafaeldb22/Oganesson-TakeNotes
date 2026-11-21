@@ -2,8 +2,10 @@
 
 iPhone-style notes app for **Android (APK + home-screen widgets)** and **Windows**, built
 with **Flutter** and synced in real time with **Supabase**. The owner (Rafa) speaks
-Spanish: reply to him in Spanish and keep the app's UI text in Spanish. Repository
-documentation, workflows and commit messages are in English.
+Spanish: reply to him in Spanish. The app UI is **Spanish + English**: write UI text in
+Spanish wrapped in `tr('…')` / `trf('… {0}', [x])` / `trn(n, one, many)` (`lib/ui/i18n.dart`)
+and add the English to `lib/ui/i18n_en.dart`. Repository documentation, workflows and commit
+messages are in English.
 
 ## First-time setup on a new PC
 
@@ -15,7 +17,8 @@ Flutter stable and Claude Code with winget / official installers, clones the rep
 
 Requirements: Flutter stable (3.50+), Git and Visual Studio **2022** with the
 "Desktop development with C++" workload (VS 2026 / MSVC 14.52 cannot build the Windows
-notifications plugin because of `/await`).
+notifications plugin because of `/await`), plus Windows **Developer Mode** on (Flutter needs
+symlinks for plugins: `start ms-settings:developers`; the setup script enables it).
 
 ```powershell
 ./scripts/prepare_windows.ps1     # generates windows/, sets the Oganesson name and icon
@@ -35,6 +38,11 @@ flutter run -d <device-id>
 
 Demo mode without an account (sample notes): `--dart-define=DEMO=true`.
 
+Notification test: `--dart-define=TEST_TOAST=true` schedules a test notification one
+minute after startup (log line `TEST_TOAST programado para …`); close the app to check
+that it still arrives. On Windows, check toasts are enabled first:
+`ToastNotificationManager.CreateToastNotifier('Rafa.Oganesson').Setting` must be `Enabled`.
+
 ## Structure
 
 - `lib/main.dart` — startup, Windows window (window_manager 0.5.x, hidden system title
@@ -45,15 +53,35 @@ Demo mode without an account (sample notes): `--dart-define=DEMO=true`.
 - `lib/data/notes_repository.dart` — local cache (SharedPreferences), change queue,
   upsert to Supabase, realtime for `notes` and `folders`, last edit wins, 3-day trash.
 - `lib/data/reminders.dart` — notifications at 7/3/1 days before the deadline.
-- `lib/data/widget_bridge.dart` — data for the Android widgets (home_widget).
+- `lib/data/widget_bridge.dart` — data for the Android widgets (home_widget); renders the
+  calendar widget image in three sizes (S/M/L), `CalendarioWidget.kt` picks one by widget size.
+- `lib/data/note_links.dart` — `NoteGraph` (links, backlinks). Links are `Note.links` (ids,
+  set from right-click → *Enlazar* / *Crear subnota*, column `notes.links`); legacy
+  `[[Title]]` text links are still read.
+- `lib/data/vault.dart` — `VaultLock`: master password for the Vault (notes with `vault = true`).
+  Stored only as a PBKDF2-SHA256 hash (SharedPreferences + Supabase table `vaults`), silent
+  auto-lock after 5 min without activity. The Vault is only reachable from ⋯ (its own screen,
+  `lib/ui/vault_screen.dart`); `NotesRepository.notes` never contains vault notes
+  (`vaultNotes` does, when unlocked). Password change needs the current one
+  (`lib/ui/vault_dialogs.dart`); email-code reset exists but is gated by
+  `AppConfig.emailCodes`. Vault notes are not end-to-end encrypted (same RLS as other notes).
+- Completed tasks: `Note.doneAt` (column `notes.done_at`); done > 3 days → hidden from lists and
+  shown in ⋯ → Completadas (`lib/ui/completed_sheet.dart`); > 30 days → trash.
+- `lib/data/updater.dart` — checks GitHub Releases (`AppConfig.githubRepo`) and installs the
+  update (Windows: silent Inno Setup install that reopens the app; Android: APK + system
+  installer). Needs the repository to be public.
 - `lib/ui/` — `notes_home.dart` (list/editor, filters, cached panels), `note_editor.dart`
   + `editor_toolbar.dart` (flutter_quill with a custom toolbar), `calendar_view.dart`
   (current month ±3), `schedule_sheet.dart` (mini calendar + time wheel), `urgency.dart`
   (fuse bar), `split.dart` (resizable divider), `theme.dart` (10 light/dark themes),
   `wave_title.dart` (retro Shrikhand title), `title_bar.dart` (custom Windows title bar),
-  `note_color_sheet.dart`, `trash_sheet.dart`, `calendar_widget_image.dart` (Android 4x2
-  calendar widget, rendered as an image with home_widget).
-- `supabase/migrations/` — schema, RLS, realtime, colour column, delete policy.
+  `note_color_sheet.dart`, `trash_sheet.dart`, `calendar_widget_image.dart` (Android
+  calendar widget in 2x2/4x2/4x4, rendered as images with home_widget), `graph_view.dart`
+  (force-directed note network), `link_picker.dart` (`[[` note picker), `update_dialog.dart`
+  (update prompt, `openLink`), `sort_menu.dart` (animated sort menu), `account_dialogs.dart`
+  (change account password), `language_picker.dart`, `i18n.dart` + `i18n_en.dart`.
+- `supabase/migrations/` — schema, RLS, realtime, colour column, delete policy, `vaults`
+  table (005). Migrations are run by hand in the Supabase SQL Editor.
 - `installer/oganesson.iss` — Inno Setup script for `Oganesson-Setup.exe`.
 - `.github/workflows/build.yml` — builds APK + Windows installer/zip and publishes a
   release (tag `v<pubspec version>`, notes taken from `CHANGELOG.md`).
@@ -68,19 +96,31 @@ Demo mode without an account (sample notes): `--dart-define=DEMO=true`.
   its API; flutter_local_notifications 19.x).
 - Animations use `flutter_animate` and the helpers in `lib/ui/anim.dart`.
 - Colours always through `Palette.*` (ThemeExtension `NotasColors`), never hard-coded.
-- Password reset with an email code needs custom SMTP in Supabase (default templates
-  only contain a link); not implemented.
+- Account password reset with an email code needs custom SMTP in Supabase (default templates
+  only contain a link); not implemented. The Vault reset uses the same mechanism.
 - Before calling something done: `flutter analyze` and, if possible, run it.
 
 ## Open items / known gaps
 
-- Not yet verified on a real phone: Android calendar widget (4x2), trash purge,
-  7/3/1-day reminders, notification permissions on Android 13+.
+- Not yet verified on a real phone: Android calendar widget (2x2/4x2/4x4 sizes and the
+  solid background), in-app APK update, trash purge, 7/3/1-day reminders, notification
+  permissions on Android 13+.
+- Migration `supabase/migrations/005_vault.sql` must be run in Supabase (adds `notes.vault`,
+  `notes.links`, `notes.done_at` and the `vaults` table). Until then those fields are not
+  uploaded (`NotesRepository.serverHasVault`), vault notes stay on this device only and the
+  Vault password is not synced.
+- Android home-screen widget layouts (Kotlin/XML) still have fixed Spanish labels.
+- Vault password reset by email code needs the Supabase *Magic Link* email template to include
+  `{{ .Token }}`; on the free plan editing templates requires custom SMTP (Brevo, Resend…).
+- In-app updates need the repository to be public (the GitHub API returns 404 while it is
+  private, and the app then simply reports no update).
 - Windows: some GPUs showed black/unpainted areas after resizing; a forced full repaint
-  runs after resize/maximise (`forceFullRepaint` in `lib/main.dart`). Needs confirmation
-  on the owner's PC.
-- Windows notifications: unknown whether scheduled toasts fire while the app is closed
-  (unpackaged app).
+  runs after resize/maximise (`forceFullRepaint` in `lib/main.dart`). Confirmed fine on
+  the owner's PC (2026-11-21: 760 px, 1500x900, maximised and restored, no artefacts).
+- Windows notifications: still unknown whether scheduled toasts fire while the app is
+  closed (unpackaged app). The 2026-11-21 test could not tell: notifications were turned
+  off system-wide on the owner's PC (`ToastEnabled = 0`). Repeat with `TEST_TOAST`.
 - Password reset by email code: needs custom SMTP in Supabase (see above).
-- Code comments are still in Spanish (UI text must stay Spanish).
-- The repository is private: the README download links only work when signed in.
+- Code comments are still in Spanish.
+- The repository is private (the owner plans to make it public): until then the README
+  download links only work when signed in and in-app update checks find nothing.

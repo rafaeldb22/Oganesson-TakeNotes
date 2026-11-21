@@ -46,6 +46,73 @@ class NotesRepository extends ChangeNotifier {
   bool _syncAgain = false;
   bool _disposed = false;
 
+  /// ¿Está abierto el Vault? Mientras no, sus notas no aparecen en ninguna
+  /// lista (notas, búsqueda, red, calendario, papelera).
+  bool Function() vaultUnlocked = () => false;
+
+  /// false si la tabla `notes` de Supabase aún no tiene la columna `vault`
+  /// (migración 005 sin ejecutar). Entonces las notas del Vault no se suben,
+  /// para que no aparezcan como notas normales en otros dispositivos.
+  bool serverHasVault = true;
+
+  /// Llamar cuando se bloquea o desbloquea el Vault.
+  void vaultChanged() => _notify();
+
+  /// Notas de las listas normales: nunca las del Vault (tienen su propia
+  /// pantalla, desde ⋯) ni las completadas hace más de 3 días.
+  bool _visible(Note n) => !n.vault && !isArchived(n);
+
+  /// Notas del Vault (solo con el Vault abierto), más recientes primero.
+  List<Note> get vaultNotes {
+    if (!vaultUnlocked()) return const [];
+    return _notes.values.where((n) => n.vault && !n.deleted).toList()
+      ..sort((a, b) {
+        if (a.pinned != b.pinned) return a.pinned ? -1 : 1;
+        return b.updatedAt.compareTo(a.updatedAt);
+      });
+  }
+
+  /// Días que una nota completada sigue en las listas antes de pasar a
+  /// "Completadas", y días que se guarda allí antes de ir a la papelera.
+  static const completedAfterDays = 3;
+  static const completedKeepDays = 30;
+
+  DateTime _doneSince(Note n) => n.doneAt ?? n.updatedAt;
+
+  /// Completada hace más de 3 días: ya no sale en las listas.
+  bool isArchived(Note n) =>
+      n.done &&
+      DateTime.now().toUtc().difference(_doneSince(n)).inDays >=
+          completedAfterDays;
+
+  /// Notas en "Completadas", las más recientes primero.
+  List<Note> get completed => _notes.values
+      .where((n) =>
+          !n.deleted &&
+          !n.isEmpty &&
+          isArchived(n) &&
+          (!n.vault || vaultUnlocked()))
+      .toList()
+    ..sort((a, b) => _doneSince(b).compareTo(_doneSince(a)));
+
+  /// Cuándo se irá a la papelera una nota completada.
+  DateTime completedUntil(Note n) =>
+      _doneSince(n).add(const Duration(days: completedKeepDays));
+
+  /// Las completadas hace más de 30 días van a la papelera.
+  void _expireCompleted() {
+    final limit = DateTime.now()
+        .toUtc()
+        .subtract(const Duration(days: completedKeepDays));
+    for (final n in _notes.values) {
+      if (n.done && !n.deleted && _doneSince(n).isBefore(limit)) {
+        n.deleted = true;
+        n.updatedAt = DateTime.now().toUtc();
+        _dirty.add(n.id);
+      }
+    }
+  }
+
   String get _cacheKey => 'notas_cache_$userId';
   String get _dirtyKey => 'notas_dirty_$userId';
   String get _foldersKey => 'carpetas_cache_$userId';
@@ -59,7 +126,7 @@ class NotesRepository extends ChangeNotifier {
 
   List<Note> get notes {
     if (_sortedCache != null && _sortedVersion == version) return _sortedCache!;
-    final list = _notes.values.where((n) => !n.deleted).toList()
+    final list = _notes.values.where((n) => !n.deleted && _visible(n)).toList()
       ..sort((a, b) {
         if (a.pinned != b.pinned) return a.pinned ? -1 : 1;
         return b.updatedAt.compareTo(a.updatedAt);
@@ -70,14 +137,11 @@ class NotesRepository extends ChangeNotifier {
   }
 
   /// Notas temporales ordenadas por fecha límite.
-  List<Note> get temporales => notes
-      .where((n) => n.isTemporal && !n.isEmpty)
-      .toList()
-    ..sort((a, b) => a.dueAt!.compareTo(b.dueAt!));
+  List<Note> get temporales =>
+      notes.where((n) => n.isTemporal && !n.isEmpty).toList()
+        ..sort((a, b) => a.dueAt!.compareTo(b.dueAt!));
 
-  List<Folder> get folders => _folders.values
-      .where((f) => !f.deleted)
-      .toList()
+  List<Folder> get folders => _folders.values.where((f) => !f.deleted).toList()
     ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
 
   /// Notas en la papelera (borradas hace menos de 3 días), más recientes antes.
@@ -86,7 +150,10 @@ class NotesRepository extends ChangeNotifier {
         DateTime.now().toUtc().subtract(const Duration(days: trashDays));
     return _notes.values
         .where((n) =>
-            n.deleted && !n.isEmpty && !_purge.contains(n.id) &&
+            n.deleted &&
+            !n.isEmpty &&
+            !_purge.contains(n.id) &&
+            (!n.vault || vaultUnlocked()) &&
             n.updatedAt.isAfter(limit))
         .toList()
       ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
@@ -132,8 +199,13 @@ class NotesRepository extends ChangeNotifier {
   Note? byId(String id) => _notes[id];
   Folder? folderById(String? id) => id == null ? null : _folders[id];
 
-  int countIn(String folderId) =>
-      notes.where((n) => n.folderId == folderId && !n.isEmpty).length;
+  int countIn(String folderId) => notes
+      .where((n) => n.folderId == folderId && !n.isEmpty && !n.vault)
+      .length;
+
+  /// Se llama en cada cambio hecho en este dispositivo (cuenta como
+  /// actividad para el bloqueo automático del Vault).
+  VoidCallback? onLocalEdit;
 
   // ---------------------------------------------------------------- ciclo
 
@@ -193,9 +265,49 @@ class NotesRepository extends ChangeNotifier {
 
   void togglePin(String id) => _edit(id, (n) => n.pinned = !n.pinned);
 
-  void toggleDone(String id) => _edit(id, (n) => n.done = !n.done);
+  void toggleDone(String id) => _edit(id, (n) {
+        n.done = !n.done;
+        n.doneAt = n.done ? DateTime.now().toUtc() : null;
+      });
+
+  /// Enlaza dos notas (enlace manual, se ve en la red y en el panel).
+  void addLinks(String id, Iterable<String> targets) => _edit(id, (n) {
+        for (final t in targets) {
+          if (t != id && !n.links.contains(t)) n.links.add(t);
+        }
+      });
+
+  void removeLink(String id, String target) => _edit(id, (n) {
+        n.links.remove(target);
+        // El enlace puede estar guardado en la otra nota.
+        final other = _notes[target];
+        if (other != null && other.links.remove(id)) {
+          other.updatedAt = DateTime.now().toUtc();
+          _dirty.add(other.id);
+        }
+      });
+
+  /// Crea una subnota enlazada a [parentId] y la devuelve.
+  Note createSubnote(String parentId) {
+    final parent = _notes[parentId];
+    final n = createNote(folderId: parent?.folderId);
+    if (parent != null) {
+      parent.links.add(n.id);
+      parent.updatedAt = DateTime.now().toUtc();
+      _dirty.add(parent.id);
+      if (parent.vault) n.vault = true;
+      _changed();
+    }
+    return n;
+  }
 
   void setColor(String id, int? color) => _edit(id, (n) => n.color = color);
+
+  /// Mete o saca una nota del Vault.
+  void setVault(String id, bool vault) => _edit(id, (n) => n.vault = vault);
+
+  /// Todas las notas activas, también las del Vault (para los avisos).
+  List<Note> get allActive => _notes.values.where((n) => !n.deleted).toList();
 
   void moveToFolder(String id, String? folderId) =>
       _edit(id, (n) => n.folderId = folderId);
@@ -299,6 +411,7 @@ class NotesRepository extends ChangeNotifier {
   }
 
   void _changed() {
+    onLocalEdit?.call();
     if (status != SyncStatus.offline) status = SyncStatus.pending;
     _schedulePersist();
     _pushDebounce?.cancel();
@@ -320,6 +433,11 @@ class NotesRepository extends ChangeNotifier {
       await _pushDirty();
       var changed = false;
       final rows = await _client.from('notes').select();
+      if (rows.isNotEmpty) {
+        final had = serverHasVault;
+        serverHasVault = rows.first.containsKey('vault');
+        if (had != serverHasVault) changed = true;
+      }
       for (final r in rows) {
         if (_mergeNote(Note.fromRow(r))) changed = true;
       }
@@ -374,6 +492,7 @@ class NotesRepository extends ChangeNotifier {
 
   Future<void> _pushDirty() async {
     _autoPurge();
+    _expireCompleted();
     // Borrados definitivos.
     if (_purge.isNotEmpty) {
       final ids = _purge.toList();
@@ -411,11 +530,23 @@ class NotesRepository extends ChangeNotifier {
         _dirty.remove(id);
         continue;
       }
+      // Sin la columna `vault` en Supabase, las del Vault esperan en local.
+      if (n.vault && !serverHasVault) continue;
       sent[id] = n.updatedAt;
-      rows.add(n.toRow(userId: userId));
+      rows.add(n.toRow(userId: userId, withVault: serverHasVault));
     }
     if (rows.isEmpty) return;
-    await _client.from('notes').upsert(rows);
+    try {
+      await _client.from('notes').upsert(rows);
+    } on PostgrestException catch (e) {
+      // Columna `vault` inexistente: se sube el resto sin ella.
+      if (serverHasVault && e.message.contains('vault')) {
+        serverHasVault = false;
+        _notify();
+        return _pushDirty();
+      }
+      rethrow;
+    }
     // Solo se marca como subido si no se ha vuelto a editar mientras tanto.
     sent.forEach((id, ts) {
       if (_notes[id]?.updatedAt == ts) _dirty.remove(id);
@@ -530,8 +661,8 @@ class NotesRepository extends ChangeNotifier {
         .toList();
     prefs.setString(_cacheKey, jsonEncode(list));
     prefs.setStringList(_dirtyKey, _dirty.toList());
-    prefs.setString(
-        _foldersKey, jsonEncode(_folders.values.map((f) => f.toRow()).toList()));
+    prefs.setString(_foldersKey,
+        jsonEncode(_folders.values.map((f) => f.toRow()).toList()));
     prefs.setStringList(_dirtyFoldersKey, _dirtyFolders.toList());
     prefs.setStringList(_purgeKey, _purge.toList());
   }
@@ -562,12 +693,16 @@ class NotesRepository extends ChangeNotifier {
     final now = DateTime.now().toUtc();
     final clase = createFolder('Clase', color: 0xFF5C8DF6);
     createFolder('Personal', color: 0xFFE76F51);
+    // Con enlaces [[…]] para que la vista de red tenga algo que mostrar.
     const textos = [
       'Lista de la compra\nLeche, pan, huevos y café',
-      'Ideas para el proyecto\nApp de notas sincronizada con widget',
-      'Examen de historia\nRepasar temas 4, 5 y 6',
+      'Ideas para el proyecto\nApp de notas sincronizada con widget. '
+          'Ver [[Examen de historia]] y [[Pelis pendientes]]',
+      'Examen de historia\nRepasar temas 4, 5 y 6. '
+          'Después: [[Entregar trabajo de física]]',
       'Pelis pendientes\nDune 2, Oppenheimer, Interstellar',
-      'Entregar trabajo de física\nPráctica del péndulo',
+      'Entregar trabajo de física\nPráctica del péndulo. '
+          'Apuntes en [[Ideas para el proyecto]]',
     ];
     for (var i = 0; i < textos.length; i++) {
       final n = createNote();

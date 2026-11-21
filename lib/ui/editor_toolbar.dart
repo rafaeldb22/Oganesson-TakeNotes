@@ -1,14 +1,19 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_quill/flutter_quill.dart';
 
 import 'anim.dart';
 import 'theme.dart';
+import 'i18n.dart';
 
 /// Barra de formato propia: limpia, con estados activos claros y una paleta
 /// de colores cuidada (sin selector de tamaño: se usan estilos de texto).
 class EditorToolbar extends StatelessWidget {
-  const EditorToolbar({super.key, required this.controller});
+  const EditorToolbar({super.key, required this.controller, this.onLink});
   final QuillController controller;
+
+  /// Enlazar otra nota (`[[…]]`); null = sin botón.
+  final VoidCallback? onLink;
 
   static const textColors = <(String, Color?)>[
     ('Por defecto', null),
@@ -34,7 +39,8 @@ class EditorToolbar extends StatelessWidget {
   static String _hex(Color c) =>
       '#${(c.toARGB32() & 0xFFFFFF).toRadixString(16).padLeft(6, '0')}';
 
-  Map<String, Attribute> get _attrs => controller.getSelectionStyle().attributes;
+  Map<String, Attribute> get _attrs =>
+      controller.getSelectionStyle().attributes;
 
   bool _has(Attribute a) => _attrs.containsKey(a.key);
 
@@ -83,12 +89,12 @@ class EditorToolbar extends StatelessWidget {
           [
             _Btn(
               icon: Icons.undo_rounded,
-              tooltip: 'Deshacer',
+              tooltip: tr('Deshacer'),
               onTap: controller.hasUndo ? controller.undo : null,
             ),
             _Btn(
               icon: Icons.redo_rounded,
-              tooltip: 'Rehacer',
+              tooltip: tr('Rehacer'),
               onTap: controller.hasRedo ? controller.redo : null,
             ),
           ],
@@ -98,30 +104,30 @@ class EditorToolbar extends StatelessWidget {
           [
             _Btn(
                 icon: Icons.format_bold_rounded,
-                tooltip: 'Negrita',
+                tooltip: tr('Negrita'),
                 active: _has(Attribute.bold),
                 onTap: () => _toggle(Attribute.bold)),
             _Btn(
                 icon: Icons.format_italic_rounded,
-                tooltip: 'Cursiva',
+                tooltip: tr('Cursiva'),
                 active: _has(Attribute.italic),
                 onTap: () => _toggle(Attribute.italic)),
             _Btn(
                 icon: Icons.format_underline_rounded,
-                tooltip: 'Subrayado',
+                tooltip: tr('Subrayado'),
                 active: _has(Attribute.underline),
                 onTap: () => _toggle(Attribute.underline)),
             _Btn(
                 icon: Icons.format_strikethrough_rounded,
-                tooltip: 'Tachado',
+                tooltip: tr('Tachado'),
                 active: _has(Attribute.strikeThrough),
                 onTap: () => _toggle(Attribute.strikeThrough)),
           ],
           [
             _ColorButton(
               current: color,
-              onText: (c) => controller.formatSelection(
-                  ColorAttribute(c == null ? null : _hex(c))),
+              onText: (c) => controller
+                  .formatSelection(ColorAttribute(c == null ? null : _hex(c))),
               onHighlight: (c) => controller.formatSelection(
                   BackgroundAttribute(c == null ? null : _hex(c))),
             ),
@@ -129,17 +135,17 @@ class EditorToolbar extends StatelessWidget {
           [
             _Btn(
                 icon: Icons.format_list_bulleted_rounded,
-                tooltip: 'Lista',
+                tooltip: tr('Lista'),
                 active: list == 'bullet',
                 onTap: () => _toggleBlock(Attribute.list.key, Attribute.ul)),
             _Btn(
                 icon: Icons.format_list_numbered_rounded,
-                tooltip: 'Lista numerada',
+                tooltip: tr('Lista numerada'),
                 active: list == 'ordered',
                 onTap: () => _toggleBlock(Attribute.list.key, Attribute.ol)),
             _Btn(
                 icon: Icons.checklist_rounded,
-                tooltip: 'Casillas',
+                tooltip: tr('Casillas'),
                 active: list == 'unchecked' || list == 'checked',
                 onTap: () =>
                     _toggleBlock(Attribute.list.key, Attribute.unchecked)),
@@ -147,19 +153,26 @@ class EditorToolbar extends StatelessWidget {
           [
             _Btn(
                 icon: Icons.format_quote_rounded,
-                tooltip: 'Cita',
+                tooltip: tr('Cita'),
                 active: _has(Attribute.blockQuote),
                 onTap: () => _toggle(Attribute.blockQuote)),
             _Btn(
                 icon: Icons.code_rounded,
-                tooltip: 'Código',
+                tooltip: tr('Código'),
                 active: _has(Attribute.codeBlock),
                 onTap: () => _toggle(Attribute.codeBlock)),
             _Btn(
                 icon: Icons.format_clear_rounded,
-                tooltip: 'Quitar formato',
+                tooltip: tr('Quitar formato'),
                 onTap: _clear),
           ],
+          if (onLink != null)
+            [
+              _Btn(
+                  icon: Icons.link_rounded,
+                  tooltip: tr('Enlazar nota  [['),
+                  onTap: onLink),
+            ],
         ];
 
         return Container(
@@ -169,9 +182,7 @@ class EditorToolbar extends StatelessWidget {
             color: Palette.background(context),
             borderRadius: BorderRadius.circular(14),
           ),
-          child: ListView(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 6),
+          child: _ToolbarScroller(
             children: [
               for (var g = 0; g < groups.length; g++) ...[
                 if (g > 0)
@@ -189,6 +200,107 @@ class EditorToolbar extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+}
+
+/// Fila horizontal desplazable de la barra. En escritorio la rueda del ratón
+/// (vertical) la mueve en horizontal y también se puede arrastrar con el
+/// ratón; un degradado en el borde avisa de que quedan botones ocultos.
+class _ToolbarScroller extends StatefulWidget {
+  const _ToolbarScroller({required this.children});
+  final List<Widget> children;
+
+  @override
+  State<_ToolbarScroller> createState() => _ToolbarScrollerState();
+}
+
+class _ToolbarScrollerState extends State<_ToolbarScroller> {
+  static const _fade = 28.0;
+  final _ctrl = ScrollController();
+  bool _atStart = true;
+  bool _atEnd = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl.addListener(_update);
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  void _update() {
+    if (!_ctrl.hasClients) return;
+    final p = _ctrl.position;
+    final start = p.pixels <= p.minScrollExtent + 0.5;
+    final end = p.pixels >= p.maxScrollExtent - 0.5;
+    if (start != _atStart || end != _atEnd) {
+      setState(() {
+        _atStart = start;
+        _atEnd = end;
+      });
+    }
+  }
+
+  void _onSignal(PointerSignalEvent event) {
+    // Solo la rueda vertical: el desplazamiento horizontal (trackpad,
+    // Mayús+rueda) ya lo gestiona el propio ListView.
+    if (event is! PointerScrollEvent || event.scrollDelta.dx != 0) return;
+    if (!_ctrl.hasClients) return;
+    GestureBinding.instance.pointerSignalResolver.register(event, (e) {
+      final p = _ctrl.position;
+      final target = (p.pixels + (e as PointerScrollEvent).scrollDelta.dy)
+          .clamp(p.minScrollExtent, p.maxScrollExtent);
+      if (target != p.pixels) _ctrl.jumpTo(target);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final behavior = ScrollConfiguration.of(context)
+        .copyWith(dragDevices: PointerDeviceKind.values.toSet());
+    return NotificationListener<ScrollMetricsNotification>(
+      // Cambia el ancho disponible (p. ej. al redimensionar la ventana).
+      onNotification: (_) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _update();
+        });
+        return false;
+      },
+      child: Listener(
+        onPointerSignal: _onSignal,
+        child: ShaderMask(
+          // Máscara de opacidad (no es un color visible): blanco = se ve,
+          // transparente = se desvanece en el borde con botones ocultos.
+          blendMode: BlendMode.dstIn,
+          shaderCallback: (bounds) {
+            final f =
+                bounds.width > 0 ? (_fade / bounds.width).clamp(0.0, 0.5) : 0.0;
+            return LinearGradient(
+              colors: [
+                _atStart ? Colors.white : Colors.transparent,
+                Colors.white,
+                Colors.white,
+                _atEnd ? Colors.white : Colors.transparent,
+              ],
+              stops: [0, f, 1 - f, 1],
+            ).createShader(bounds);
+          },
+          child: ScrollConfiguration(
+            behavior: behavior,
+            child: ListView(
+              controller: _ctrl,
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 6),
+              children: widget.children,
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
@@ -223,7 +335,8 @@ class _Btn extends StatelessWidget {
             height: 34,
             margin: const EdgeInsets.symmetric(horizontal: 1, vertical: 6),
             decoration: BoxDecoration(
-              color: active ? accent.withValues(alpha: 0.16) : Colors.transparent,
+              color:
+                  active ? accent.withValues(alpha: 0.16) : Colors.transparent,
               borderRadius: BorderRadius.circular(9),
             ),
             child: Icon(
@@ -248,19 +361,24 @@ class _StyleMenu extends StatelessWidget {
   final int? current;
   final void Function(int?) onSelect;
 
-  static const _names = {null: 'Texto', 1: 'Título', 2: 'Subtítulo', 3: 'Encabezado'};
+  static const _names = {
+    null: 'Texto',
+    1: 'Título',
+    2: 'Subtítulo',
+    3: 'Encabezado'
+  };
 
   @override
   Widget build(BuildContext context) {
     return PopupMenuButton<int>(
-      tooltip: 'Estilo de texto',
+      tooltip: tr('Estilo de texto'),
       position: PopupMenuPosition.under,
       onSelected: (v) => onSelect(v == 0 ? null : v),
       itemBuilder: (_) => [
-        _item(context, 1, 'Título', 22, FontWeight.w800),
-        _item(context, 2, 'Subtítulo', 18, FontWeight.w700),
-        _item(context, 3, 'Encabezado', 15.5, FontWeight.w700),
-        _item(context, 0, 'Texto', 15, FontWeight.w400),
+        _item(context, 1, tr('Título'), 22, FontWeight.w800),
+        _item(context, 2, tr('Subtítulo'), 18, FontWeight.w700),
+        _item(context, 3, tr('Encabezado'), 15.5, FontWeight.w700),
+        _item(context, 0, tr('Texto'), 15, FontWeight.w400),
       ],
       child: Container(
         height: 34,
@@ -271,7 +389,7 @@ class _StyleMenu extends StatelessWidget {
         ),
         child: Row(
           children: [
-            Text(_names[current] ?? 'Texto',
+            Text(tr(_names[current] ?? 'Texto'),
                 style: const TextStyle(fontWeight: FontWeight.w600)),
             const SizedBox(width: 2),
             const Icon(Icons.expand_more_rounded, size: 18),
@@ -326,7 +444,7 @@ class _ColorButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final underline = _currentColor ?? Palette.secondary(context);
     return Tooltip(
-      message: 'Color',
+      message: tr('Color'),
       waitDuration: const Duration(milliseconds: 500),
       child: Bouncy(
         pressedScale: 0.85,
@@ -340,7 +458,7 @@ class _ColorButton extends StatelessWidget {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Text('A',
+                Text(tr('A'),
                     style:
                         TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
                 Container(
@@ -364,7 +482,8 @@ class _ColorButton extends StatelessWidget {
     final overlay =
         Overlay.of(context).context.findRenderObject() as RenderBox?;
     if (box == null || overlay == null) return;
-    final pos = box.localToGlobal(Offset(0, box.size.height), ancestor: overlay);
+    final pos =
+        box.localToGlobal(Offset(0, box.size.height), ancestor: overlay);
 
     await showDialog<void>(
       context: context,
@@ -388,7 +507,7 @@ class _ColorButton extends StatelessWidget {
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _label(ctx, 'Color del texto'),
+                      _label(ctx, tr('Color del texto')),
                       _swatches(ctx, EditorToolbar.textColors, (c) {
                         onText(c);
                         Navigator.pop(ctx);
@@ -429,7 +548,7 @@ class _ColorButton extends StatelessWidget {
       children: [
         for (final (name, c) in colors)
           Tooltip(
-            message: name,
+            message: tr(name),
             child: Bouncy(
               pressedScale: 0.85,
               hoverScale: 1.1,
@@ -448,7 +567,7 @@ class _ColorButton extends StatelessWidget {
                       ? Icon(Icons.block,
                           size: 15, color: Palette.secondary(context))
                       : (textStyle
-                          ? Text('A',
+                          ? Text(tr('A'),
                               style: TextStyle(
                                   color: c,
                                   fontSize: 14,

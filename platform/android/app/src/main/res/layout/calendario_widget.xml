@@ -4,11 +4,21 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
+    <!-- Solid rounded background covering the whole widget (theme card colour). -->
+    <ImageView
+        android:id="@+id/calendario_bg"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:importantForAccessibility="no"
+        android:scaleType="fitXY"
+        android:src="@drawable/widget_shape"
+        android:tint="@color/widget_bg" />
+
+    <!-- Content drawn by Flutter for the current size class (S / M / L). -->
     <ImageView
         android:id="@+id/calendario_img"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:adjustViewBounds="true"
         android:contentDescription="Calendario y tareas"
         android:scaleType="fitCenter" />
 
@@ -16,7 +26,6 @@
         android:id="@+id/calendario_vacio"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:background="@drawable/widget_bg"
         android:gravity="center"
         android:padding="12dp"
         android:text="Abre Oganesson para cargar el calendario"

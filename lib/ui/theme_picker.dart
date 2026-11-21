@@ -3,6 +3,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 
 import 'anim.dart';
 import 'theme.dart';
+import 'i18n.dart';
 
 Future<void> showThemePicker(BuildContext context) {
   return showModalBottomSheet<void>(
@@ -28,10 +29,11 @@ class _ThemePicker extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Tema',
-                    style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800)),
+                Text(tr('Tema'),
+                    style:
+                        TextStyle(fontSize: 24, fontWeight: FontWeight.w800)),
                 const SizedBox(height: 4),
-                Text('Elige los colores de la app',
+                Text(tr('Elige los colores de la app'),
                     style: TextStyle(color: Palette.secondary(context))),
                 const SizedBox(height: 16),
                 LayoutBuilder(builder: (context, c) {
@@ -49,7 +51,8 @@ class _ThemePicker extends StatelessWidget {
                             theme: appThemes[i],
                             dark: dark,
                             selected: appThemes[i].id == themeSettings.themeId,
-                            onTap: () => themeSettings.setTheme(appThemes[i].id),
+                            onTap: () =>
+                                themeSettings.setTheme(appThemes[i].id),
                           ),
                         )
                             .animate(delay: (50 * i).ms)
@@ -62,26 +65,27 @@ class _ThemePicker extends StatelessWidget {
                   );
                 }),
                 const SizedBox(height: 22),
-                const Text('Apariencia',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                Text(tr('Apariencia'),
+                    style:
+                        TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
                 const SizedBox(height: 10),
                 SizedBox(
                   width: double.infinity,
                   child: SegmentedButton<ThemeMode>(
                     showSelectedIcon: false,
-                    segments: const [
+                    segments: [
                       ButtonSegment(
                           value: ThemeMode.system,
                           icon: Icon(Icons.brightness_auto_outlined),
-                          label: Text('Auto')),
+                          label: Text(tr('Auto'))),
                       ButtonSegment(
                           value: ThemeMode.light,
                           icon: Icon(Icons.light_mode_outlined),
-                          label: Text('Claro')),
+                          label: Text(tr('Claro'))),
                       ButtonSegment(
                           value: ThemeMode.dark,
                           icon: Icon(Icons.dark_mode_outlined),
-                          label: Text('Oscuro')),
+                          label: Text(tr('Oscuro'))),
                     ],
                     selected: {themeSettings.mode},
                     onSelectionChanged: (s) => themeSettings.setMode(s.first),
@@ -189,7 +193,7 @@ class _ThemeCard extends StatelessWidget {
               Row(
                 children: [
                   Expanded(
-                    child: Text(theme.name,
+                    child: Text(tr(theme.name),
                         style: TextStyle(
                             color: fg,
                             fontWeight: FontWeight.w700,
@@ -198,19 +202,21 @@ class _ThemeCard extends StatelessWidget {
                   AnimatedSwitcher(
                     duration: Anim.medium,
                     transitionBuilder: (w, a) => ScaleTransition(
-                      scale: CurvedAnimation(
-                          parent: a, curve: Curves.easeOutBack),
+                      scale:
+                          CurvedAnimation(parent: a, curve: Curves.easeOutBack),
                       child: w,
                     ),
                     child: selected
                         ? Icon(Icons.check_circle,
-                            key: const ValueKey('si'), color: c.accent, size: 20)
+                            key: const ValueKey('si'),
+                            color: c.accent,
+                            size: 20)
                         : const SizedBox(key: ValueKey('no'), width: 20),
                   ),
                 ],
               ),
               const SizedBox(height: 2),
-              Text(theme.description,
+              Text(tr(theme.description),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(color: c.secondary, fontSize: 12)),

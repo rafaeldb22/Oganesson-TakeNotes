@@ -6,6 +6,7 @@ import 'package:window_manager/window_manager.dart';
 
 import 'anim.dart';
 import 'theme.dart';
+import 'i18n.dart';
 
 bool get isDesktopWindows => !kIsWeb && Platform.isWindows;
 
@@ -15,7 +16,7 @@ bool get isDesktopWindows => !kIsWeb && Platform.isWindows;
 class AppTitleBar extends StatefulWidget {
   const AppTitleBar({super.key});
 
-  static const height = 34.0;
+  static const height = 36.0;
 
   @override
   State<AppTitleBar> createState() => _AppTitleBarState();
@@ -23,6 +24,7 @@ class AppTitleBar extends StatefulWidget {
 
 class _AppTitleBarState extends State<AppTitleBar> with WindowListener {
   bool _maximized = false;
+  bool _focused = true;
 
   @override
   void initState() {
@@ -45,6 +47,10 @@ class _AppTitleBarState extends State<AppTitleBar> with WindowListener {
   void onWindowUnmaximize() => setState(() => _maximized = false);
   @override
   void onWindowRestore() => setState(() => _maximized = false);
+  @override
+  void onWindowFocus() => setState(() => _focused = true);
+  @override
+  void onWindowBlur() => setState(() => _focused = false);
 
   Future<void> _toggleMax() async {
     if (await windowManager.isMaximized()) {
@@ -57,40 +63,50 @@ class _AppTitleBarState extends State<AppTitleBar> with WindowListener {
   @override
   Widget build(BuildContext context) {
     final p = Palette.of(context);
-    return Material(
-      color: p.background,
-      child: SizedBox(
-        height: AppTitleBar.height,
-        child: Row(
-          children: [
-            Expanded(
-              child: GestureDetector(
-                behavior: HitTestBehavior.translucent,
-                onPanStart: (_) => windowManager.startDragging(),
-                onDoubleTap: _toggleMax,
-                child: const SizedBox.expand(),
+    return AnimatedContainer(
+      duration: Anim.medium,
+      height: AppTitleBar.height,
+      decoration: BoxDecoration(
+        color: Palette.titleBar(context),
+        border: Border(bottom: BorderSide(color: p.separator, width: 1)),
+      ),
+      child: Material(
+        type: MaterialType.transparency,
+        child: AnimatedOpacity(
+          // Ventana sin foco: barra atenuada, como las apps nativas.
+          duration: Anim.fast,
+          opacity: _focused ? 1 : 0.55,
+          child: Row(
+            children: [
+              Expanded(
+                child: GestureDetector(
+                  behavior: HitTestBehavior.translucent,
+                  onPanStart: (_) => windowManager.startDragging(),
+                  onDoubleTap: _toggleMax,
+                  child: const SizedBox.expand(),
+                ),
               ),
-            ),
-            _WinButton(
-              tooltip: 'Minimizar',
-              icon: Icons.remove_rounded,
-              onTap: () => windowManager.minimize(),
-            ),
-            _WinButton(
-              tooltip: _maximized ? 'Restaurar' : 'Maximizar',
-              icon: _maximized
-                  ? Icons.filter_none_rounded
-                  : Icons.crop_square_rounded,
-              iconSize: _maximized ? 13 : 15,
-              onTap: _toggleMax,
-            ),
-            _WinButton(
-              tooltip: 'Cerrar',
-              icon: Icons.close_rounded,
-              danger: true,
-              onTap: () => windowManager.close(),
-            ),
-          ],
+              _WinButton(
+                tooltip: tr('Minimizar'),
+                icon: Icons.remove_rounded,
+                onTap: () => windowManager.minimize(),
+              ),
+              _WinButton(
+                tooltip: _maximized ? tr('Restaurar') : tr('Maximizar'),
+                icon: _maximized
+                    ? Icons.filter_none_rounded
+                    : Icons.crop_square_rounded,
+                iconSize: _maximized ? 13 : 15,
+                onTap: _toggleMax,
+              ),
+              _WinButton(
+                tooltip: tr('Cerrar'),
+                icon: Icons.close_rounded,
+                danger: true,
+                onTap: () => windowManager.close(),
+              ),
+            ],
+          ),
         ),
       ),
     );

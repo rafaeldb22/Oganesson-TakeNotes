@@ -5,6 +5,7 @@ import '../data/notes_repository.dart';
 import '../models/note.dart';
 import 'anim.dart';
 import 'theme.dart';
+import 'i18n.dart';
 
 /// Papelera: notas borradas en los últimos 3 días. Se pueden recuperar o
 /// borrar para siempre. Pasados los 3 días se borran solas.
@@ -31,17 +32,17 @@ Future<void> showTrash(BuildContext context, NotesRepository repo) {
                   children: [
                     const Icon(Icons.delete_outline_rounded),
                     const SizedBox(width: 8),
-                    const Expanded(
-                      child: Text('Papelera',
+                    Expanded(
+                      child: Text(tr('Papelera'),
                           style: TextStyle(
                               fontSize: 22, fontWeight: FontWeight.w800)),
                     ),
                     if (notes.isNotEmpty)
                       TextButton(
-                        style: TextButton.styleFrom(
-                            foregroundColor: Colors.red),
+                        style:
+                            TextButton.styleFrom(foregroundColor: Colors.red),
                         onPressed: () => _confirmEmpty(context, repo),
-                        child: const Text('Vaciar'),
+                        child: Text(tr('Vaciar')),
                       ),
                   ],
                 ),
@@ -49,8 +50,8 @@ Future<void> showTrash(BuildContext context, NotesRepository repo) {
               Padding(
                 padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
                 child: Text(
-                  'Las notas se borran para siempre a los '
-                  '${NotesRepository.trashDays} días.',
+                  trf('Las notas se borran para siempre a los {0} días.',
+                      [NotesRepository.trashDays]),
                   style: TextStyle(color: Palette.secondary(context)),
                 ),
               ),
@@ -68,7 +69,7 @@ Future<void> showTrash(BuildContext context, NotesRepository repo) {
                                   color: Palette.secondary(context)
                                       .withValues(alpha: 0.5)),
                               const SizedBox(height: 10),
-                              Text('La papelera está vacía',
+                              Text(tr('La papelera está vacía'),
                                   style: TextStyle(
                                       color: Palette.secondary(context))),
                             ],
@@ -79,7 +80,8 @@ Future<void> showTrash(BuildContext context, NotesRepository repo) {
                           controller: scroll,
                           padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
                           itemCount: notes.length,
-                          separatorBuilder: (_, __) => const SizedBox(height: 8),
+                          separatorBuilder: (_, __) =>
+                              const SizedBox(height: 8),
                           itemBuilder: (context, i) => _TrashTile(
                             key: ValueKey(notes[i].id),
                             note: notes[i],
@@ -107,16 +109,17 @@ Future<void> _confirmDelete(
   final ok = await showDialog<bool>(
     context: context,
     builder: (ctx) => AlertDialog(
-      title: const Text('¿Borrar para siempre?'),
-      content: Text('«${n.title}» se eliminará y no se podrá recuperar.'),
+      title: Text(tr('¿Borrar para siempre?')),
+      content:
+          Text(trf('«{0}» se eliminará y no se podrá recuperar.', [n.title])),
       actions: [
         TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancelar')),
+            child: Text(tr('Cancelar'))),
         FilledButton(
           style: FilledButton.styleFrom(backgroundColor: Colors.red),
           onPressed: () => Navigator.pop(ctx, true),
-          child: const Text('Borrar'),
+          child: Text(tr('Borrar')),
         ),
       ],
     ),
@@ -129,18 +132,18 @@ Future<void> _confirmEmpty(BuildContext context, NotesRepository repo) async {
   final ok = await showDialog<bool>(
     context: context,
     builder: (ctx) => AlertDialog(
-      title: const Text('¿Vaciar la papelera?'),
+      title: Text(tr('¿Vaciar la papelera?')),
       content: Text(count == 1
-          ? 'Se borrará 1 nota para siempre.'
-          : 'Se borrarán $count notas para siempre.'),
+          ? tr('Se borrará 1 nota para siempre.')
+          : trf('Se borrarán {0} notas para siempre.', [count])),
       actions: [
         TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancelar')),
+            child: Text(tr('Cancelar'))),
         FilledButton(
           style: FilledButton.styleFrom(backgroundColor: Colors.red),
           onPressed: () => Navigator.pop(ctx, true),
-          child: const Text('Vaciar'),
+          child: Text(tr('Vaciar')),
         ),
       ],
     ),
@@ -166,10 +169,10 @@ class _TrashTile extends StatelessWidget {
     final d = purgeAt.difference(DateTime.now().toUtc());
     if (d.inHours >= 24) {
       final days = (d.inHours / 24).ceil();
-      return days == 1 ? 'Se borra en 1 día' : 'Se borra en $days días';
+      return trn(days, 'Se borra en {0} día', 'Se borra en {0} días');
     }
-    if (d.inHours >= 1) return 'Se borra en ${d.inHours} h';
-    return 'Se borra en menos de 1 h';
+    if (d.inHours >= 1) return trf('Se borra en {0} h', [d.inHours]);
+    return tr('Se borra en menos de 1 h');
   }
 
   @override
@@ -201,14 +204,14 @@ class _TrashTile extends StatelessWidget {
               child: TextButton.icon(
                 onPressed: onRestore,
                 icon: const Icon(Icons.restore_rounded, size: 18),
-                label: const Text('Recuperar'),
+                label: Text(tr('Recuperar')),
               ),
             ),
             IconButton(
-              tooltip: 'Borrar para siempre',
+              tooltip: tr('Borrar para siempre'),
               onPressed: onDelete,
-              icon: const Icon(Icons.delete_forever_outlined,
-                  color: Colors.red),
+              icon:
+                  const Icon(Icons.delete_forever_outlined, color: Colors.red),
             ),
           ],
         ),

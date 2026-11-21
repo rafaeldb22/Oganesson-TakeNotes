@@ -5,6 +5,7 @@ import '../data/notes_repository.dart';
 import '../models/note.dart';
 import 'anim.dart';
 import 'theme.dart';
+import 'i18n.dart';
 
 /// Colores para las carpetas.
 const folderColors = <int>[
@@ -140,7 +141,6 @@ class FilterChips extends StatelessWidget {
       ),
     );
   }
-
 }
 
 /// Crear o editar una carpeta (nombre + color). Devuelve la carpeta.
@@ -152,7 +152,8 @@ Future<Folder?> editFolderDialog(BuildContext context, NotesRepository repo,
     context: context,
     builder: (ctx) => StatefulBuilder(
       builder: (ctx, setLocal) => AlertDialog(
-        title: Text(folder == null ? 'Nueva carpeta' : 'Editar carpeta'),
+        title:
+            Text(folder == null ? tr('Nueva carpeta') : tr('Editar carpeta')),
         content: SizedBox(
           width: 340,
           child: Column(
@@ -163,8 +164,8 @@ Future<Folder?> editFolderDialog(BuildContext context, NotesRepository repo,
                 controller: name,
                 autofocus: true,
                 textCapitalization: TextCapitalization.sentences,
-                decoration: const InputDecoration(
-                  labelText: 'Nombre',
+                decoration: InputDecoration(
+                  labelText: tr('Nombre'),
                   border: OutlineInputBorder(),
                 ),
                 onSubmitted: (_) => Navigator.pop(ctx, 'ok'),
@@ -207,13 +208,13 @@ Future<Folder?> editFolderDialog(BuildContext context, NotesRepository repo,
             TextButton(
               onPressed: () => Navigator.pop(ctx, 'borrar'),
               style: TextButton.styleFrom(foregroundColor: Colors.red),
-              child: const Text('Borrar carpeta'),
+              child: Text(tr('Borrar carpeta')),
             ),
           TextButton(
-              onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
+              onPressed: () => Navigator.pop(ctx), child: Text(tr('Cancelar'))),
           FilledButton(
               onPressed: () => Navigator.pop(ctx, 'ok'),
-              child: Text(folder == null ? 'Crear' : 'Guardar')),
+              child: Text(folder == null ? tr('Crear') : tr('Guardar'))),
         ],
       ),
     ),
@@ -240,14 +241,14 @@ Future<String?> pickFolder(
       child: ListView(
         shrinkWrap: true,
         children: [
-          const Padding(
+          Padding(
             padding: EdgeInsets.fromLTRB(20, 0, 20, 8),
-            child: Text('Mover a carpeta',
+            child: Text(tr('Mover a carpeta'),
                 style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
           ),
           ListTile(
             leading: const Icon(Icons.notes),
-            title: const Text('Sin carpeta'),
+            title: Text(tr('Sin carpeta')),
             trailing: current == null ? const Icon(Icons.check) : null,
             onTap: () => Navigator.pop(ctx, ''),
           ),
@@ -261,7 +262,7 @@ Future<String?> pickFolder(
             ),
           ListTile(
             leading: const Icon(Icons.create_new_folder_outlined),
-            title: const Text('Nueva carpeta…'),
+            title: Text(tr('Nueva carpeta…')),
             onTap: () async {
               final f = await editFolderDialog(ctx, repo);
               if (ctx.mounted) Navigator.pop(ctx, f?.id);

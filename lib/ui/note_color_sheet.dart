@@ -5,6 +5,7 @@ import '../data/notes_repository.dart';
 import 'anim.dart';
 import 'theme.dart';
 import 'urgency.dart';
+import 'i18n.dart';
 
 /// Elegir el color de una nota. Cambia también su barra de tiempo (mecha)
 /// y sus barras en el calendario. Se aplica al momento.
@@ -17,7 +18,10 @@ Future<void> showNoteColorSheet(
       listenable: repo,
       builder: (context, _) {
         final current = repo.byId(noteId)?.color;
-        final options = <(String, int?)>[('Automático', null), ...noteColors];
+        final options = <(String, int?)>[
+          (tr('Automático'), null),
+          ...noteColors
+        ];
         return SafeArea(
           child: Padding(
             padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
@@ -25,11 +29,11 @@ Future<void> showNoteColorSheet(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const Text('Color de la nota',
+                Text(tr('Color de la nota'),
                     style:
                         TextStyle(fontSize: 22, fontWeight: FontWeight.w800)),
                 const SizedBox(height: 4),
-                Text('También cambia su mecha de tiempo.',
+                Text(tr('También cambia su mecha de tiempo.'),
                     style: TextStyle(color: Palette.secondary(context))),
                 const SizedBox(height: 18),
                 Wrap(
@@ -38,7 +42,7 @@ Future<void> showNoteColorSheet(
                   children: [
                     for (var i = 0; i < options.length; i++)
                       _Swatch(
-                        name: options[i].$1,
+                        name: tr(options[i].$1),
                         color: options[i].$2,
                         selected: options[i].$2 == current,
                         onTap: () => repo.setColor(noteId, options[i].$2),
@@ -62,7 +66,7 @@ Future<void> showNoteColorSheet(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('VISTA PREVIA',
+                      Text(tr('VISTA PREVIA'),
                           style: TextStyle(
                               fontSize: 10.5,
                               letterSpacing: 1,

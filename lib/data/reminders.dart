@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../ui/i18n.dart';
 import 'dart:io' show Platform;
 
 import 'package:flutter/foundation.dart';
@@ -25,8 +26,7 @@ class Reminders {
   String _lastSignature = '';
   Timer? _debounce;
 
-  bool get supported =>
-      !kIsWeb && (Platform.isAndroid || Platform.isWindows);
+  bool get supported => !kIsWeb && (Platform.isAndroid || Platform.isWindows);
 
   Future<void> init() async {
     if (!supported || _ready) return;
@@ -45,6 +45,37 @@ class Reminders {
     } catch (e) {
       debugPrint('Notificaciones no disponibles: $e');
     }
+  }
+
+  /// Solo para pruebas (`--dart-define=TEST_TOAST=true`): programa un aviso
+  /// dentro de [delay] para comprobar si llega con la app cerrada.
+  /// Usa un id fuera del rango de los avisos reales y se vuelve a programar
+  /// cada vez que [schedule] reprograma (porque hace cancelAll).
+  Future<void> scheduleTest(Duration delay) async {
+    await init();
+    if (!_ready) return;
+    await askPermission();
+    _testAt = DateTime.now().toUtc().add(delay);
+    await _scheduleTest();
+  }
+
+  DateTime? _testAt;
+
+  Future<void> _scheduleTest() async {
+    final at = _testAt;
+    if (at == null || !at.isAfter(DateTime.now().toUtc())) return;
+    await _plugin.zonedSchedule(
+      0x7fffffff,
+      'Prueba de Oganesson',
+      'Aviso programado a las ${at.toLocal().toIso8601String().substring(11, 19)}',
+      tz.TZDateTime.from(at, tz.UTC),
+      const NotificationDetails(
+        android: AndroidNotificationDetails('recordatorios', 'Recordatorios'),
+        windows: WindowsNotificationDetails(),
+      ),
+      androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+    );
+    debugPrint('TEST_TOAST programado para ${at.toLocal()}');
   }
 
   /// Pide permiso de notificaciones (Android 13+) y de alarmas exactas.
@@ -70,7 +101,7 @@ class Reminders {
         .where((n) => n.isTemporal && !n.done && !n.deleted && !n.isEmpty)
         .toList();
     final sig = relevant
-        .map((n) => '${n.id}|${n.dueAt}|${n.title}')
+        .map((n) => '${n.id}|${n.dueAt}|${n.title}|${n.vault}')
         .join(';');
     if (sig == _lastSignature) return;
     _lastSignature = sig;
@@ -84,6 +115,7 @@ class Reminders {
     if (notes.isNotEmpty) await askPermission();
     try {
       await _plugin.cancelAll();
+      await _scheduleTest();
     } catch (_) {}
 
     final now = DateTime.now().toUtc();
@@ -103,10 +135,13 @@ class Reminders {
       final due = n.dueAt!;
       // Avisos solo cuando quedan menos de 7 días, menos de 3 y menos de 1.
       final avisos = <(int, DateTime, String)>[
-        (base, due.subtract(const Duration(days: 7)), 'Quedan 7 días'),
-        (base + 1, due.subtract(const Duration(days: 3)), 'Quedan 3 días'),
-        (base + 2, due.subtract(const Duration(days: 1)), 'Queda 1 día'),
-      ].map((a) => (a.$1, a.$2, 'Recordatorio: ${n.title}', a.$3)).toList();
+        (base, due.subtract(const Duration(days: 7)), tr('Quedan 7 días')),
+        (base + 1, due.subtract(const Duration(days: 3)), tr('Quedan 3 días')),
+        (base + 2, due.subtract(const Duration(days: 1)), tr('Queda 1 día')),
+      ].map((a) {
+        final title = n.vault ? tr('Nota del Vault') : n.title;
+        return (a.$1, a.$2, trf('Recordatorio: {0}', [title]), a.$3);
+      }).toList();
       for (final (id, at, title, body) in avisos) {
         if (!at.isAfter(now)) continue;
         try {

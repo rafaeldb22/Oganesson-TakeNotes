@@ -1,12 +1,31 @@
 import 'package:flutter/material.dart';
 
+import 'i18n.dart';
 import '../models/note.dart';
 import 'format.dart';
 import 'theme.dart';
 import 'urgency.dart';
 
-/// Contenido del widget "Calendario" de Android (4x2): mes actual a la
-/// izquierda y tareas ordenadas por fecha límite a la derecha.
+/// Tamaños del widget "Calendario" de Android.
+enum CalendarWidgetSize {
+  /// 2x2: solo el mes.
+  small(Size(170, 170), 'calendario_img_s'),
+
+  /// 4x2: mes a la izquierda y tareas a la derecha.
+  medium(Size(360, 180), 'calendario_img_m'),
+
+  /// 4x4: mes arriba y lista de tareas debajo.
+  large(Size(360, 380), 'calendario_img_l');
+
+  const CalendarWidgetSize(this.logicalSize, this.key);
+  final Size logicalSize;
+
+  /// Clave con la que se guarda la imagen (la lee CalendarioWidget.kt).
+  final String key;
+}
+
+/// Contenido del widget "Calendario" de Android en el tamaño [size]:
+/// mes actual y tareas ordenadas por fecha límite.
 /// Se dibuja fuera de pantalla y se guarda como imagen para el widget,
 /// así que solo usa widgets simples (sin animaciones ni Material).
 class CalendarWidgetImage extends StatelessWidget {
@@ -15,8 +34,10 @@ class CalendarWidgetImage extends StatelessWidget {
     required this.notes,
     required this.colors,
     required this.dark,
+    this.size = CalendarWidgetSize.medium,
   });
 
+  final CalendarWidgetSize size;
   final List<Note> notes; // temporales pendientes
   final NotasColors colors;
   final bool dark;
@@ -30,7 +51,7 @@ class CalendarWidgetImage extends StatelessWidget {
     final today = _d(now);
     final first = DateTime(now.year, now.month, 1);
     final gridStart = first.subtract(Duration(days: first.weekday - 1));
-    final name = mesesNombre[now.month - 1];
+    final name = tr(mesesNombre[now.month - 1]);
     final pending = notes.where((n) => !n.done).toList()
       ..sort((a, b) => a.dueAt!.compareTo(b.dueAt!));
 
@@ -48,7 +69,7 @@ class CalendarWidgetImage extends StatelessWidget {
       return null;
     }
 
-    const dias = ['L', 'M', 'X', 'J', 'V', 'S', 'D'];
+    final dias = diasIniciales;
 
     final calendar = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -130,41 +151,53 @@ class CalendarWidgetImage extends StatelessWidget {
       ],
     );
 
-    final tasks = Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
+    // Cuántas tareas caben: alto de cada fila con margen para fuentes
+    // más altas que la de diseño (la imagen se dibuja en el móvil).
+    const rowHeight = 39.0, headerHeight = 24.0, moreHeight = 14.0;
+    final tasks = LayoutBuilder(builder: (context, c) {
+      var fit = ((c.maxHeight - headerHeight) / rowHeight).floor();
+      if (fit < pending.length) {
+        fit = ((c.maxHeight - headerHeight - moreHeight) / rowHeight).floor();
+      }
+      final shown = fit.clamp(1, pending.isEmpty ? 1 : pending.length);
+      return ClipRect(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Tareas',
-                style: TextStyle(
-                    color: fg, fontSize: 13, fontWeight: FontWeight.w800)),
-            const Spacer(),
-            Text('${pending.length}',
-                style: TextStyle(
-                    color: colors.secondary,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700)),
+            Row(
+              children: [
+                Text(tr('Tareas'),
+                    style: TextStyle(
+                        color: fg, fontSize: 13, fontWeight: FontWeight.w800)),
+                const Spacer(),
+                Text('${pending.length}',
+                    style: TextStyle(
+                        color: colors.secondary,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700)),
+              ],
+            ),
+            const SizedBox(height: 6),
+            if (pending.isEmpty)
+              Expanded(
+                child: Center(
+                  child: Text(tr('Sin tareas pendientes'),
+                      style: TextStyle(color: colors.secondary, fontSize: 10)),
+                ),
+              )
+            else
+              for (final n in pending.take(shown))
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: _TaskRow(note: n, fg: fg, colors: colors),
+                ),
+            if (pending.length > shown)
+              Text(trf('+{0} más', [pending.length - shown]),
+                  style: TextStyle(color: colors.secondary, fontSize: 9)),
           ],
         ),
-        const SizedBox(height: 6),
-        if (pending.isEmpty)
-          Expanded(
-            child: Center(
-              child: Text('Sin tareas pendientes',
-                  style: TextStyle(color: colors.secondary, fontSize: 10)),
-            ),
-          )
-        else
-          for (final n in pending.take(4))
-            Padding(
-              padding: const EdgeInsets.only(bottom: 6),
-              child: _TaskRow(note: n, fg: fg, colors: colors),
-            ),
-        if (pending.length > 4)
-          Text('+${pending.length - 4} más',
-              style: TextStyle(color: colors.secondary, fontSize: 9)),
-      ],
-    );
+      );
+    });
 
     return Directionality(
       textDirection: TextDirection.ltr,
@@ -174,18 +207,34 @@ class CalendarWidgetImage extends StatelessWidget {
           color: colors.card,
           borderRadius: BorderRadius.circular(22),
         ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Expanded(flex: 10, child: calendar),
-            Container(
-              width: 1,
-              margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              color: colors.separator,
+        child: switch (size) {
+          CalendarWidgetSize.small => calendar,
+          CalendarWidgetSize.medium => Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(flex: 10, child: calendar),
+                Container(
+                  width: 1,
+                  margin:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  color: colors.separator,
+                ),
+                Expanded(flex: 11, child: tasks),
+              ],
             ),
-            Expanded(flex: 11, child: tasks),
-          ],
-        ),
+          CalendarWidgetSize.large => Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(flex: 8, child: calendar),
+                Container(
+                  height: 1,
+                  margin: const EdgeInsets.symmetric(vertical: 8),
+                  color: colors.separator,
+                ),
+                Expanded(flex: 11, child: tasks),
+              ],
+            ),
+        },
       ),
     );
   }

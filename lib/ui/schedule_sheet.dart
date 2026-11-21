@@ -7,6 +7,7 @@ import 'anim.dart';
 import 'format.dart';
 import 'theme.dart';
 import 'urgency.dart';
+import 'i18n.dart';
 
 /// Hoja para poner las fechas de una nota temporal: un calendario pequeño
 /// para marcar el día de inicio y el de fin, y una rueda para la hora.
@@ -106,7 +107,7 @@ class _ScheduleSheetState extends State<_ScheduleSheet> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Text('Fechas',
+            Text(tr('Fechas'),
                 style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800)),
             const SizedBox(height: 14),
             // Inicio / fin: tocar uno para editarlo.
@@ -114,7 +115,7 @@ class _ScheduleSheetState extends State<_ScheduleSheet> {
               children: [
                 Expanded(
                   child: _EdgeCard(
-                    label: 'Empieza',
+                    label: tr('Empieza'),
                     icon: Icons.play_arrow_rounded,
                     value: _start,
                     active: _editing == _Edge.start,
@@ -132,7 +133,7 @@ class _ScheduleSheetState extends State<_ScheduleSheet> {
                 ),
                 Expanded(
                   child: _EdgeCard(
-                    label: 'Termina',
+                    label: tr('Termina'),
                     icon: Icons.flag_rounded,
                     value: _end,
                     active: _editing == _Edge.end,
@@ -172,7 +173,7 @@ class _ScheduleSheetState extends State<_ScheduleSheet> {
                     style: TextButton.styleFrom(
                         foregroundColor: Palette.secondary(context)),
                     icon: const Icon(Icons.event_busy_outlined, size: 18),
-                    label: const Text('Quitar fechas'),
+                    label: Text(tr('Quitar fechas')),
                   ),
                 const Spacer(),
                 Bouncy(
@@ -184,7 +185,7 @@ class _ScheduleSheetState extends State<_ScheduleSheet> {
                       shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(14)),
                     ),
-                    child: const Text('Guardar',
+                    child: Text(tr('Guardar'),
                         style: TextStyle(fontWeight: FontWeight.w700)),
                   ),
                 ),
@@ -217,7 +218,7 @@ class _EdgeCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final d = value;
-    final fecha = '${d.day} ${mesesNombre[d.month - 1].substring(0, 3)}';
+    final fecha = '${d.day} ${tr(mesesNombre[d.month - 1]).substring(0, 3)}';
     final hora = '${d.hour}:${d.minute.toString().padLeft(2, '0')}';
     return Bouncy(
       pressedScale: 0.97,
@@ -295,8 +296,8 @@ class _MiniCalendar extends StatelessWidget {
     final first = DateTime(month.year, month.month, 1);
     final gridStart = first.subtract(Duration(days: first.weekday - 1));
     final today = _d(DateTime.now());
-    final name = mesesNombre[month.month - 1];
-    const dias = ['L', 'M', 'X', 'J', 'V', 'S', 'D'];
+    final name = tr(mesesNombre[month.month - 1]);
+    final dias = diasIniciales;
     final rangeColor = accent.withValues(alpha: 0.14);
 
     return Container(
@@ -361,8 +362,7 @@ class _MiniCalendar extends StatelessWidget {
                           !day.isAfter(_d(range.last));
                       final isStart = day == start;
                       final isEnd = day == end;
-                      final inRange =
-                          !day.isBefore(start) && !day.isAfter(end);
+                      final inRange = !day.isBefore(start) && !day.isAfter(end);
                       final edge = isStart || isEnd;
                       return GestureDetector(
                         onTap: inWindow ? () => onPick(day) : null,
@@ -445,8 +445,8 @@ class _TimeWheel extends StatelessWidget {
         data: CupertinoThemeData(
           brightness: dark ? Brightness.dark : Brightness.light,
           textTheme: CupertinoTextThemeData(
-            dateTimePickerTextStyle: TextStyle(
-                fontSize: 22, fontWeight: FontWeight.w600, color: fg),
+            dateTimePickerTextStyle:
+                TextStyle(fontSize: 22, fontWeight: FontWeight.w600, color: fg),
           ),
         ),
         child: CupertinoDatePicker(
@@ -493,7 +493,7 @@ class _Preview extends StatelessWidget {
                   style: TextStyle(
                       color: fuseColor(p), fontWeight: FontWeight.w700)),
               const Spacer(),
-              Text('dura $durTxt',
+              Text(trf('dura {0}', [durTxt]),
                   style: TextStyle(
                       color: Palette.secondary(context), fontSize: 12.5)),
             ],

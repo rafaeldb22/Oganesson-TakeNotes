@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_quill/flutter_quill.dart';
 
+import '../data/note_links.dart';
 import '../data/notes_repository.dart';
 import '../models/note.dart';
 import 'anim.dart';
@@ -12,9 +13,11 @@ import 'editor_toolbar.dart';
 import 'folders.dart';
 import 'note_color_sheet.dart';
 import 'format.dart';
+import 'link_picker.dart';
 import 'schedule_sheet.dart';
 import 'theme.dart';
 import 'urgency.dart';
+import 'i18n.dart';
 
 /// Editor de una nota con formato (negrita, títulos, listas, casillas,
 /// colores, alineación…) usando flutter_quill.
@@ -25,6 +28,7 @@ class NoteEditor extends StatefulWidget {
     required this.noteId,
     required this.onClose,
     required this.onDelete,
+    this.onOpenNote,
     this.showBack = true,
     this.autofocus = false,
   });
@@ -37,6 +41,9 @@ class NoteEditor extends StatefulWidget {
 
   /// Borrar la nota (lo gestiona la pantalla principal para poder deshacer).
   final void Function(String id) onDelete;
+
+  /// Abrir otra nota (desde el panel de enlaces).
+  final void Function(String id)? onOpenNote;
 
   /// true en pantallas estrechas (móvil/ventana pequeña): botón "< notas".
   final bool showBack;
@@ -114,6 +121,13 @@ class _NoteEditorState extends State<NoteEditor> {
     repo.updateContent(widget.noteId, _plain(), rich: rich);
   }
 
+  /// Crea la nota de un enlace que aún no existe y la abre.
+  void _createLinked(String title) {
+    final n = repo.createNote(folderId: repo.byId(widget.noteId)?.folderId);
+    repo.updateContent(n.id, title);
+    widget.onOpenNote?.call(n.id);
+  }
+
   /// Cambios que llegan desde el otro dispositivo mientras la nota está abierta.
   void _onRepo() {
     if (!mounted || _closing) return;
@@ -158,8 +172,9 @@ class _NoteEditorState extends State<NoteEditor> {
     final fg = dark ? Colors.white : const Color(0xFF151515);
     const h0 = HorizontalSpacing(0, 0);
     const v0 = VerticalSpacing(0, 0);
-    DefaultTextBlockStyle block(double size, FontWeight w, double top,
-            double bottom, {double height = 1.3}) =>
+    DefaultTextBlockStyle block(
+            double size, FontWeight w, double top, double bottom,
+            {double height = 1.3}) =>
         DefaultTextBlockStyle(
           TextStyle(fontSize: size, fontWeight: w, height: height, color: fg),
           h0,
@@ -218,7 +233,7 @@ class _NoteEditorState extends State<NoteEditor> {
             ? Bouncy(
                 pressedScale: 0.85,
                 child: IconButton(
-                  tooltip: 'Volver',
+                  tooltip: tr('Volver'),
                   color: accent,
                   onPressed: widget.onClose,
                   icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
@@ -228,17 +243,15 @@ class _NoteEditorState extends State<NoteEditor> {
         actions: [
           // Fechas / recordatorio
           _iconAction(
-            tooltip: 'Nota temporal y avisos',
+            tooltip: tr('Nota temporal y avisos'),
             icon: Icon(
-              n?.isTemporal == true
-                  ? Icons.alarm_on
-                  : Icons.alarm_add_outlined,
+              n?.isTemporal == true ? Icons.alarm_on : Icons.alarm_add_outlined,
             ),
             onPressed: () => showScheduleSheet(context, repo, widget.noteId),
           ),
           // Color de la nota (y de su mecha)
           _iconAction(
-            tooltip: 'Color de la nota',
+            tooltip: tr('Color de la nota'),
             icon: n?.color == null
                 ? const Icon(Icons.palette_outlined)
                 : Container(
@@ -254,7 +267,7 @@ class _NoteEditorState extends State<NoteEditor> {
           if (!compact) ...[
             // Carpeta
             PopupMenuButton<String>(
-              tooltip: 'Mover a carpeta',
+              tooltip: tr('Mover a carpeta'),
               icon: Icon(folder == null ? Icons.folder_outlined : Icons.folder,
                   color:
                       folder?.color != null ? Color(folder!.color!) : accent),
@@ -264,7 +277,7 @@ class _NoteEditorState extends State<NoteEditor> {
                 CheckedPopupMenuItem(
                     value: '',
                     checked: n?.folderId == null,
-                    child: const Text('Sin carpeta')),
+                    child: Text(tr('Sin carpeta'))),
                 for (final f in repo.folders)
                   CheckedPopupMenuItem(
                       value: f.id,
@@ -274,7 +287,7 @@ class _NoteEditorState extends State<NoteEditor> {
             ),
             if (n != null)
               _iconAction(
-                tooltip: pinned ? 'Desfijar' : 'Fijar arriba',
+                tooltip: pinned ? tr('Desfijar') : tr('Fijar arriba'),
                 onPressed: () => repo.togglePin(widget.noteId),
                 icon: AnimatedSwitcher(
                   duration: Anim.medium,
@@ -289,12 +302,13 @@ class _NoteEditorState extends State<NoteEditor> {
                 ),
               ),
             _iconAction(
-              tooltip: _toolbarOpen ? 'Ocultar formato' : 'Mostrar formato',
+              tooltip:
+                  _toolbarOpen ? tr('Ocultar formato') : tr('Mostrar formato'),
               icon: Icon(_toolbarOpen ? Icons.text_format : Icons.text_fields),
               onPressed: () => setState(() => _toolbarOpen = !_toolbarOpen),
             ),
             _iconAction(
-              tooltip: 'Eliminar nota',
+              tooltip: tr('Eliminar nota'),
               icon: const Icon(Icons.delete_outline),
               onPressed: () {
                 _closing = true;
@@ -304,7 +318,7 @@ class _NoteEditorState extends State<NoteEditor> {
           ] else
             // Móvil: el resto va en un menú para que nada se monte.
             PopupMenuButton<String>(
-              tooltip: 'Más',
+              tooltip: tr('Más'),
               icon: const Icon(Icons.more_horiz_rounded),
               onSelected: (v) async {
                 switch (v) {
@@ -331,16 +345,16 @@ class _NoteEditorState extends State<NoteEditor> {
                         leading: Icon(folder == null
                             ? Icons.folder_outlined
                             : Icons.folder),
-                        title: Text(folder?.name ?? 'Mover a carpeta'))),
+                        title: Text(folder?.name ?? tr('Mover a carpeta')))),
                 PopupMenuItem(
                     value: 'fijar',
                     child: ListTile(
                         dense: true,
                         contentPadding: EdgeInsets.zero,
-                        leading: Icon(pinned
-                            ? Icons.push_pin
-                            : Icons.push_pin_outlined),
-                        title: Text(pinned ? 'Desfijar' : 'Fijar arriba'))),
+                        leading: Icon(
+                            pinned ? Icons.push_pin : Icons.push_pin_outlined),
+                        title: Text(
+                            pinned ? tr('Desfijar') : tr('Fijar arriba')))),
                 PopupMenuItem(
                     value: 'formato',
                     child: ListTile(
@@ -348,15 +362,15 @@ class _NoteEditorState extends State<NoteEditor> {
                         contentPadding: EdgeInsets.zero,
                         leading: const Icon(Icons.text_format),
                         title: Text(_toolbarOpen
-                            ? 'Ocultar formato'
-                            : 'Mostrar formato'))),
-                const PopupMenuItem(
+                            ? tr('Ocultar formato')
+                            : tr('Mostrar formato')))),
+                PopupMenuItem(
                     value: 'borrar',
                     child: ListTile(
                         dense: true,
                         contentPadding: EdgeInsets.zero,
                         leading: Icon(Icons.delete_outline, color: Colors.red),
-                        title: Text('Eliminar',
+                        title: Text(tr('Eliminar'),
                             style: TextStyle(color: Colors.red)))),
               ],
             ),
@@ -368,18 +382,15 @@ class _NoteEditorState extends State<NoteEditor> {
                 ? Center(
                     child: TextButton(
                       onPressed: () => _focus.unfocus(),
-                      child: Text('OK',
+                      child: Text(tr('OK'),
                           style: TextStyle(
                               color: accent,
                               fontWeight: FontWeight.w700,
                               fontSize: 16)),
-                    )
-                        .animate()
-                        .fadeIn(duration: Anim.fast)
-                        .scale(
-                            begin: const Offset(0.6, 0.6),
-                            curve: Curves.easeOutBack,
-                            duration: Anim.medium),
+                    ).animate().fadeIn(duration: Anim.fast).scale(
+                        begin: const Offset(0.6, 0.6),
+                        curve: Curves.easeOutBack,
+                        duration: Anim.medium),
                   )
                 : const SizedBox(height: kToolbarHeight),
           ),
@@ -396,7 +407,11 @@ class _NoteEditorState extends State<NoteEditor> {
               curve: Anim.curve,
               alignment: Alignment.topCenter,
               child: _toolbarOpen
-                  ? EditorToolbar(controller: _ctrl)
+                  ? EditorToolbar(
+                      controller: _ctrl,
+                      onLink: () =>
+                          showLinkNotesPicker(context, repo, widget.noteId),
+                    )
                   : const SizedBox(width: double.infinity),
             ),
             Expanded(
@@ -432,7 +447,7 @@ class _NoteEditorState extends State<NoteEditor> {
                             focusNode: _focus,
                             scrollController: _scroll,
                             config: QuillEditorConfig(
-                              placeholder: 'Escribe algo…',
+                              placeholder: tr('Escribe algo…'),
                               autoFocus: widget.autofocus,
                               expands: true,
                               padding: const EdgeInsets.only(bottom: 40),
@@ -440,6 +455,14 @@ class _NoteEditorState extends State<NoteEditor> {
                             ),
                           ),
                         ),
+                        if (n != null)
+                          _LinksBar(
+                            graph: NoteGraph.of(repo),
+                            noteId: n.id,
+                            repo: repo,
+                            onOpen: widget.onOpenNote,
+                            onCreate: _createLinked,
+                          ),
                       ],
                     ),
                   ),
@@ -477,7 +500,7 @@ class _TemporalBanner extends StatelessWidget {
       child: Row(
         children: [
           IconButton(
-            tooltip: note.done ? 'Marcar pendiente' : 'Completar',
+            tooltip: note.done ? tr('Marcar pendiente') : tr('Completar'),
             onPressed: onToggleDone,
             icon: AnimatedSwitcher(
               duration: Anim.medium,
@@ -504,5 +527,113 @@ class _TemporalBanner extends StatelessWidget {
         ],
       ),
     ).animate().fadeIn(duration: Anim.medium).slideY(begin: -0.2);
+  }
+}
+
+/// Enlaces de la nota: a qué notas enlaza (→), cuáles la mencionan (←)
+/// y enlaces a notas que aún no existen (+, al tocarlos se crean).
+class _LinksBar extends StatelessWidget {
+  const _LinksBar({
+    required this.graph,
+    required this.noteId,
+    required this.repo,
+    required this.onOpen,
+    required this.onCreate,
+  });
+
+  final NoteGraph graph;
+  final String noteId;
+  final NotesRepository repo;
+  final void Function(String id)? onOpen;
+  final void Function(String title) onCreate;
+
+  @override
+  Widget build(BuildContext context) {
+    final out = graph.outgoing[noteId] ?? const <String>{};
+    final back = graph.incoming[noteId] ?? const <String>{};
+    final missing = graph.unresolved[noteId] ?? const <String>{};
+    if (out.isEmpty && back.isEmpty && missing.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    final p = Palette.of(context);
+
+    Widget chip(
+        IconData icon, String label, String tooltip, VoidCallback? onTap,
+        {bool dashed = false}) {
+      return Padding(
+        padding: const EdgeInsets.only(right: 6),
+        child: Tooltip(
+          message: tooltip,
+          child: Material(
+            color: dashed ? Colors.transparent : p.searchFill,
+            shape: StadiumBorder(
+                side: BorderSide(
+                    color: dashed
+                        ? p.accent.withValues(alpha: 0.6)
+                        : p.separator)),
+            child: InkWell(
+              customBorder: const StadiumBorder(),
+              onTap: onTap,
+              child: Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(icon,
+                        size: 14, color: dashed ? p.accent : p.secondary),
+                    const SizedBox(width: 5),
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 180),
+                      child: Text(label,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 12.5)),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    String title(String id) => repo.byId(id)?.title ?? 'Nota';
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.only(top: 8, bottom: 10),
+      decoration: BoxDecoration(
+        border: Border(top: BorderSide(color: p.separator)),
+      ),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: Icon(Icons.hub_outlined, size: 16, color: p.accent),
+            ),
+            for (final id in out)
+              chip(
+                  Icons.north_east_rounded,
+                  title(id),
+                  tr('Enlaza a esta nota'),
+                  onOpen == null ? null : () => onOpen!(id)),
+            for (final id in back)
+              chip(
+                  Icons.south_west_rounded,
+                  title(id),
+                  tr('Esta nota te menciona'),
+                  onOpen == null ? null : () => onOpen!(id)),
+            for (final t in missing)
+              chip(Icons.add_rounded, t, trf('Crear la nota «{0}»', [t]),
+                  () => onCreate(t),
+                  dashed: true),
+          ],
+        ),
+      ),
+    ).animate().fadeIn(duration: Anim.fast);
   }
 }

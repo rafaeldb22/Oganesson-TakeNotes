@@ -43,3 +43,5 @@ Name: "{autodesktop}\Oganesson"; Filename: "{app}\Oganesson.exe"; Tasks: desktop
 
 [Run]
 Filename: "{app}\Oganesson.exe"; Description: "{cm:LaunchProgram,Oganesson}"; Flags: nowait postinstall skipifsilent
+; Silent install = in-app update: reopen the app when it finishes.
+Filename: "{app}\Oganesson.exe"; Flags: nowait; Check: WizardSilent

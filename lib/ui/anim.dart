@@ -39,9 +39,8 @@ class _BouncyState extends State<Bouncy> {
 
   @override
   Widget build(BuildContext context) {
-    final scale = _pressed
-        ? widget.pressedScale
-        : (_hover ? widget.hoverScale : 1.0);
+    final scale =
+        _pressed ? widget.pressedScale : (_hover ? widget.hoverScale : 1.0);
     return MouseRegion(
       onEnter: (_) => _set(hover: true),
       onExit: (_) => _set(hover: false, pressed: false),
@@ -71,8 +70,8 @@ Widget pushTransition(Widget child, Animation<double> animation,
   );
   if (isPage) {
     return SlideTransition(
-      position: Tween(begin: const Offset(1, 0), end: Offset.zero)
-          .animate(curved),
+      position:
+          Tween(begin: const Offset(1, 0), end: Offset.zero).animate(curved),
       child: DecoratedBox(
         decoration: const BoxDecoration(boxShadow: [
           BoxShadow(blurRadius: 24, color: Color(0x33000000)),

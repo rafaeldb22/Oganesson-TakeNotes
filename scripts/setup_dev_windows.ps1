@@ -69,6 +69,23 @@ else {
 }
 flutter --version
 
+# 3b. Windows Developer Mode: Flutter needs symlinks to build apps with plugins
+#     ("Building with plugins requires symlink support"). Enabling it needs admin,
+#     so only that single registry write runs elevated (one UAC prompt).
+Step 'Windows Developer Mode (symlink support for Flutter plugins)'
+$devKey = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\AppModelUnlock'
+$devOn = (Get-ItemProperty $devKey -Name AllowDevelopmentWithoutDevLicense -ErrorAction SilentlyContinue).AllowDevelopmentWithoutDevLicense -eq 1
+if ($devOn) { Write-Host 'Already enabled.' }
+else {
+  Write-Host 'Enabling it (accept the administrator prompt)...'
+  try {
+    Start-Process reg.exe -Verb RunAs -Wait -WindowStyle Hidden -ArgumentList `
+      'add', 'HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\AppModelUnlock', '/t', 'REG_DWORD', '/f', '/v', 'AllowDevelopmentWithoutDevLicense', '/d', '1'
+  } catch {
+    Write-Warning 'Could not enable it automatically. Turn on Settings > System > For developers > Developer Mode (start ms-settings:developers).'
+  }
+}
+
 # 4. Claude Code (official native installer, no admin needed).
 Step 'Claude Code'
 if (Have claude) { Write-Host 'Already installed.' }

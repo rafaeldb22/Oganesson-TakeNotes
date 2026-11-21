@@ -423,6 +423,15 @@ class Palette {
   static Color selected(BuildContext c) => of(c).selected;
   static Color searchFill(BuildContext c) => of(c).searchFill;
   static Color hover(BuildContext c) => of(c).hover;
+
+  /// Fondo de la barra de título de Windows: la superficie de tarjeta con un
+  /// toque del acento, para que se distinga del contenido de la app.
+  static Color titleBar(BuildContext c) {
+    final p = of(c);
+    final dark = Theme.of(c).brightness == Brightness.dark;
+    return Color.alphaBlend(
+        p.accent.withValues(alpha: dark ? 0.12 : 0.08), p.card);
+  }
 }
 
 ThemeData buildTheme(AppTheme t, Brightness b) {
@@ -430,8 +439,8 @@ ThemeData buildTheme(AppTheme t, Brightness b) {
   final c = dark ? t.dark : t.light;
   final fg = dark ? Colors.white : const Color(0xFF111111);
 
-  final scheme = ColorScheme.fromSeed(seedColor: c.accent, brightness: b)
-      .copyWith(
+  final scheme =
+      ColorScheme.fromSeed(seedColor: c.accent, brightness: b).copyWith(
     primary: c.accent,
     onPrimary: c.onAccent,
     surface: c.card,

@@ -55,7 +55,21 @@ Sign in with the **same account** on every device and your notes sync automatica
 - iPhone-style list with pinned notes, search, swipe to delete and a two-panel layout on desktop.
 - Rich text editor: titles, bold/italic/underline/strikethrough, bullet & numbered lists, checklists, quotes, code, text colour and highlight. New notes start with a big title line.
 - Folders with name and colour; custom colour per note.
+- Sort by last modified, creation date or name.
 - Trash: deleted notes stay **3 days** before being removed for good (restore, delete forever, empty trash). Every delete can be undone for 3 seconds.
+
+**Note network**
+- Right-click a note (long press on Android) to link it with other notes or create a linked sub-note.
+- Graph view of all your notes and links: zoom, pan, drag nodes, hover to highlight neighbours, tap to open.
+- Every note shows its links and backlinks.
+
+**Vault**
+- Notes behind a master password, in their own screen from the ⋯ menu (never in the normal lists or widgets).
+- Locks itself after 5 minutes without use. Change the Vault or account password from ⋯ by typing the current one.
+
+**Completed & languages**
+- Tasks completed more than 3 days ago move to *Completed* by themselves and are kept for 30 days.
+- Spanish and English, switchable from ⋯ → Language.
 
 **Deadlines & calendar**
 - Turn any note into a task with a start and a deadline, picked on a mini calendar with a time wheel.
@@ -69,8 +83,12 @@ Sign in with the **same account** on every device and your notes sync automatica
 **Look & feel**
 - 10 colour themes, each with light and dark mode, animated theme switching.
 - Animated retro title, smooth transitions and micro-interactions throughout.
-- Windows: custom title bar (like Chrome), resizable panels that remember their width, minimum window size for a stable layout.
-- Android: 2×2 quick-note widget and a 4×2 calendar widget with upcoming tasks.
+- Windows: clean custom title bar tinted with the theme colour, resizable panels that remember their width, minimum window size for a stable layout.
+- Android: 2×2 quick-note widget and a resizable calendar widget (2×2, 4×2 or 4×4) with upcoming tasks.
+
+**Updates & support**
+- The app checks GitHub Releases and installs new versions in one click (Windows installer / Android APK).
+- Open source: if you like it, you can [buy me a coffee](https://buymeacoffee.com/rafaeldb) ☕
 
 ## Build from source
 
@@ -80,7 +98,7 @@ Sign in with the **same account** on every device and your notes sync automatica
 powershell -ExecutionPolicy Bypass -File scripts/setup_dev_windows.ps1
 ```
 
-Requirements: Flutter (stable, 3.50+), Git. For Windows builds: **Visual Studio 2022** with *Desktop development with C++* (MSVC 14.52 / VS 2026 cannot build the Windows notifications plugin yet).
+Requirements: Flutter (stable, 3.50+), Git. For Windows builds: **Visual Studio 2022** with *Desktop development with C++* (MSVC 14.52 / VS 2026 cannot build the Windows notifications plugin yet) and Windows **Developer Mode** enabled (`start ms-settings:developers`), which Flutter needs for plugin symlinks.
 
 ```powershell
 # Windows

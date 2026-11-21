@@ -8,11 +8,18 @@ import 'format.dart';
 import 'split.dart';
 import 'theme.dart';
 import 'urgency.dart';
+import 'i18n.dart';
 
 DateTime _day(DateTime d) => DateTime(d.year, d.month, d.day);
 
 const _diasSemana = [
-  'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado', 'domingo'
+  'lunes',
+  'martes',
+  'miércoles',
+  'jueves',
+  'viernes',
+  'sábado',
+  'domingo'
 ];
 
 /// Calendario mensual: este mes, los 3 anteriores y los 3 siguientes.
@@ -37,6 +44,11 @@ class CalendarView extends StatefulWidget {
 }
 
 class _CalendarViewState extends State<CalendarView> {
+  /// Alto mínimo de una celda del mes: margen + borde (7) + espacio (4) +
+  /// número del día (28) + 3 barras (21) + "+N" (12) = 72, con holgura.
+  /// Si no cabe, el calendario se desplaza en vez de desbordarse.
+  static const _minCell = 78.0;
+
   static const _before = 3;
   late final PageController _pages = PageController(initialPage: _before);
   int _page = _before;
@@ -56,7 +68,8 @@ class _CalendarViewState extends State<CalendarView> {
   void _goTo(int page) => _pages.animateToPage(page,
       duration: Anim.slow, curve: Curves.easeInOutCubic);
 
-  static List<Note> activeOn(List<Note> notes, DateTime day) => notes.where((n) {
+  static List<Note> activeOn(List<Note> notes, DateTime day) =>
+      notes.where((n) {
         final s = _day(n.periodStart.toLocal());
         final e = _day(n.dueAt!.toLocal());
         return !day.isBefore(s) && !day.isAfter(e);
@@ -64,7 +77,7 @@ class _CalendarViewState extends State<CalendarView> {
 
   Widget _header(BuildContext context) {
     final month = _monthAt(_page);
-    final name = mesesNombre[month.month - 1];
+    final name = tr(mesesNombre[month.month - 1]);
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 16, 12, 8),
       child: Row(
@@ -116,7 +129,7 @@ class _CalendarViewState extends State<CalendarView> {
                       setState(() => _selected = _day(DateTime.now()));
                       _goTo(_before);
                     },
-              child: const Text('Hoy'),
+              child: Text(tr('Hoy')),
             ),
           ),
           const SizedBox(width: 4),
@@ -130,14 +143,15 @@ class _CalendarViewState extends State<CalendarView> {
               children: [
                 IconButton(
                   visualDensity: VisualDensity.compact,
-                  tooltip: 'Mes anterior',
+                  tooltip: tr('Mes anterior'),
                   onPressed: _page > 0 ? () => _goTo(_page - 1) : null,
                   icon: const Icon(Icons.chevron_left),
                 ),
                 IconButton(
                   visualDensity: VisualDensity.compact,
-                  tooltip: 'Mes siguiente',
-                  onPressed: _page < _before * 2 ? () => _goTo(_page + 1) : null,
+                  tooltip: tr('Mes siguiente'),
+                  onPressed:
+                      _page < _before * 2 ? () => _goTo(_page + 1) : null,
                   icon: const Icon(Icons.chevron_right),
                 ),
               ],
@@ -149,7 +163,7 @@ class _CalendarViewState extends State<CalendarView> {
   }
 
   Widget _weekdays(BuildContext context) {
-    const d = ['L', 'M', 'X', 'J', 'V', 'S', 'D'];
+    final d = diasIniciales;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12),
       child: Row(
@@ -214,7 +228,7 @@ class _CalendarViewState extends State<CalendarView> {
             // Calendario a la izquierda (llena el alto disponible) y las
             // tareas del día a la derecha, con separador ajustable.
             final calendar = LayoutBuilder(builder: (context, cc) {
-              final cellH = ((cc.maxHeight - 96) / 6).clamp(72.0, 130.0);
+              final cellH = ((cc.maxHeight - 96) / 6).clamp(_minCell, 130.0);
               return SingleChildScrollView(
                 child: Column(
                   children: [
@@ -243,7 +257,7 @@ class _CalendarViewState extends State<CalendarView> {
 
           // Estrecho (móvil): todo en un único desplazamiento, sin capas
           // que se monten unas encima de otras.
-          final cellH = ((c.maxWidth - 24) / 7 * 0.95).clamp(70.0, 88.0);
+          final cellH = ((c.maxWidth - 24) / 7 * 0.95).clamp(_minCell, 92.0);
           final dayNotes = activeOn(notes, _selected);
           return ColoredBox(
             color: Palette.card(context),
@@ -265,9 +279,8 @@ class _CalendarViewState extends State<CalendarView> {
                   Padding(
                     padding: const EdgeInsets.symmetric(vertical: 28),
                     child: Center(
-                      child: Text('Día libre',
-                          style:
-                              TextStyle(color: Palette.secondary(context))),
+                      child: Text(tr('Día libre'),
+                          style: TextStyle(color: Palette.secondary(context))),
                     ),
                   )
                 else
@@ -379,8 +392,7 @@ class _MonthGrid extends StatelessWidget {
     final isToday = day == today;
     final isSel = day == selected;
     final dayNotes = _CalendarViewState.activeOn(visible, day);
-    final extra =
-        dayNotes.where((n) => (lanes[n.id] ?? 0) >= _maxLanes).length;
+    final extra = dayNotes.where((n) => (lanes[n.id] ?? 0) >= _maxLanes).length;
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
@@ -398,7 +410,7 @@ class _MonthGrid extends StatelessWidget {
         ),
         child: Column(
           children: [
-            const SizedBox(height: 6),
+            const SizedBox(height: 4),
             AnimatedContainer(
               duration: Anim.fast,
               width: 28,
@@ -455,8 +467,9 @@ class _MonthGrid extends StatelessWidget {
     final total = e.difference(s).inDays;
     final t = total <= 0 ? 1.0 : day.difference(s).inDays / total;
     final passed = !day.isAfter(_day(DateTime.now()));
-    final color =
-        n.done ? Palette.secondary(context) : paletteAt(fusePalette(n.color), t);
+    final color = n.done
+        ? Palette.secondary(context)
+        : paletteAt(fusePalette(n.color), t);
     return Padding(
       padding: EdgeInsets.only(
           left: isStart ? 4 : 0, right: isEnd ? 4 : 0, bottom: 2),
@@ -513,7 +526,7 @@ class _DayPanel extends StatelessWidget {
                             color: Palette.secondary(context)
                                 .withValues(alpha: 0.5)),
                         const SizedBox(height: 8),
-                        Text('Día libre',
+                        Text(tr('Día libre'),
                             style:
                                 TextStyle(color: Palette.secondary(context))),
                       ],
@@ -564,13 +577,14 @@ class TempCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = urgencyColor(context, note);
-    return Bouncy(
-      pressedScale: 0.985,
+    return _HoverCard(
+      color: onCard ? Palette.background(context) : Palette.card(context),
       child: Material(
-        color: onCard ? Palette.background(context) : Palette.card(context),
-        borderRadius: BorderRadius.circular(16),
-        clipBehavior: Clip.antiAlias,
+        type: MaterialType.transparency,
         child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          // Sin la mancha gris al pasar el ratón: lo hace _HoverCard.
+          hoverColor: Colors.transparent,
           onTap: onOpen,
           onLongPress: onEditDates,
           onSecondaryTap: onEditDates,
@@ -581,7 +595,7 @@ class TempCard extends StatelessWidget {
               children: [
                 IconButton(
                   visualDensity: VisualDensity.compact,
-                  tooltip: note.done ? 'Marcar pendiente' : 'Completar',
+                  tooltip: note.done ? tr('Marcar pendiente') : tr('Completar'),
                   onPressed: onToggleDone,
                   icon: AnimatedSwitcher(
                     duration: Anim.medium,
@@ -623,7 +637,7 @@ class TempCard extends StatelessWidget {
                 ),
                 IconButton(
                   visualDensity: VisualDensity.compact,
-                  tooltip: 'Cambiar fechas',
+                  tooltip: tr('Cambiar fechas'),
                   onPressed: onEditDates,
                   icon: Icon(Icons.edit_calendar_outlined,
                       color: Palette.secondary(context), size: 19),
@@ -637,7 +651,6 @@ class TempCard extends StatelessWidget {
   }
 }
 
-
 /// Cabecera del día seleccionado: día de la semana, fecha, nº de tareas y
 /// botón para crear una tarea ese día. El botón va en su propia fila para
 /// que nunca se monte sobre la fecha.
@@ -650,7 +663,7 @@ class _DayHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final year = day.year != DateTime.now().year ? ' de ${day.year}' : '';
+    final sameYear = day.year == DateTime.now().year;
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 18, 16, 12),
       child: Row(
@@ -660,14 +673,22 @@ class _DayHeader extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(_diasSemana[day.weekday - 1].toUpperCase(),
+                Text(tr(_diasSemana[day.weekday - 1]).toUpperCase(),
                     style: TextStyle(
                         fontSize: 11.5,
                         letterSpacing: 1.2,
                         fontWeight: FontWeight.w700,
                         color: Palette.accent(context))),
                 const SizedBox(height: 2),
-                Text('${day.day} de ${mesesNombre[day.month - 1]}$year',
+                Text(
+                    sameYear
+                        ? trf('{0} de {1}',
+                            [day.day, tr(mesesNombre[day.month - 1])])
+                        : trf('{0} de {1} de {2}', [
+                            day.day,
+                            tr(mesesNombre[day.month - 1]),
+                            day.year
+                          ]),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
@@ -675,8 +696,8 @@ class _DayHeader extends StatelessWidget {
                 const SizedBox(height: 2),
                 Text(
                   count == 0
-                      ? 'Sin tareas'
-                      : (count == 1 ? '1 tarea' : '$count tareas'),
+                      ? tr('Sin tareas')
+                      : trn(count, '{0} tarea', '{0} tareas'),
                   style: TextStyle(
                       color: Palette.secondary(context), fontSize: 13),
                 ),
@@ -686,12 +707,65 @@ class _DayHeader extends StatelessWidget {
           const SizedBox(width: 8),
           Bouncy(
             child: IconButton.filledTonal(
-              tooltip: 'Nueva tarea este día',
+              tooltip: tr('Nueva tarea este día'),
               onPressed: onNew,
               icon: const Icon(Icons.add_rounded),
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Tarjeta con un resaltado limpio al pasar el ratón: borde suave del color
+/// del tema, sombra ligera y un poco de tinte (en vez del gris plano del
+/// InkWell). Al pulsar encoge un poco.
+class _HoverCard extends StatefulWidget {
+  const _HoverCard({required this.color, required this.child});
+  final Color color;
+  final Widget child;
+
+  @override
+  State<_HoverCard> createState() => _HoverCardState();
+}
+
+class _HoverCardState extends State<_HoverCard> {
+  bool _hover = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = Palette.accent(context);
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hover = true),
+      onExit: (_) => setState(() => _hover = false),
+      child: Bouncy(
+        pressedScale: 0.985,
+        child: AnimatedContainer(
+          duration: Anim.medium,
+          curve: Anim.curve,
+          clipBehavior: Clip.antiAlias,
+          decoration: BoxDecoration(
+            color: _hover
+                ? Color.alphaBlend(accent.withValues(alpha: 0.05), widget.color)
+                : widget.color,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: _hover
+                  ? accent.withValues(alpha: 0.45)
+                  : accent.withValues(alpha: 0),
+              width: 1.2,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: accent.withValues(alpha: _hover ? 0.14 : 0),
+                blurRadius: _hover ? 16 : 0,
+                offset: Offset(0, _hover ? 5 : 0),
+              ),
+            ],
+          ),
+          child: widget.child,
+        ),
       ),
     );
   }

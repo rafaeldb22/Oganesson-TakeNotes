@@ -234,8 +234,8 @@ class _FusePainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final y = size.height / 2;
     final r = Radius.circular(barHeight / 2);
-    final full = RRect.fromLTRBR(0, y - barHeight / 2, size.width,
-        y + barHeight / 2, r);
+    final full =
+        RRect.fromLTRBR(0, y - barHeight / 2, size.width, y + barHeight / 2, r);
 
     // Cordón que queda por quemar.
     canvas.drawRRect(full, Paint()..color = track);
@@ -282,6 +282,7 @@ class _FusePainter extends CustomPainter {
       old.track != track ||
       old.spark != spark ||
       old.dimmed != dimmed ||
-      !identical(old.colors, colors) && old.colors.toString() != colors.toString() ||
+      !identical(old.colors, colors) &&
+          old.colors.toString() != colors.toString() ||
       old.barHeight != barHeight;
 }

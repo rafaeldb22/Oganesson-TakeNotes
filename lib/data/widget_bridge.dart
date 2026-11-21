@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../ui/i18n.dart';
 import 'dart:io' show Platform;
 
 import 'package:flutter/foundation.dart';
@@ -9,7 +10,7 @@ import '../models/note.dart';
 import '../ui/calendar_widget_image.dart';
 import '../ui/theme.dart';
 
-/// Puente con el widget 2x2 de Android. En Windows no hace nada.
+/// Puente con los widgets de Android (nota rápida y calendario). En Windows no hace nada.
 class WidgetBridge {
   static bool get supported => !kIsWeb && Platform.isAndroid;
 
@@ -29,19 +30,22 @@ class WidgetBridge {
   }
 
   static Future<void> _push(List<Note> notes) async {
-    final real = notes.where((n) => !n.isEmpty && !n.deleted).toList()
+    // Las notas del Vault nunca salen en la pantalla de inicio.
+    final real = notes
+        .where((n) => !n.isEmpty && !n.deleted && !n.vault)
+        .toList()
       ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
     final latest = real.isEmpty ? null : real.first;
     try {
       await HomeWidget.saveWidgetData<String>(
-          'ultima_titulo', latest?.title ?? 'Sin notas todavía');
+          'ultima_titulo', latest?.title ?? tr('Sin notas todavía'));
       await HomeWidget.saveWidgetData<String>(
           'ultima_preview',
           latest == null
-              ? 'Toca «Nueva nota» para escribir'
-              : (latest.preview == 'Sin texto adicional' ? '' : latest.preview));
+              ? tr('Toca «Nueva nota» para escribir')
+              : (!latest.hasPreview ? '' : latest.preview));
       await HomeWidget.saveWidgetData<String>(
-          'total', real.length == 1 ? '1 nota' : '${real.length} notas');
+          'total', trn(real.length, '{0} nota', '{0} notas'));
       final t = themeSettings.theme;
       await HomeWidget.saveWidgetData<int>(
           'acento_claro', t.light.accent.toARGB32());
@@ -58,7 +62,7 @@ class WidgetBridge {
     await _pushCalendar(real);
   }
 
-  /// Widget "Calendario" (4x2): la app lo dibuja como imagen y Android
+  /// Widget "Calendario" (2x2, 4x2 o 4x4): la app lo dibuja como imagen y Android
   /// la muestra. Solo cambia la imagen si cambian las tareas o el tema.
   static String _lastCalendarSig = '';
 
@@ -80,20 +84,28 @@ class WidgetBridge {
     if (sig == _lastCalendarSig) return;
     _lastCalendarSig = sig;
     final t = themeSettings.theme;
+    final colors = dark ? t.dark : t.light;
     try {
-      await HomeWidget.renderFlutterWidget(
-        MediaQuery(
-          data: const MediaQueryData(),
-          child: CalendarWidgetImage(
-            notes: temporales,
-            colors: dark ? t.dark : t.light,
-            dark: dark,
+      // Fondo nativo del widget: mismo color que la tarjeta dibujada.
+      await HomeWidget.saveWidgetData<int>(
+          'calendario_bg', colors.card.toARGB32());
+      // Una imagen por tamaño; Android muestra la que encaja (S / M / L).
+      for (final size in CalendarWidgetSize.values) {
+        await HomeWidget.renderFlutterWidget(
+          MediaQuery(
+            data: const MediaQueryData(),
+            child: CalendarWidgetImage(
+              notes: temporales,
+              colors: colors,
+              dark: dark,
+              size: size,
+            ),
           ),
-        ),
-        key: 'calendario_img',
-        logicalSize: const Size(360, 180),
-        pixelRatio: 3,
-      );
+          key: size.key,
+          logicalSize: size.logicalSize,
+          pixelRatio: 3,
+        );
+      }
       await HomeWidget.updateWidget(androidName: 'CalendarioWidget');
     } catch (e) {
       debugPrint('Widget calendario: $e');

@@ -1,5 +1,7 @@
 import 'dart:math';
 
+import '../ui/i18n.dart';
+
 DateTime? _parseDate(Object? v) =>
     v is String && v.isNotEmpty ? DateTime.parse(v).toUtc() : null;
 
@@ -17,9 +19,22 @@ class Note {
     this.color,
     this.pinned = false,
     this.deleted = false,
-  });
+    this.vault = false,
+    this.doneAt,
+    List<String>? links,
+  }) : links = links ?? [];
+
+  /// Cuándo se marcó como completada (para moverla a "Completadas").
+  DateTime? doneAt;
+
+  /// Notas enlazadas a mano (clic derecho → Enlazar), por id.
+  List<String> links;
 
   final String id;
+
+  /// Nota guardada en el Vault: oculta hasta desbloquearlo con la contraseña
+  /// maestra (y nunca se muestra en los widgets de Android).
+  bool vault;
 
   /// Color elegido para la nota (ARGB). null = colores por defecto.
   int? color;
@@ -77,22 +92,32 @@ class Note {
   /// Primera línea con texto = título (como en Notas de iPhone).
   String get title {
     final l = _lines;
-    return l.isEmpty ? 'Nota nueva' : l.first;
+    return l.isEmpty ? tr('Nota nueva') : l.first;
   }
 
   String get preview {
     final l = _lines;
-    return l.length < 2 ? 'Sin texto adicional' : l.sublist(1).join(' ');
+    return l.length < 2 ? tr('Sin texto adicional') : l.sublist(1).join(' ');
+  }
+
+  /// ¿Tiene texto además del título?
+  bool get hasPreview {
+    return _lines.length >= 2;
   }
 
   bool get isEmpty => content.trim().isEmpty;
 
-  Map<String, dynamic> toRow({String? userId}) => {
+  /// [withVault] = false cuando Supabase aún no tiene las columnas de la
+  /// migración 005 (`vault`, `links`, `done_at`): el resto se sigue subiendo.
+  Map<String, dynamic> toRow({String? userId, bool withVault = true}) => {
         'id': id,
         if (userId != null) 'user_id': userId,
         'content': content,
         'rich': rich,
         'folder_id': folderId,
+        if (withVault) 'vault': vault,
+        if (withVault) 'links': links,
+        if (withVault) 'done_at': doneAt?.toUtc().toIso8601String(),
         'remind_at': remindAt?.toUtc().toIso8601String(),
         'due_at': dueAt?.toUtc().toIso8601String(),
         'done': done,
@@ -116,6 +141,11 @@ class Note {
       color: r['color'] is num ? (r['color'] as num).toInt() : null,
       pinned: r['pinned'] == true,
       deleted: r['deleted'] == true,
+      vault: r['vault'] == true,
+      doneAt: _parseDate(r['done_at']),
+      links: r['links'] is List
+          ? (r['links'] as List).whereType<String>().toList()
+          : null,
       createdAt: _parseDate(r['created_at']) ?? updated,
       updatedAt: updated,
     );

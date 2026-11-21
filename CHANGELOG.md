@@ -2,6 +2,58 @@
 
 All notable changes to Oganesson TakeNotes (formerly *Notas* / *BabuNotes*).
 
+## [1.1.0] — 2026-11-21
+
+### Added
+- **Note network** (like Obsidian's graph view): right-click a note (long press on Android) →
+  *Enlazar con otras notas…* to connect it with other notes, or *Crear subnota enlazada* to
+  create a linked sub-note. The link button in the formatting bar opens the same picker. A new
+  **Network** view in the bottom bar shows every note as a node and every link as a line: zoom,
+  pan, drag nodes, hover to highlight a note and its neighbours, tap to open it. Each note lists
+  its links and backlinks at the bottom.
+- **In-app updates**: the app checks GitHub Releases on startup and offers the new version. On
+  Windows it downloads the installer, updates silently and reopens; on Android it downloads the
+  APK and opens the system installer. Also available from *⋯ → Buscar actualizaciones*.
+- *⋯* menu: **Invítame a un café** (Buy Me a Coffee donations) and **Código en GitHub**.
+- Android calendar widget in **three sizes**: 2×2 (month), 4×2 (month + tasks) and 4×4 (month +
+  task list). It adapts when resized.
+- **Vault** (only in *⋯ → Vault*): notes protected by a master password, in their own screen
+  (new note, add existing notes, right-click → remove from the Vault). Vault notes never show
+  in the normal lists, search, calendar, network or Android widgets (their reminders say
+  *"Nota del Vault"*). It locks itself silently after 5 minutes without use. The password is
+  stored only as a salted PBKDF2-SHA256 hash and synced through Supabase.
+- **Change passwords** from *⋯* by typing the current one: the account password and the Vault
+  password. (Vault reset by email code is built in but off until custom SMTP is configured:
+  `--dart-define=EMAIL_CODES=true`.)
+- **Completed** (*⋯ → Completadas*): tasks completed more than 3 days ago leave the notes list
+  by themselves and are kept there for 30 days (restore or delete), then go to the trash.
+- **English**: the app is now available in Spanish and English (*⋯ → Idioma*; defaults to the
+  system language).
+- Sort notes by **last modified**, **creation date** or **name** (remembered), from a new
+  animated sort menu.
+
+### Changed
+- Swipe to delete now asks *"¿Eliminar «note title»?"* in the middle of the screen first.
+- Task cards: cleaner hover effect (soft theme-coloured border, light shadow and tint instead of
+  a flat grey overlay).
+- Windows: redesigned title bar, now a separate strip tinted with the theme colour with a
+  divider line, dimmed while the window is unfocused.
+- Formatting bar: scrolls with the mouse wheel or by dragging, and fades at the edges when more
+  buttons are hidden.
+
+### Fixed
+- Android calendar widget looked transparent: it now has a solid rounded background in the theme
+  colour, and the task list only shows as many tasks as fit.
+- Calendar: "bottom overflowed" stripes when the window (or phone screen) was small; day cells
+  now have a safe minimum height and the month scrolls instead.
+- Network and calendar buttons stayed highlighted after opening a note; tapping them with a note
+  open now goes back to that view.
+- Network view: dragged nodes could be drawn over the rest of the app; the header is now its
+  own bar, the graph area is clipped below it, the *Sueltas* / *Centrar* buttons sit at the
+  bottom left, and the graph is framed while it settles.
+- Switching between *All*, *Network* and *Calendar* no longer replays the list animation when
+  the list shows the same notes.
+
 ## [1.0.0] — 2026-11-21
 
 ### Changed
