@@ -35,8 +35,7 @@ class _Node {
   bool pinned = false;
 }
 
-class _GraphViewState extends State<GraphView>
-    with SingleTickerProviderStateMixin {
+class _GraphViewState extends State<GraphView> with TickerProviderStateMixin {
   late final Ticker _ticker;
   final _nodes = <String, _Node>{};
   final _rnd = math.Random(7);
@@ -56,6 +55,34 @@ class _GraphViewState extends State<GraphView>
 
   // Interacción.
   String? _hover;
+
+  /// Nodo resaltado que se está dibujando (se mantiene mientras se
+  /// desvanece) y animación del resaltado.
+  String? _shownHover;
+  late final AnimationController _hoverCtrl = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 260),
+    reverseDuration: const Duration(milliseconds: 200),
+  )
+    ..addListener(() => setState(() {}))
+    ..addStatusListener((s) {
+      if (s == AnimationStatus.dismissed && _hover == null) {
+        _shownHover = null;
+      }
+    });
+
+  void _setHover(String? h) {
+    setState(() => _hover = h);
+    if (h != null) {
+      // De un nodo a otro: arranca desde un punto intermedio, más fluido.
+      final from = _shownHover != null && _shownHover != h ? 0.35 : null;
+      _shownHover = h;
+      _hoverCtrl.forward(from: from);
+    } else {
+      _hoverCtrl.reverse();
+    }
+  }
+
   String? _dragging;
   Offset? _lastFocal;
   double _startScale = 1;
@@ -77,6 +104,7 @@ class _GraphViewState extends State<GraphView>
   void dispose() {
     widget.repo.removeListener(_onRepo);
     _ticker.dispose();
+    _hoverCtrl.dispose();
     super.dispose();
   }
 
@@ -302,9 +330,9 @@ class _GraphViewState extends State<GraphView>
                               : SystemMouseCursors.grab,
                           onHover: (e) {
                             final h = _hit(e.localPosition);
-                            if (h != _hover) setState(() => _hover = h);
+                            if (h != _hover) _setHover(h);
                           },
-                          onExit: (_) => setState(() => _hover = null),
+                          onExit: (_) => _setHover(null),
                           child: GestureDetector(
                             behavior: HitTestBehavior.opaque,
                             onScaleStart: (d) {
@@ -365,7 +393,9 @@ class _GraphViewState extends State<GraphView>
                                 notes: notesById,
                                 scale: _scale,
                                 offset: _offset,
-                                hover: _hover ?? _dragging,
+                                hover: _dragging ?? _shownHover,
+                                hoverT:
+                                    _dragging != null ? 1 : _hoverCtrl.value,
                                 radius: _radius,
                                 colors: p,
                                 labelColor: onSurface,
@@ -474,6 +504,7 @@ class _GraphPainter extends CustomPainter {
     required this.scale,
     required this.offset,
     required this.hover,
+    required this.hoverT,
     required this.radius,
     required this.colors,
     required this.labelColor,
@@ -486,6 +517,9 @@ class _GraphPainter extends CustomPainter {
   final double scale;
   final Offset offset;
   final String? hover;
+
+  /// Progreso de la animación de resaltado (0..1).
+  final double hoverT;
   final double Function(String id) radius;
   final NotasColors colors;
   final Color labelColor;
@@ -495,12 +529,13 @@ class _GraphPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    // t: progreso de la animación de resaltado (0 = nada, 1 = completo).
+    final t = Curves.easeOutCubic.transform(hoverT.clamp(0.0, 1.0));
     final focus = hover == null ? null : {hover!, ...graph.neighbors(hover!)};
+    double lerp(double a, double b) => a + (b - a) * t;
 
     // Enlaces.
-    final edge = Paint()
-      ..strokeWidth = 1.2
-      ..style = PaintingStyle.stroke;
+    final edge = Paint()..style = PaintingStyle.stroke;
     graph.outgoing.forEach((from, targets) {
       final a = nodes[from];
       if (a == null) return;
@@ -510,9 +545,11 @@ class _GraphPainter extends CustomPainter {
         final lit = focus != null && (from == hover || to == hover);
         edge
           ..color = lit
-              ? colors.accent.withValues(alpha: 0.9)
-              : colors.secondary.withValues(alpha: focus == null ? 0.35 : 0.12)
-          ..strokeWidth = lit ? 2 : 1.2;
+              ? Color.lerp(colors.secondary.withValues(alpha: 0.35),
+                  colors.accent.withValues(alpha: 0.95), t)!
+              : colors.secondary
+                  .withValues(alpha: focus == null ? 0.35 : lerp(0.35, 0.1))
+          ..strokeWidth = lit ? lerp(1.2, 2.4) : 1.2;
         canvas.drawLine(_s(a.pos), _s(b.pos), edge);
       }
     });
@@ -522,16 +559,27 @@ class _GraphPainter extends CustomPainter {
       final note = notes[n.id];
       if (note == null) continue;
       final c = _s(n.pos);
-      final r = radius(n.id) * scale.clamp(0.6, 1.6);
-      final dim = focus != null && !focus.contains(n.id);
+      final isHover = n.id == hover;
+      final inFocus = focus?.contains(n.id) ?? false;
+      final grow = isHover ? lerp(1, 1.4) : (inFocus ? lerp(1, 1.12) : 1.0);
+      final r = radius(n.id) * scale.clamp(0.6, 1.6) * grow;
       final base = note.color != null ? Color(note.color!) : colors.accent;
       final orphan = graph.degree(n.id) == 0;
+      final alpha = orphan ? 0.55 : 1.0;
       final fill = Paint()
-        ..color = (orphan ? colors.secondary : base)
-            .withValues(alpha: dim ? 0.18 : (orphan ? 0.55 : 1));
-      if (n.id == hover) {
+        ..color = (orphan ? colors.secondary : base).withValues(
+            alpha: focus != null && !inFocus ? lerp(alpha, 0.16) : alpha);
+      if (isHover) {
+        // Halo que se expande.
+        canvas.drawCircle(c, r + lerp(0, 9),
+            Paint()..color = base.withValues(alpha: 0.22 * t));
         canvas.drawCircle(
-            c, r + 6, Paint()..color = base.withValues(alpha: 0.22));
+            c,
+            r + lerp(0, 3),
+            Paint()
+              ..style = PaintingStyle.stroke
+              ..strokeWidth = 1.5
+              ..color = base.withValues(alpha: 0.6 * t));
       }
       canvas.drawCircle(c, r, fill);
     }
@@ -540,10 +588,20 @@ class _GraphPainter extends CustomPainter {
     for (final n in nodes.values) {
       final note = notes[n.id];
       if (note == null) continue;
+      final isHover = n.id == hover;
       final inFocus = focus?.contains(n.id) ?? false;
       final big = graph.degree(n.id) >= 3;
-      if (!(inFocus || scale >= 0.85 || (big && scale >= 0.5))) continue;
-      if (focus != null && !inFocus) continue;
+      final always = scale >= 0.85 || (big && scale >= 0.5);
+      // Visibilidad: las de fuera del foco se desvanecen.
+      final double visible;
+      if (focus == null) {
+        visible = always ? 1 : 0;
+      } else if (inFocus) {
+        visible = always ? 1 : t;
+      } else {
+        visible = always ? 1 - t : 0;
+      }
+      if (visible <= 0.01) continue;
       final title = note.title.length > 28
           ? '${note.title.substring(0, 27)}…'
           : note.title;
@@ -551,18 +609,19 @@ class _GraphPainter extends CustomPainter {
         text: TextSpan(
           text: title,
           style: TextStyle(
-            fontSize: n.id == hover ? 13 : 11.5,
-            fontWeight: n.id == hover ? FontWeight.w700 : FontWeight.w500,
-            color: labelColor.withValues(
-                alpha: inFocus || focus == null ? 0.92 : 0.4),
+            fontSize: isHover ? lerp(11.5, 13.5) : 11.5,
+            fontWeight: isHover && t > 0.5 ? FontWeight.w700 : FontWeight.w500,
+            color: labelColor.withValues(alpha: 0.92 * visible),
           ),
         ),
         textDirection: textDirection,
         maxLines: 1,
       )..layout();
       final c = _s(n.pos);
-      final r = radius(n.id) * scale.clamp(0.6, 1.6);
-      tp.paint(canvas, c + Offset(-tp.width / 2, r + 4));
+      final grow = isHover ? lerp(1, 1.4) : (inFocus ? lerp(1, 1.12) : 1.0);
+      final r = radius(n.id) * scale.clamp(0.6, 1.6) * grow;
+      tp.paint(canvas,
+          c + Offset(-tp.width / 2, r + 4 + (isHover ? lerp(0, 3) : 0)));
     }
   }
 

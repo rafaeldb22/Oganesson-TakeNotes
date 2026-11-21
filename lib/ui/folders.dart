@@ -1,10 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 
 import '../data/notes_repository.dart';
 import '../models/note.dart';
 import 'anim.dart';
-import 'theme.dart';
 import 'i18n.dart';
 
 /// Colores para las carpetas.
@@ -18,130 +16,6 @@ const folderColors = <int>[
   0xFF12A594, // turquesa
   0xFF8D8D8D, // gris
 ];
-
-/// Fila de filtros: Todas · Temporales · Calendario · carpetas · + carpeta.
-class FilterChips extends StatelessWidget {
-  const FilterChips({
-    super.key,
-    required this.repo,
-    required this.selected,
-    required this.onSelect,
-  });
-
-  final NotesRepository repo;
-  final String selected;
-  final void Function(String) onSelect;
-
-  @override
-  Widget build(BuildContext context) {
-    final folders = repo.folders;
-    // Arriba solo "Todas" y las carpetas creadas. El calendario y crear
-    // carpeta están en la barra inferior.
-    final chips = <Widget>[
-      _chip(context, 'todas', 'Todas', Icons.notes),
-      for (final f in folders)
-        _chip(context, f.id, f.name, Icons.folder,
-            color: f.color == null ? null : Color(f.color!),
-            badge: '${repo.countIn(f.id)}',
-            onLongPress: () => editFolderDialog(context, repo, folder: f)),
-    ];
-
-    return SizedBox(
-      height: 48,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
-        itemCount: chips.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 8),
-        itemBuilder: (_, i) => chips[i]
-            .animate(delay: (30 * i).ms)
-            .fadeIn(duration: Anim.medium)
-            .slideX(begin: 0.3, curve: Anim.curve),
-      ),
-    );
-  }
-
-  Widget _chip(
-    BuildContext context,
-    String id,
-    String label,
-    IconData icon, {
-    Color? color,
-    String? badge,
-    Color? badgeColor,
-    VoidCallback? onLongPress,
-  }) {
-    final sel = id == selected;
-    final accent = Palette.accent(context);
-    final c = color ?? accent;
-    return Bouncy(
-      pressedScale: 0.92,
-      child: GestureDetector(
-        onLongPress: onLongPress,
-        onSecondaryTap: onLongPress,
-        child: AnimatedContainer(
-          duration: Anim.medium,
-          curve: Anim.curve,
-          // Sin sombras: un tinte suave del color y borde fino al elegirlo.
-          decoration: BoxDecoration(
-            color: sel
-                ? c.withValues(alpha: 0.16)
-                : Palette.searchFill(context).withValues(alpha: 0.7),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-              color: sel ? c.withValues(alpha: 0.55) : Colors.transparent,
-              width: 1.2,
-            ),
-          ),
-          child: Material(
-            type: MaterialType.transparency,
-            child: InkWell(
-              borderRadius: BorderRadius.circular(20),
-              onTap: () => onSelect(id),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(icon,
-                        size: 16,
-                        color: sel ? c : (color ?? Palette.secondary(context))),
-                    const SizedBox(width: 6),
-                    Text(label,
-                        style: TextStyle(
-                            fontWeight: FontWeight.w600,
-                            color: sel ? c : null)),
-                    if (badge != null) ...[
-                      const SizedBox(width: 6),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 6, vertical: 1),
-                        decoration: BoxDecoration(
-                          color: badgeColor ??
-                              (sel
-                                  ? c.withValues(alpha: 0.22)
-                                  : Palette.separator(context)),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Text(badge,
-                            style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w700,
-                                color: badgeColor != null
-                                    ? Colors.white
-                                    : (sel ? c : null))),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
 
 /// Crear o editar una carpeta (nombre + color). Devuelve la carpeta.
 Future<Folder?> editFolderDialog(BuildContext context, NotesRepository repo,

@@ -146,7 +146,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         autofillHints: const [AutofillHints.email],
                         textInputAction: TextInputAction.next,
                         decoration:
-                            _deco(context, 'Correo', Icons.alternate_email),
+                            _deco(context, tr('Correo'), Icons.alternate_email),
                       ),
                       const SizedBox(height: 12),
                       TextField(

@@ -146,7 +146,15 @@ class _ScheduleSheetState extends State<_ScheduleSheet> {
                 ),
               ],
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 12),
+            _Presets(onPick: (day) {
+              setState(() {
+                _editing = _Edge.end;
+                _month = DateTime(day.year, day.month);
+              });
+              _pickDay(day);
+            }),
+            const SizedBox(height: 12),
             _MiniCalendar(
               month: _month,
               start: _d(_start),
@@ -268,8 +276,10 @@ class _EdgeCard extends StatelessWidget {
   }
 }
 
-/// Calendario compacto con el rango inicio→fin resaltado.
-class _MiniCalendar extends StatelessWidget {
+/// Calendario compacto con el rango inicio→fin resaltado: los días
+/// reaccionan al pasar el ratón, el cambio de mes se desliza y la franja del
+/// rango tiene los extremos redondeados.
+class _MiniCalendar extends StatefulWidget {
   const _MiniCalendar({
     required this.month,
     required this.start,
@@ -287,137 +297,314 @@ class _MiniCalendar extends StatelessWidget {
   final void Function(DateTime) onPick;
 
   @override
+  State<_MiniCalendar> createState() => _MiniCalendarState();
+}
+
+class _MiniCalendarState extends State<_MiniCalendar> {
+  DateTime? _hover;
+  int _direction = 1; // 1 = mes siguiente, -1 = anterior
+
+  @override
+  void didUpdateWidget(_MiniCalendar old) {
+    super.didUpdateWidget(old);
+    if (old.month != widget.month) {
+      _direction = widget.month.isAfter(old.month) ? 1 : -1;
+    }
+  }
+
+  Widget _navButton(IconData icon, VoidCallback? onTap, String tip) {
+    final p = Palette.of(context);
+    return Tooltip(
+      message: tip,
+      child: Material(
+        color: Colors.transparent,
+        shape: const CircleBorder(),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.all(6),
+            child: Icon(icon,
+                size: 20,
+                color: onTap == null
+                    ? p.secondary.withValues(alpha: 0.3)
+                    : p.secondary),
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final p = Palette.of(context);
+    final month = widget.month;
     final range = calendarRange();
     final firstMonth = DateTime(range.first.year, range.first.month);
     final lastMonth = DateTime(range.last.year, range.last.month);
     final canPrev = month.isAfter(firstMonth);
     final canNext = month.isBefore(lastMonth);
-    final first = DateTime(month.year, month.month, 1);
-    final gridStart = first.subtract(Duration(days: first.weekday - 1));
-    final today = _d(DateTime.now());
     final name = tr(mesesNombre[month.month - 1]);
-    final dias = diasIniciales;
-    final rangeColor = accent.withValues(alpha: 0.14);
 
     return Container(
-      padding: const EdgeInsets.fromLTRB(8, 4, 8, 8),
+      padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
       decoration: BoxDecoration(
-        color: Palette.background(context),
+        color: p.background,
         borderRadius: BorderRadius.circular(18),
       ),
       child: Column(
         children: [
           Row(
             children: [
-              const SizedBox(width: 8),
+              const SizedBox(width: 6),
               Expanded(
-                child: Text(
-                  '${name[0].toUpperCase()}${name.substring(1)} ${month.year}',
-                  style: const TextStyle(
-                      fontSize: 15, fontWeight: FontWeight.w700),
+                child: AnimatedSwitcher(
+                  duration: Anim.medium,
+                  transitionBuilder: (c, a) => FadeTransition(
+                    opacity: a,
+                    child: SlideTransition(
+                      position: Tween(
+                              begin: Offset(0.15 * _direction, 0),
+                              end: Offset.zero)
+                          .animate(a),
+                      child: c,
+                    ),
+                  ),
+                  layoutBuilder: (cur, prev) => Stack(
+                      alignment: Alignment.centerLeft,
+                      children: [...prev, if (cur != null) cur]),
+                  child: Text(
+                    '${name[0].toUpperCase()}${name.substring(1)} ${month.year}',
+                    key: ValueKey(month),
+                    style: const TextStyle(
+                        fontSize: 15.5, fontWeight: FontWeight.w800),
+                  ),
                 ),
               ),
-              IconButton(
-                visualDensity: VisualDensity.compact,
-                onPressed: canPrev
-                    ? () => onMonth(DateTime(month.year, month.month - 1))
-                    : null,
-                icon: const Icon(Icons.chevron_left),
-              ),
-              IconButton(
-                visualDensity: VisualDensity.compact,
-                onPressed: canNext
-                    ? () => onMonth(DateTime(month.year, month.month + 1))
-                    : null,
-                icon: const Icon(Icons.chevron_right),
-              ),
+              _navButton(
+                  Icons.chevron_left_rounded,
+                  canPrev
+                      ? () =>
+                          widget.onMonth(DateTime(month.year, month.month - 1))
+                      : null,
+                  tr('Mes anterior')),
+              _navButton(
+                  Icons.chevron_right_rounded,
+                  canNext
+                      ? () =>
+                          widget.onMonth(DateTime(month.year, month.month + 1))
+                      : null,
+                  tr('Mes siguiente')),
             ],
           ),
+          const SizedBox(height: 6),
           Row(
             children: [
-              for (final d in dias)
+              for (final (i, d) in diasIniciales.indexed)
                 Expanded(
                   child: Center(
                     child: Text(d,
                         style: TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.w700,
-                            color: Palette.secondary(context))),
+                            color: p.secondary
+                                .withValues(alpha: i >= 5 ? 0.6 : 1))),
                   ),
                 ),
             ],
           ),
           const SizedBox(height: 4),
-          for (var w = 0; w < 6; w++)
-            Row(
-              children: [
-                for (var i = 0; i < 7; i++)
-                  Expanded(
-                    child: Builder(builder: (context) {
-                      final day = DateTime(gridStart.year, gridStart.month,
-                          gridStart.day + w * 7 + i);
-                      final inMonth = day.month == month.month;
-                      final inWindow = !day.isBefore(_d(range.first)) &&
-                          !day.isAfter(_d(range.last));
-                      final isStart = day == start;
-                      final isEnd = day == end;
-                      final inRange = !day.isBefore(start) && !day.isAfter(end);
-                      final edge = isStart || isEnd;
-                      return GestureDetector(
-                        onTap: inWindow ? () => onPick(day) : null,
-                        child: SizedBox(
-                          height: 38,
-                          child: Stack(
-                            alignment: Alignment.center,
-                            children: [
-                              // Franja del rango (une inicio y fin).
-                              if (inRange && start != end)
-                                Positioned.fill(
-                                  top: 5,
-                                  bottom: 5,
-                                  left: isStart ? 19 : 0,
-                                  right: isEnd ? 19 : 0,
-                                  child: ColoredBox(color: rangeColor),
-                                ),
-                              AnimatedContainer(
-                                duration: Anim.fast,
-                                width: 32,
-                                height: 32,
-                                alignment: Alignment.center,
-                                decoration: BoxDecoration(
-                                  color: edge ? accent : Colors.transparent,
-                                  shape: BoxShape.circle,
-                                  border: day == today && !edge
-                                      ? Border.all(color: accent, width: 1.2)
-                                      : null,
-                                ),
-                                child: Text(
-                                  '${day.day}',
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: edge || day == today
-                                        ? FontWeight.w800
-                                        : FontWeight.w500,
-                                    color: edge
-                                        ? Palette.of(context).onAccent
-                                        : (!inWindow
-                                            ? Palette.secondary(context)
-                                                .withValues(alpha: 0.25)
-                                            : (inMonth
-                                                ? null
-                                                : Palette.secondary(context)
-                                                    .withValues(alpha: 0.5))),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      );
-                    }),
+          ClipRect(
+            child: AnimatedSwitcher(
+              duration: Anim.medium,
+              switchInCurve: Anim.curve,
+              switchOutCurve: Curves.easeIn,
+              transitionBuilder: (c, a) {
+                final incoming = c.key == ValueKey(month);
+                return FadeTransition(
+                  opacity: a,
+                  child: SlideTransition(
+                    position: Tween(
+                      begin: Offset((incoming ? 0.25 : -0.25) * _direction, 0),
+                      end: Offset.zero,
+                    ).animate(a),
+                    child: c,
                   ),
+                );
+              },
+              layoutBuilder: (cur, prev) =>
+                  Stack(children: [...prev, if (cur != null) cur]),
+              child: KeyedSubtree(
+                key: ValueKey(month),
+                child: _grid(context, month, range),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _grid(BuildContext context, DateTime month,
+      ({DateTime first, DateTime last}) range) {
+    final p = Palette.of(context);
+    final accent = widget.accent;
+    final start = widget.start;
+    final end = widget.end;
+    final first = DateTime(month.year, month.month, 1);
+    final gridStart = first.subtract(Duration(days: first.weekday - 1));
+    final today = _d(DateTime.now());
+    final rangeColor = accent.withValues(alpha: 0.14);
+
+    Widget cell(DateTime day, int column) {
+      final inMonth = day.month == month.month;
+      final inWindow =
+          !day.isBefore(_d(range.first)) && !day.isAfter(_d(range.last));
+      final isStart = day == start;
+      final isEnd = day == end;
+      final inRange = !day.isBefore(start) && !day.isAfter(end);
+      final edge = isStart || isEnd;
+      final hover = _hover == day && inWindow && !edge;
+      // La franja se redondea en los extremos del rango y al principio y
+      // fin de cada semana.
+      final roundLeft = isStart || column == 0;
+      final roundRight = isEnd || column == 6;
+      return MouseRegion(
+        cursor: inWindow ? SystemMouseCursors.click : SystemMouseCursors.basic,
+        onEnter: (_) => setState(() => _hover = day),
+        onExit: (_) {
+          if (_hover == day) setState(() => _hover = null);
+        },
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: inWindow ? () => widget.onPick(day) : null,
+          child: SizedBox(
+            height: 40,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                if (inRange && start != end)
+                  Positioned.fill(
+                    top: 4,
+                    bottom: 4,
+                    left: isStart ? 6 : 0,
+                    right: isEnd ? 6 : 0,
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: rangeColor,
+                        borderRadius: BorderRadius.horizontal(
+                          left: Radius.circular(roundLeft ? 16 : 0),
+                          right: Radius.circular(roundRight ? 16 : 0),
+                        ),
+                      ),
+                    ),
+                  ),
+                AnimatedScale(
+                  scale: hover ? 1.08 : 1,
+                  duration: Anim.fast,
+                  curve: Anim.curve,
+                  child: AnimatedContainer(
+                    duration: Anim.fast,
+                    curve: Anim.curve,
+                    width: 32,
+                    height: 32,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: edge
+                          ? accent
+                          : (hover
+                              ? accent.withValues(alpha: 0.16)
+                              : Colors.transparent),
+                      shape: BoxShape.circle,
+                      border: day == today && !edge
+                          ? Border.all(color: accent, width: 1.3)
+                          : null,
+                      boxShadow: edge
+                          ? [
+                              BoxShadow(
+                                color: accent.withValues(alpha: 0.35),
+                                blurRadius: 8,
+                                offset: const Offset(0, 2),
+                              )
+                            ]
+                          : null,
+                    ),
+                    child: Text(
+                      '${day.day}',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: edge || day == today
+                            ? FontWeight.w800
+                            : FontWeight.w500,
+                        color: edge
+                            ? p.onAccent
+                            : (!inWindow
+                                ? p.secondary.withValues(alpha: 0.25)
+                                : (inMonth
+                                    ? null
+                                    : p.secondary.withValues(alpha: 0.5))),
+                      ),
+                    ),
+                  ),
+                ),
               ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      children: [
+        for (var w = 0; w < 6; w++)
+          Row(
+            children: [
+              for (var i = 0; i < 7; i++)
+                Expanded(
+                  child: cell(
+                      DateTime(gridStart.year, gridStart.month,
+                          gridStart.day + w * 7 + i),
+                      i),
+                ),
+            ],
+          ),
+      ],
+    );
+  }
+}
+
+/// Atajos para la fecha de fin: hoy, mañana, en una semana, en un mes.
+class _Presets extends StatelessWidget {
+  const _Presets({required this.onPick});
+  final void Function(DateTime day) onPick;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = Palette.of(context);
+    final now = DateTime.now();
+    final presets = [
+      (tr('Hoy'), DateTime(now.year, now.month, now.day)),
+      (tr('Mañana'), DateTime(now.year, now.month, now.day + 1)),
+      (tr('En una semana'), DateTime(now.year, now.month, now.day + 7)),
+      (tr('En un mes'), DateTime(now.year, now.month + 1, now.day)),
+    ];
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: [
+          for (final (label, day) in presets)
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: Bouncy(
+                pressedScale: 0.94,
+                child: ActionChip(
+                  label: Text(label),
+                  avatar: Icon(Icons.bolt_rounded, size: 16, color: p.accent),
+                  shape: StadiumBorder(side: BorderSide(color: p.separator)),
+                  backgroundColor: p.background,
+                  onPressed: () => onPick(day),
+                ),
+              ),
             ),
         ],
       ),
@@ -434,7 +621,7 @@ class _TimeWheel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final dark = Theme.of(context).brightness == Brightness.dark;
-    final fg = dark ? Colors.white : const Color(0xFF111111);
+    final fg = Theme.of(context).colorScheme.onSurface;
     return Container(
       height: 128,
       decoration: BoxDecoration(

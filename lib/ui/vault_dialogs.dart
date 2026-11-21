@@ -4,6 +4,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import '../config.dart';
 import '../data/vault.dart';
 import 'anim.dart';
+import 'toast.dart';
 import 'i18n.dart';
 import 'theme.dart';
 
@@ -29,8 +30,8 @@ Future<void> changeVaultPassword(BuildContext context, VaultLock vault) async {
     builder: (_) => _NewPasswordDialog(vault: vault, mode: _Mode.change),
   );
   if (ok == true && context.mounted) {
-    ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(tr('Contraseña del Vault cambiada'))));
+    showToast(context, tr('Contraseña del Vault cambiada'),
+        icon: Icons.check_circle_outline_rounded);
   }
 }
 
@@ -185,7 +186,7 @@ class _UnlockDialogState extends State<_UnlockDialog> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            _header(context, Icons.lock_outline_rounded, 'Vault bloqueado',
+            _header(context, Icons.lock_outline_rounded, tr('Vault bloqueado'),
                 tr('Escribe la contraseña maestra para ver las notas del Vault.')),
             _PasswordField(
               controller: _pass,
@@ -215,7 +216,7 @@ class _UnlockDialogState extends State<_UnlockDialog> {
             child: Text(tr('Cancelar'))),
         FilledButton(
             onPressed: _busy ? null : _submit,
-            child: _busyLabel(_busy, 'Desbloquear')),
+            child: _busyLabel(_busy, tr('Desbloquear'))),
       ],
     );
   }

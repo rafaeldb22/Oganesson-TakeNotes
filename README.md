@@ -54,7 +54,7 @@ Sign in with the **same account** on every device and your notes sync automatica
 **Notes**
 - iPhone-style list with pinned notes, search, swipe to delete and a two-panel layout on desktop.
 - Rich text editor: titles, bold/italic/underline/strikethrough, bullet & numbered lists, checklists, quotes, code, text colour and highlight. New notes start with a big title line.
-- Folders with name and colour; custom colour per note.
+- Collapsible folders inside the list (like Zen browser), with name and colour; custom colour per note.
 - Sort by last modified, creation date or name.
 - Trash: deleted notes stay **3 days** before being removed for good (restore, delete forever, empty trash). Every delete can be undone for 3 seconds.
 

@@ -599,7 +599,7 @@ class _LinksBar extends StatelessWidget {
       );
     }
 
-    String title(String id) => repo.byId(id)?.title ?? 'Nota';
+    String title(String id) => repo.byId(id)?.title ?? tr('Nota');
 
     return Container(
       width: double.infinity,

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'toast.dart';
 import 'i18n.dart';
 
 /// Cambiar la contraseña de la cuenta escribiendo la actual.
@@ -10,8 +11,8 @@ Future<void> changeAccountPassword(BuildContext context) async {
     builder: (_) => const _AccountPasswordDialog(),
   );
   if (ok == true && context.mounted) {
-    ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(tr('Contraseña de la cuenta cambiada'))));
+    showToast(context, tr('Contraseña de la cuenta cambiada'),
+        icon: Icons.check_circle_outline_rounded);
   }
 }
 

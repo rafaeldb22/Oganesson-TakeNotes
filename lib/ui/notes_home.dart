@@ -17,7 +17,9 @@ import 'anim.dart';
 import 'account_dialogs.dart';
 import 'calendar_view.dart';
 import 'completed_sheet.dart';
+import 'context_menu.dart';
 import 'folders.dart';
+import 'folder_group.dart';
 import 'format.dart';
 import 'graph_view.dart';
 import 'i18n.dart';
@@ -28,6 +30,7 @@ import 'note_editor.dart';
 import 'schedule_sheet.dart';
 import 'sort_menu.dart';
 import 'split.dart';
+import 'toast.dart';
 import 'theme.dart';
 import 'theme_picker.dart';
 import 'trash_sheet.dart';
@@ -55,7 +58,6 @@ class _NotesHomeState extends State<NotesHome> {
   String _query = '';
   String? _openId;
   final Set<String> _removing = {}; // filas que se están plegando
-  ScaffoldFeatureController<SnackBar, SnackBarClosedReason>? _lastBar;
   bool _openAutofocus = false;
   StreamSubscription<Uri?>? _widgetSub;
 
@@ -72,8 +74,18 @@ class _NotesHomeState extends State<NotesHome> {
   Widget? _editorCache;
   Object? _editorKey;
 
-  bool get _isFolderFilter =>
-      !const {'todas', 'calendario', 'red'}.contains(_filter);
+  /// Carpetas desplegadas en la lista (como las carpetas de Zen).
+  final Set<String> _openFolders = {};
+  static const _kOpenFolders = 'carpetas_abiertas';
+
+  void _toggleFolder(String id) {
+    setState(() => _openFolders.contains(id)
+        ? _openFolders.remove(id)
+        : _openFolders.add(id));
+    SharedPreferences.getInstance()
+        .then((p) => p.setStringList(_kOpenFolders, _openFolders.toList()))
+        .catchError((_) => false);
+  }
 
   NotesRepository get repo => widget.repo;
 
@@ -90,7 +102,12 @@ class _NotesHomeState extends State<NotesHome> {
     WidgetBridge.initialUri().then(_onWidgetUri);
     SharedPreferences.getInstance().then((p) {
       final v = p.getString(_kSort);
-      if (v != null && mounted) setState(() => _sort = v);
+      final open = p.getStringList(_kOpenFolders);
+      if (!mounted) return;
+      setState(() {
+        if (v != null) _sort = v;
+        if (open != null) _openFolders.addAll(open);
+      });
     }).catchError((_) {});
     if (!AppConfig.demo) {
       WidgetsBinding.instance
@@ -134,8 +151,8 @@ class _NotesHomeState extends State<NotesHome> {
     }
   }
 
-  void _newNote() {
-    final n = repo.createNote(folderId: _isFolderFilter ? _filter : null);
+  void _newNote({String? folderId}) {
+    final n = repo.createNote(folderId: folderId);
     _open(n.id, autofocus: true);
     if (_filter == 'calendario') {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -148,7 +165,6 @@ class _NotesHomeState extends State<NotesHome> {
   void _newOnDay(DateTime day) {
     final due = DateTime(day.year, day.month, day.day, 20);
     final n = repo.createNote(
-      folderId: _isFolderFilter ? _filter : null,
       dueAt: due.toUtc(),
       remindAt: DateTime.now().toUtc().isBefore(due.toUtc())
           ? DateTime.now().toUtc()
@@ -199,27 +215,13 @@ class _NotesHomeState extends State<NotesHome> {
     if (_openId == id) setState(() => _openId = null);
     repo.delete(id);
     if (!hadContent || !mounted) return;
-    final messenger = ScaffoldMessenger.of(context);
-    messenger.hideCurrentSnackBar();
-    final bar = messenger.showSnackBar(SnackBar(
-      content: Text(tr('Nota movida a la papelera')),
-      behavior: SnackBarBehavior.floating,
-      width: 340,
-      duration: const Duration(seconds: 3),
-      action: SnackBarAction(
-        label: tr('Deshacer'),
-        onPressed: () => repo.restore(id),
-      ),
-    ));
-    // Las versiones nuevas de Flutter dejan fijos los avisos con botón;
-    // lo cerramos nosotros a los 3 segundos.
-    _lastBar = bar;
-    bar.closed.then((_) {
-      if (identical(_lastBar, bar)) _lastBar = null;
-    });
-    Timer(const Duration(seconds: 3), () {
-      if (identical(_lastBar, bar)) bar.close();
-    });
+    showToast(
+      context,
+      tr('Nota movida a la papelera'),
+      icon: Icons.delete_outline_rounded,
+      actionLabel: tr('Deshacer'),
+      onAction: () => repo.restore(id),
+    );
   }
 
   /// Acciones de una nota: menú contextual con clic derecho (en [at]) o
@@ -249,37 +251,13 @@ class _NotesHomeState extends State<NotesHome> {
 
     String? choice;
     if (at != null) {
-      final overlay =
-          Overlay.of(context).context.findRenderObject() as RenderBox;
-      choice = await showMenu<String>(
-        context: context,
-        position: RelativeRect.fromRect(
-            at & const Size(1, 1), Offset.zero & overlay.size),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-        items: [
+      choice = await showContextMenu(
+        context,
+        position: at,
+        title: n.title,
+        entries: [
           for (final (id, icon, label, danger) in actions)
-            if (id == '-')
-              const PopupMenuDivider()
-            else
-              PopupMenuItem(
-                value: id,
-                height: 40,
-                child: Row(
-                  children: [
-                    Icon(icon,
-                        size: 19,
-                        color: danger
-                            ? Theme.of(context).colorScheme.error
-                            : Palette.secondary(context)),
-                    const SizedBox(width: 12),
-                    Text(label,
-                        style: TextStyle(
-                            color: danger
-                                ? Theme.of(context).colorScheme.error
-                                : null)),
-                  ],
-                ),
-              ),
+            id == '-' ? null : MenuEntry(id, icon, label, danger: danger),
         ],
       );
     } else {
@@ -385,6 +363,7 @@ class _NotesHomeState extends State<NotesHome> {
       _query,
       _filter,
       _sort,
+      Object.hashAllUnordered(_openFolders),
       _openId,
       wide,
       _removing.length,
@@ -435,32 +414,54 @@ class _NotesHomeState extends State<NotesHome> {
 
                 if (wide) {
                   return Scaffold(
-                    body: ResizableSplit(
-                      storageKey: 'lista',
-                      initialFraction: 0.32,
-                      minLeft: 300,
-                      maxLeft: 560,
-                      minRight: 380,
-                      left: _list(context, true),
-                      right: AnimatedSwitcher(
-                        duration: Anim.medium,
-                        switchInCurve: Anim.curve,
-                        switchOutCurve: Curves.easeIn,
-                        transitionBuilder: fadeThrough,
-                        child: hasOpen
-                            ? _editor(showBack: false)
-                            : switch (_filter) {
-                                'calendario' => RepaintBoundary(
-                                    key: const ValueKey('cal'),
-                                    child: _calendar()),
-                                'red' => RepaintBoundary(
-                                    key: const ValueKey('red-panel'),
-                                    child: _graph()),
-                                _ => _EmptyPane(
-                                    key: const ValueKey('vacio'),
-                                    onNew: _newNote),
-                              },
-                      ),
+                    body: Stack(
+                      children: [
+                        Positioned.fill(
+                            child: ResizableSplit(
+                          storageKey: 'lista',
+                          initialFraction: 0.32,
+                          minLeft: 300,
+                          maxLeft: 560,
+                          minRight: 380,
+                          left: _list(context, true),
+                          right: AnimatedSwitcher(
+                            duration: Anim.medium,
+                            switchInCurve: Anim.curve,
+                            switchOutCurve: Curves.easeIn,
+                            transitionBuilder: fadeThrough,
+                            child: hasOpen
+                                ? _editor(showBack: false)
+                                : switch (_filter) {
+                                    'calendario' => RepaintBoundary(
+                                        key: const ValueKey('cal'),
+                                        child: _calendar()),
+                                    'red' => RepaintBoundary(
+                                        key: const ValueKey('red-panel'),
+                                        child: _graph()),
+                                    _ => _EmptyPane(
+                                        key: const ValueKey('vacio'),
+                                        onNew: _newNote),
+                                  },
+                          ),
+                        )),
+                        // Contador abajo a la derecha de la ventana.
+                        Positioned(
+                          right: 14,
+                          bottom: 8,
+                          child: IgnorePointer(
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 10, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: Palette.background(context)
+                                    .withValues(alpha: 0.85),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: _statusText(context),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   );
                 }
@@ -503,7 +504,6 @@ class _NotesHomeState extends State<NotesHome> {
     final all = repo.notes
         .where((n) => !n.isEmpty || n.id == _openId)
         .where((n) => q.isEmpty || n.content.toLowerCase().contains(q))
-        .where((n) => !_isFolderFilter || n.folderId == _filter)
         .toList();
     switch (_sort) {
       case 'creada':
@@ -515,9 +515,6 @@ class _NotesHomeState extends State<NotesHome> {
     }
     final pinned = all.where((n) => n.pinned).toList();
     final others = all.where((n) => !n.pinned).toList();
-    final total = repo.notes.where((n) => !n.isEmpty).length;
-    final pendientes = repo.temporales.where((n) => !n.done).length;
-    final enlaces = _filter == 'red' ? NoteGraph.of(repo).edgeCount : 0;
     final noteOpen = _openId != null && repo.byId(_openId!) != null;
 
     Widget body;
@@ -527,29 +524,72 @@ class _NotesHomeState extends State<NotesHome> {
       body = _calendar();
     } else if (_filter == 'red' && !wide) {
       body = _graph();
-    } else if (all.isEmpty) {
+    } else if (all.isEmpty && (q.isNotEmpty || repo.folders.isEmpty)) {
       body = _EmptyList(
           searching: q.isNotEmpty, timeView: _filter == 'calendario');
     } else {
       var index = 0;
+      final folders = repo.folders;
+      final folderIds = {for (final f in folders) f.id};
+      final loose = others
+          .where((n) => n.folderId == null || !folderIds.contains(n.folderId))
+          .toList();
       body = RefreshIndicator(
         onRefresh: repo.sync,
         child: ListView(
           key: const PageStorageKey('lista-notas'),
           physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
+          padding: const EdgeInsets.fromLTRB(12, 0, 12, 24),
           children: [
+            // Cabecera: título de la lista y orden.
+            Padding(
+              key: const ValueKey('cabecera-lista'),
+              padding: const EdgeInsets.fromLTRB(6, 6, 0, 2),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(tr('Notas'),
+                        style: const TextStyle(
+                            fontSize: 17, fontWeight: FontWeight.w700)),
+                  ),
+                  _sortMenu(context),
+                ],
+              ),
+            ),
             if (pinned.isNotEmpty)
-              ..._section(context, 'Fijadas', pinned, wide, () => index++,
-                  trailing: _sortMenu(context)),
-            if (others.isNotEmpty)
+              ..._section(context, tr('Fijadas'), pinned, wide, () => index++),
+            for (final f in folders)
+              if (q.isEmpty || others.any((n) => n.folderId == f.id))
+                Builder(
+                  key: ValueKey('carpeta-${f.id}'),
+                  builder: (context) {
+                    final inFolder =
+                        others.where((n) => n.folderId == f.id).toList();
+                    final expanded =
+                        q.isNotEmpty || _openFolders.contains(f.id);
+                    return FolderGroup(
+                      folder: f,
+                      count: inFolder.where((n) => !n.isEmpty).length,
+                      expanded: expanded,
+                      onToggle: () => _toggleFolder(f.id),
+                      onNewNote: () {
+                        if (!_openFolders.contains(f.id)) _toggleFolder(f.id);
+                        _newNote(folderId: f.id);
+                      },
+                      onOptions: (at) => _folderOptions(f, at),
+                      child: inFolder.isEmpty
+                          ? null
+                          : _tilesCard(context, inFolder, wide, () => index++),
+                    );
+                  },
+                ),
+            if (loose.isNotEmpty)
               ..._section(
                   context,
-                  pinned.isEmpty ? tr('Notas') : tr('Otras notas'),
-                  others,
+                  folders.isEmpty && pinned.isEmpty ? null : tr('Sin carpeta'),
+                  loose,
                   wide,
-                  () => index++,
-                  trailing: pinned.isEmpty ? _sortMenu(context) : null),
+                  () => index++),
           ],
         ),
       );
@@ -559,9 +599,12 @@ class _NotesHomeState extends State<NotesHome> {
       appBar: AppBar(
         centerTitle: false,
         titleSpacing: 20,
-        title: const WaveTitle(text: 'oganesson', fontSize: 30)
-            .animate()
-            .fadeIn(duration: Anim.slow),
+        // Con el panel estrecho el título se encoge en vez de desbordarse.
+        title: const FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.centerLeft,
+          child: WaveTitle(text: 'oganesson', fontSize: 30),
+        ).animate().fadeIn(duration: Anim.slow),
         actions: [
           _SyncIndicator(repo: repo),
           PopupMenuButton<String>(
@@ -690,11 +733,6 @@ class _NotesHomeState extends State<NotesHome> {
               ),
             ),
           ),
-          FilterChips(
-            repo: repo,
-            selected: _filter,
-            onSelect: _setFilter,
-          ),
           Expanded(
             child: AnimatedSwitcher(
               duration: Anim.medium,
@@ -726,41 +764,23 @@ class _NotesHomeState extends State<NotesHome> {
                 icon: Icons.create_new_folder_outlined,
                 onTap: () async {
                   final f = await editFolderDialog(context, repo);
-                  if (f != null) _setFilter(f.id);
+                  if (f != null && !_openFolders.contains(f.id)) {
+                    _toggleFolder(f.id);
+                  }
                 },
               ),
+              // Contador: en pantalla ancha va abajo a la derecha de la
+              // ventana; en el móvil, aquí.
               Expanded(
-                child: Center(
-                  child: AnimatedSwitcher(
-                    duration: Anim.medium,
-                    transitionBuilder: (c, a) => FadeTransition(
-                      opacity: a,
-                      child: SlideTransition(
-                        position:
-                            Tween(begin: const Offset(0, 0.6), end: Offset.zero)
-                                .animate(a),
-                        child: c,
-                      ),
-                    ),
-                    child: Text(
-                      switch (_filter) {
-                        'calendario' => trn(pendientes, '{0} tarea pendiente',
-                            '{0} tareas pendientes'),
-                        'red' => trn(enlaces, '{0} enlace', '{0} enlaces'),
-                        _ => trn(total, '{0} nota', '{0} notas'),
-                      },
-                      key: ValueKey('$_filter-$total-$pendientes-$enlaces'),
-                      style: TextStyle(
-                          fontSize: 12, color: Palette.secondary(context)),
-                    ),
-                  ),
-                ),
+                child: wide
+                    ? const SizedBox()
+                    : Center(child: _statusText(context)),
               ),
               for (final (view, tip, on, off) in [
                 ('red', tr('Red de notas'), Icons.hub, Icons.hub_outlined),
                 (
                   'calendario',
-                  'Calendario',
+                  tr('Calendario'),
                   Icons.calendar_month,
                   Icons.calendar_month_outlined
                 ),
@@ -805,9 +825,72 @@ class _NotesHomeState extends State<NotesHome> {
   Widget _sortMenu(BuildContext context) =>
       SortMenu(value: _sort, onChanged: _setSort);
 
-  List<Widget> _section(BuildContext context, String title, List<Note> notes,
-      bool wide, int Function() nextIndex,
-      {Widget? trailing}) {
+  /// Nº de notas, enlaces o tareas pendientes según la vista.
+  Widget _statusText(BuildContext context) {
+    final total = repo.notes.where((n) => !n.isEmpty).length;
+    final pendientes = repo.temporales.where((n) => !n.done).length;
+    final enlaces = _filter == 'red' ? NoteGraph.of(repo).edgeCount : 0;
+    return AnimatedSwitcher(
+      duration: Anim.medium,
+      transitionBuilder: (c, a) => FadeTransition(
+        opacity: a,
+        child: SlideTransition(
+          position:
+              Tween(begin: const Offset(0, 0.6), end: Offset.zero).animate(a),
+          child: c,
+        ),
+      ),
+      child: Text(
+        switch (_filter) {
+          'calendario' =>
+            trn(pendientes, '{0} tarea pendiente', '{0} tareas pendientes'),
+          'red' => trn(enlaces, '{0} enlace', '{0} enlaces'),
+          _ => trn(total, '{0} nota', '{0} notas'),
+        },
+        key: ValueKey('$_filter-$total-$pendientes-$enlaces'),
+        style: TextStyle(fontSize: 12, color: Palette.secondary(context)),
+      ),
+    );
+  }
+
+  /// Opciones de una carpeta (clic derecho o pulsación larga).
+  Future<void> _folderOptions(Folder f, Offset? at) async {
+    final entries = [
+      MenuEntry('new', Icons.note_add_outlined, tr('Nueva nota aquí')),
+      MenuEntry('edit', Icons.edit_outlined, tr('Editar carpeta')),
+    ];
+    String? choice;
+    if (at != null) {
+      choice = await showContextMenu(context,
+          position: at, title: f.name, entries: entries);
+    } else {
+      choice = await showModalBottomSheet<String>(
+        context: context,
+        showDragHandle: true,
+        builder: (ctx) => SafeArea(
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            for (final e in entries)
+              ListTile(
+                leading: Icon(e.icon),
+                title: Text(e.label),
+                onTap: () => Navigator.pop(ctx, e.value),
+              ),
+          ]),
+        ),
+      );
+    }
+    if (!mounted) return;
+    if (choice == 'new') {
+      if (!_openFolders.contains(f.id)) _toggleFolder(f.id);
+      _newNote(folderId: f.id);
+    } else if (choice == 'edit') {
+      await editFolderDialog(context, repo, folder: f);
+    }
+  }
+
+  /// Tarjeta con las filas de unas notas.
+  Widget _tilesCard(BuildContext context, List<Note> notes, bool wide,
+      int Function() nextIndex) {
     final tiles = <Widget>[];
     for (var i = 0; i < notes.length; i++) {
       final n = notes[i];
@@ -834,33 +917,39 @@ class _NotesHomeState extends State<NotesHome> {
             .slideY(begin: 0.25, curve: Anim.curve, duration: Anim.slow),
       ));
     }
-    return [
-      Padding(
-        key: ValueKey('titulo-$title'),
-        padding: const EdgeInsets.fromLTRB(4, 14, 4, 8),
-        child: Row(
-          children: [
-            Expanded(
-              child: Text(title,
-                  style: const TextStyle(
-                      fontSize: 17, fontWeight: FontWeight.w700)),
-            ),
-            if (trailing != null) trailing,
-          ],
+    return AnimatedSize(
+      duration: Anim.medium,
+      curve: Anim.curve,
+      alignment: Alignment.topCenter,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: Material(
+          color: Palette.card(context),
+          child: Column(children: tiles),
         ),
       ),
-      AnimatedSize(
+    );
+  }
+
+  List<Widget> _section(BuildContext context, String? title, List<Note> notes,
+      bool wide, int Function() nextIndex) {
+    return [
+      if (title != null)
+        Padding(
+          key: ValueKey('titulo-$title'),
+          padding: const EdgeInsets.fromLTRB(6, 14, 4, 8),
+          child: Text(title,
+              style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.3,
+                  color: Palette.secondary(context))),
+        )
+      else
+        const SizedBox(key: ValueKey('sin-titulo'), height: 8),
+      KeyedSubtree(
         key: ValueKey('seccion-$title'),
-        duration: Anim.medium,
-        curve: Anim.curve,
-        alignment: Alignment.topCenter,
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(12),
-          child: Material(
-            color: Palette.card(context),
-            child: Column(children: tiles),
-          ),
-        ),
+        child: _tilesCard(context, notes, wide, nextIndex),
       ),
     ];
   }

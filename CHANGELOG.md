@@ -2,6 +2,26 @@
 
 All notable changes to Oganesson TakeNotes (formerly *Notas* / *BabuNotes*).
 
+## [1.2.0] — 2026-11-21
+
+### Changed
+- **Folders like Zen browser**: folders now live inside the notes list as collapsible groups
+  (chevron, folder icon and colour, note count). Open one to see its notes indented under a
+  guide line; hover for a quick *new note here* button, right-click for options. Open folders
+  are remembered and searching opens the ones with matches. The folder chips row is gone.
+- New **context menu** (right click on a note or folder): header with the name, grouped
+  options with icons, soft hover highlight and a smooth scale/fade in and out from the cursor.
+- **Pop-up notifications** (undo delete, updates, password changes…) now animate in and out.
+- **Date picker**: days react on hover, months slide when changing, the range has rounded
+  ends, and quick presets (Today, Tomorrow, In a week, In a month).
+- **Network view**: hovering a note animates the highlight (the node grows with a halo, its
+  links light up and the rest fades smoothly).
+- The note / link / pending-task counter moved to the bottom-right corner of the window.
+
+### Fixed
+- Narrowing the left panel no longer overflows (the title scales down).
+- Missing English translations ("Pinned", "All", "Calendar"…).
+
 ## [1.1.0] — 2026-11-21
 
 ### Added

@@ -513,7 +513,7 @@ class _ColorButton extends StatelessWidget {
                         Navigator.pop(ctx);
                       }, textStyle: true),
                       const SizedBox(height: 12),
-                      _label(ctx, 'Resaltado'),
+                      _label(ctx, tr('Resaltado')),
                       _swatches(ctx, EditorToolbar.highlightColors, (c) {
                         onHighlight(c);
                         Navigator.pop(ctx);

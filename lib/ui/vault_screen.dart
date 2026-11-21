@@ -5,6 +5,7 @@ import '../data/notes_repository.dart';
 import '../data/vault.dart';
 import '../models/note.dart';
 import 'anim.dart';
+import 'context_menu.dart';
 import 'format.dart';
 import 'i18n.dart';
 import 'note_editor.dart';
@@ -98,32 +99,13 @@ class _VaultScreenState extends State<VaultScreen> {
     ];
     String? choice;
     if (at != null) {
-      final overlay =
-          Overlay.of(context).context.findRenderObject() as RenderBox;
-      choice = await showMenu<String>(
-        context: context,
-        position: RelativeRect.fromRect(
-            at & const Size(1, 1), Offset.zero & overlay.size),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-        items: [
+      choice = await showContextMenu(
+        context,
+        position: at,
+        title: n.title,
+        entries: [
           for (final (id, icon, label, danger) in items)
-            PopupMenuItem(
-              value: id,
-              height: 40,
-              child: Row(children: [
-                Icon(icon,
-                    size: 19,
-                    color: danger
-                        ? Theme.of(context).colorScheme.error
-                        : Palette.secondary(context)),
-                const SizedBox(width: 12),
-                Text(label,
-                    style: TextStyle(
-                        color: danger
-                            ? Theme.of(context).colorScheme.error
-                            : null)),
-              ]),
-            ),
+            MenuEntry(id, icon, label, danger: danger),
         ],
       );
     } else {

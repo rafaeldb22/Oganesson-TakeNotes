@@ -38,6 +38,9 @@ const enStrings = <String, String>{
   'Restaurar': 'Restore',
 
   // --- Lista de notas
+  'Resaltado': 'Highlight',
+  'Nota': 'Note',
+  'Calendario': 'Calendar',
   'Fijadas': 'Pinned',
   'Otras notas': 'Other notes',
   'Todas': 'All',
@@ -197,6 +200,9 @@ const enStrings = <String, String>{
   'Nota temporal y avisos': 'Task and reminders',
 
   // --- Fechas y tareas
+  'Mañana': 'Tomorrow',
+  'En una semana': 'In a week',
+  'En un mes': 'In a month',
   'Fechas': 'Dates',
   'Empieza': 'Starts',
   'Termina': 'Ends',
@@ -266,6 +272,8 @@ const enStrings = <String, String>{
   'Se borra en menos de 1 h': 'Deleted in less than 1 h',
 
   // --- Carpetas
+  'Nueva nota aquí': 'New note here',
+  'Carpeta vacía': 'Empty folder',
   'Nueva carpeta': 'New folder',
   'Nueva carpeta…': 'New folder…',
   'Editar carpeta': 'Edit folder',

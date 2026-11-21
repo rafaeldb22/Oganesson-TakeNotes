@@ -5,16 +5,16 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../data/updater.dart';
 import 'theme.dart';
+import 'toast.dart';
 import 'i18n.dart';
 
 /// Abre un enlace en el navegador del sistema.
 Future<void> openLink(BuildContext context, String url) async {
-  final messenger = ScaffoldMessenger.of(context);
   final ok =
       await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
-  if (!ok) {
-    messenger.showSnackBar(
-        SnackBar(content: Text(tr('No se pudo abrir el enlace'))));
+  if (!ok && context.mounted) {
+    showToast(context, tr('No se pudo abrir el enlace'),
+        icon: Icons.link_off_rounded);
   }
 }
 
@@ -29,23 +29,24 @@ Future<void> checkForUpdatesOnStart(BuildContext context) async {
 
 /// Comprobación desde el menú: informa también si ya está al día o si falla.
 Future<void> checkForUpdatesManually(BuildContext context) async {
-  final messenger = ScaffoldMessenger.of(context);
-  messenger
-      .showSnackBar(SnackBar(content: Text(tr('Buscando actualizaciones…'))));
+  showToast(context, tr('Buscando actualizaciones…'),
+      icon: Icons.sync_rounded);
   try {
     final release = await Updater.instance.check(manual: true);
-    messenger.hideCurrentSnackBar();
     if (release != null) {
       if (context.mounted) await showUpdateDialog(context, release);
     } else {
       final v = await Updater.instance.currentVersion();
-      messenger.showSnackBar(
-          SnackBar(content: Text(trf('Tienes la última versión ({0})', [v]))));
+      if (context.mounted) {
+        showToast(context, trf('Tienes la última versión ({0})', [v]),
+            icon: Icons.check_circle_outline_rounded);
+      }
     }
   } catch (_) {
-    messenger.hideCurrentSnackBar();
-    messenger.showSnackBar(SnackBar(
-        content: Text(tr('No se pudo comprobar. Revisa la conexión.'))));
+    if (context.mounted) {
+      showToast(context, tr('No se pudo comprobar. Revisa la conexión.'),
+          icon: Icons.cloud_off_rounded);
+    }
   }
 }
 

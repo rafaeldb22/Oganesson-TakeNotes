@@ -79,7 +79,10 @@ that it still arrives. On Windows, check toasts are enabled first:
   calendar widget in 2x2/4x2/4x4, rendered as images with home_widget), `graph_view.dart`
   (force-directed note network), `link_picker.dart` (`[[` note picker), `update_dialog.dart`
   (update prompt, `openLink`), `sort_menu.dart` (animated sort menu), `account_dialogs.dart`
-  (change account password), `language_picker.dart`, `i18n.dart` + `i18n_en.dart`.
+  (change account password), `language_picker.dart`, `i18n.dart` + `i18n_en.dart`,
+  `folder_group.dart` (collapsible Zen-style folders inside the list), `context_menu.dart`
+  (`showContextMenu` for right-click menus), `toast.dart` (`showToast`, animated pop-up
+  notifications; use it instead of SnackBar).
 - `supabase/migrations/` — schema, RLS, realtime, colour column, delete policy, `vaults`
   table (005). Migrations are run by hand in the Supabase SQL Editor.
 - `installer/oganesson.iss` — Inno Setup script for `Oganesson-Setup.exe`.
