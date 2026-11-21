@@ -115,12 +115,9 @@ that it still arrives. On Windows, check toasts are enabled first:
 - Not yet verified on a real phone: Android calendar widget (2x2/4x2/4x4 sizes and the
   solid background), in-app APK update, trash purge, 7/3/1-day reminders, notification
   permissions on Android 13+.
-- Migration `supabase/migrations/006_archive_order.sql` must also be run (archive + order).
-- Migration `supabase/migrations/005_vault.sql` must be run in Supabase (adds `notes.vault`,
-  `notes.links`, `notes.done_at` and the `vaults` table). Until then those fields are not
-  uploaded (`NotesRepository.serverHasVault`), vault notes stay on this device only and the
-  Vault password is not synced.
-- Android home-screen widget layouts (Kotlin/XML) still have fixed Spanish labels.
+- Migrations 005 (Vault, links, done_at) and 006 (archived, position) were applied to the
+  production Supabase project on 2026-11-21 (via the Management API). New migrations still
+  have to be run by hand (SQL Editor) or with a personal access token.
 - Vault password reset by email code needs the Supabase *Magic Link* email template to include
   `{{ .Token }}`; on the free plan editing templates requires custom SMTP (Brevo, Resend…).
 - In-app updates need the repository to be public (the GitHub API returns 404 while it is
