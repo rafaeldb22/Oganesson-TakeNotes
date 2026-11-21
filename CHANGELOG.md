@@ -2,6 +2,13 @@
 
 All notable changes to Oganesson TakeNotes (formerly *Notas* / *BabuNotes*).
 
+## [1.4.1] — 2026-11-21
+
+### Fixed
+- Light mode: remaining-time texts in light colours (yellow, mint…) were hard to read; they are
+  now darkened for light backgrounds while keeping their hue (notes list, calendar panel and the
+  Android widgets).
+
 ## [1.4.0] — 2026-11-21
 
 ### Added

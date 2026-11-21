@@ -300,7 +300,10 @@ class WidgetTaskRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final stops = fusePalette(note.color);
     final p = note.progress();
-    final c = note.isOverdue() ? stops.last : paletteAt(stops, p);
+    // Texto oscuro (fg) = widget en modo claro: color de aviso legible.
+    final c = readableOn(
+        note.isOverdue() ? stops.last : paletteAt(stops, p),
+        light: fg.computeLuminance() < 0.5);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [

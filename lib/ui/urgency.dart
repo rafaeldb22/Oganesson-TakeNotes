@@ -97,8 +97,20 @@ Color fuseColor(double t) => paletteAt(fuseStops, t);
 Color urgencyColor(BuildContext context, Note n) {
   if (n.done) return Palette.secondary(context);
   final stops = fusePalette(n.color);
-  if (n.isOverdue()) return stops.last;
-  return paletteAt(stops, n.progress());
+  final c = n.isOverdue() ? stops.last : paletteAt(stops, n.progress());
+  return readableOn(c, light: Theme.of(context).brightness == Brightness.light);
+}
+
+/// Color de texto legible: sobre fondo claro se oscurece (luminosidad
+/// máxima 0,40) conservando el tono; sobre oscuro se deja igual.
+Color readableOn(Color c, {required bool light}) {
+  if (!light) return c;
+  final h = HSLColor.fromColor(c);
+  if (h.lightness <= 0.40) return c;
+  return h
+      .withLightness(0.40)
+      .withSaturation((h.saturation + 0.1).clamp(0.0, 1.0))
+      .toColor();
 }
 
 /// Barra de tiempo con forma de mecha: el tramo consumido brilla con un
