@@ -10,10 +10,15 @@ import '../data/notes_repository.dart';
 import '../data/widget_bridge.dart';
 import '../models/note.dart';
 import 'anim.dart';
+import 'calendar_view.dart';
+import 'folders.dart';
 import 'format.dart';
 import 'note_editor.dart';
+import 'schedule_sheet.dart';
 import 'theme.dart';
 import 'theme_picker.dart';
+import 'urgency.dart';
+import 'wave_title.dart';
 
 /// Pantalla principal. Un único estado ("qué nota está abierta") que se
 /// pinta de dos formas según el ancho disponible:
@@ -35,6 +40,18 @@ class _NotesHomeState extends State<NotesHome> {
   final Set<String> _removing = {}; // filas que se están plegando
   bool _openAutofocus = false;
   StreamSubscription<Uri?>? _widgetSub;
+
+  /// 'todas' | 'temporales' | 'calendario' | id de carpeta
+  String _filter = 'todas';
+
+  // Cachés para que al redimensionar la ventana no se reconstruya todo.
+  Widget? _listCache;
+  Object? _listKey;
+  Widget? _editorCache;
+  Object? _editorKey;
+
+  bool get _isFolderFilter =>
+      !const {'todas', 'temporales', 'calendario'}.contains(_filter);
 
   NotesRepository get repo => widget.repo;
 
@@ -64,8 +81,31 @@ class _NotesHomeState extends State<NotesHome> {
   }
 
   void _newNote() {
-    final n = repo.createNote();
+    final n = repo.createNote(folderId: _isFolderFilter ? _filter : null);
     _open(n.id, autofocus: true);
+    if (_filter == 'temporales' || _filter == 'calendario') {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) showScheduleSheet(context, repo, n.id);
+      });
+    }
+  }
+
+  /// Nueva nota temporal que vence el día elegido en el calendario.
+  void _newOnDay(DateTime day) {
+    final due = DateTime(day.year, day.month, day.day, 20);
+    final n = repo.createNote(
+      folderId: _isFolderFilter ? _filter : null,
+      dueAt: due.toUtc(),
+      remindAt: DateTime.now().toUtc().isBefore(due.toUtc())
+          ? DateTime.now().toUtc()
+          : due.toUtc(),
+    );
+    _open(n.id, autofocus: true);
+  }
+
+  void _setFilter(String f) {
+    if (f == _filter) return;
+    setState(() => _filter = f);
   }
 
   void _open(String id, {bool autofocus = false}) {
@@ -134,6 +174,24 @@ class _NotesHomeState extends State<NotesHome> {
               },
             ),
             ListTile(
+              leading: Icon(n.isTemporal ? Icons.alarm_on : Icons.alarm_add_outlined),
+              title: Text(n.isTemporal ? 'Cambiar fechas' : 'Hacer temporal'),
+              onTap: () {
+                Navigator.pop(ctx);
+                showScheduleSheet(context, repo, n.id);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.drive_file_move_outline),
+              title: const Text('Mover a carpeta'),
+              onTap: () {
+                Navigator.pop(ctx);
+                pickFolder(context, repo, n.folderId).then((r) {
+                  if (r != null) repo.moveToFolder(n.id, r.isEmpty ? null : r);
+                });
+              },
+            ),
+            ListTile(
               leading: const Icon(Icons.delete_outline, color: Colors.red),
               title:
                   const Text('Eliminar', style: TextStyle(color: Colors.red)),
@@ -172,16 +230,39 @@ class _NotesHomeState extends State<NotesHome> {
   }
 
   Widget _editor({required bool showBack}) {
-    return NoteEditor(
+    final key = (_openId, showBack, _openAutofocus);
+    if (_editorCache != null && _editorKey == key) return _editorCache!;
+    _editorKey = key;
+    return _editorCache = RepaintBoundary(
       key: ValueKey('editor-$_openId'),
-      repo: repo,
-      noteId: _openId!,
-      showBack: showBack,
-      autofocus: _openAutofocus,
-      onClose: _close,
-      onDelete: _deleteAnimated,
+      child: NoteEditor(
+        repo: repo,
+        noteId: _openId!,
+        showBack: showBack,
+        autofocus: _openAutofocus,
+        onClose: _close,
+        onDelete: _deleteAnimated,
+      ),
     );
   }
+
+  /// Lista cacheada: solo se reconstruye si cambian los datos o filtros,
+  /// no por cambiar el tamaño de la ventana.
+  Widget _list(BuildContext context, bool wide) {
+    final key = (repo.version, repo.status, _query, _filter, _openId, wide,
+        _removing.length, Theme.of(context));
+    if (_listCache != null && _listKey == key) return _listCache!;
+    _listKey = key;
+    return _listCache = RepaintBoundary(child: _buildList(context, wide));
+  }
+
+  Widget _calendar() => CalendarView(
+        key: const ValueKey('calendario'),
+        repo: repo,
+        onOpenNote: _open,
+        onNewOnDay: _newOnDay,
+        onEditDates: (id) => showScheduleSheet(context, repo, id),
+      );
 
   @override
   Widget build(BuildContext context) {
@@ -207,7 +288,7 @@ class _NotesHomeState extends State<NotesHome> {
                 return Scaffold(
                   body: Row(
                     children: [
-                      SizedBox(width: listWidth, child: _buildList(context, true)),
+                      SizedBox(width: listWidth, child: _list(context, true)),
                       VerticalDivider(
                           width: 1, color: Palette.separator(context)),
                       Expanded(
@@ -218,9 +299,13 @@ class _NotesHomeState extends State<NotesHome> {
                           transitionBuilder: fadeThrough,
                           child: hasOpen
                               ? _editor(showBack: false)
-                              : _EmptyPane(
-                                  key: const ValueKey('vacio'),
-                                  onNew: _newNote),
+                              : (_filter == 'calendario'
+                                  ? RepaintBoundary(
+                                      key: const ValueKey('cal'),
+                                      child: _calendar())
+                                  : _EmptyPane(
+                                      key: const ValueKey('vacio'),
+                                      onNew: _newNote)),
                         ),
                       ),
                     ],
@@ -249,7 +334,7 @@ class _NotesHomeState extends State<NotesHome> {
                       ? _editor(showBack: true)
                       : KeyedSubtree(
                           key: const ValueKey('lista'),
-                          child: _buildList(context, false),
+                          child: _list(context, false),
                         ),
                 ),
               );
@@ -262,9 +347,12 @@ class _NotesHomeState extends State<NotesHome> {
 
   Widget _buildList(BuildContext context, bool wide) {
     final q = _query.toLowerCase();
+    final timeView = _filter == 'temporales' || _filter == 'calendario';
     final all = repo.notes
         .where((n) => !n.isEmpty || n.id == _openId)
         .where((n) => q.isEmpty || n.content.toLowerCase().contains(q))
+        .where((n) => !_isFolderFilter || n.folderId == _filter)
+        .where((n) => !timeView || n.isTemporal)
         .toList();
     final pinned = all.where((n) => n.pinned).toList();
     final others = all.where((n) => !n.pinned).toList();
@@ -273,8 +361,12 @@ class _NotesHomeState extends State<NotesHome> {
     Widget body;
     if (!repo.loaded) {
       body = const Center(child: CircularProgressIndicator());
+    } else if (_filter == 'calendario' && !wide) {
+      body = _calendar();
     } else if (all.isEmpty) {
-      body = _EmptyList(searching: q.isNotEmpty);
+      body = _EmptyList(searching: q.isNotEmpty, timeView: timeView);
+    } else if (timeView) {
+      body = _timeList(context, all);
     } else {
       var index = 0;
       body = RefreshIndicator(
@@ -298,11 +390,7 @@ class _NotesHomeState extends State<NotesHome> {
       appBar: AppBar(
         centerTitle: false,
         titleSpacing: 20,
-        title: const Text('Notas',
-                style: TextStyle(fontSize: 30, fontWeight: FontWeight.w800))
-            .animate()
-            .fadeIn(duration: Anim.slow)
-            .slideX(begin: -0.1, curve: Anim.curve),
+        title: const WaveTitle().animate().fadeIn(duration: Anim.slow),
         actions: [
           _SyncIndicator(repo: repo),
           PopupMenuButton<String>(
@@ -374,11 +462,17 @@ class _NotesHomeState extends State<NotesHome> {
               ),
             ),
           ),
+          FilterChips(
+            repo: repo,
+            selected: _filter,
+            onSelect: _setFilter,
+          ),
           Expanded(
             child: AnimatedSwitcher(
               duration: Anim.medium,
+              transitionBuilder: fadeThrough,
               child: KeyedSubtree(
-                key: ValueKey(all.isEmpty ? 'vacia-$q' : 'llena'),
+                key: ValueKey('$_filter-${all.isEmpty}-${q.isEmpty}'),
                 child: body,
               ),
             ),
@@ -433,6 +527,55 @@ class _NotesHomeState extends State<NotesHome> {
           ),
         ),
       ),
+    );
+  }
+
+  Widget _timeList(BuildContext context, List<Note> notes) {
+    final sorted = [...notes]..sort((a, b) => a.dueAt!.compareTo(b.dueAt!));
+    final groups = <String, List<Note>>{};
+    for (final n in sorted) {
+      groups.putIfAbsent(grupoTemporal(n.dueAt!, done: n.done), () => []).add(n);
+    }
+    var i = 0;
+    return ListView(
+      key: PageStorageKey('lista-tiempo-$_filter'),
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
+      children: [
+        for (final g in ordenGrupos)
+          if (groups[g] != null) ...[
+            Padding(
+              padding: const EdgeInsets.fromLTRB(4, 14, 4, 8),
+              child: Row(
+                children: [
+                  Text(g,
+                      style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                          color: g == 'Vencidas'
+                              ? const Color(0xFFE5484D)
+                              : null)),
+                  const SizedBox(width: 8),
+                  Text('${groups[g]!.length}',
+                      style: TextStyle(color: Palette.secondary(context))),
+                ],
+              ),
+            ),
+            for (final n in groups[g]!)
+              Padding(
+                key: ValueKey('t-${n.id}'),
+                padding: const EdgeInsets.only(bottom: 10),
+                child: TempCard(
+                  note: n,
+                  onOpen: () => _open(n.id),
+                  onEditDates: () => showScheduleSheet(context, repo, n.id),
+                  onToggleDone: () => repo.toggleDone(n.id),
+                )
+                    .animate(delay: (min(i++, 10) * 40).ms)
+                    .fadeIn(duration: Anim.medium)
+                    .slideY(begin: 0.2, curve: Anim.curve),
+              ),
+          ],
+      ],
     );
   }
 
@@ -576,6 +719,24 @@ class _NoteTileState extends State<_NoteTile> {
                               ),
                             ],
                           ),
+                          if (n.isTemporal) ...[
+                            const SizedBox(height: 7),
+                            Row(
+                              children: [
+                                Icon(Icons.alarm,
+                                    size: 13,
+                                    color: urgencyColor(context, n)),
+                                const SizedBox(width: 6),
+                                Expanded(child: TimeBar(note: n, compact: true)),
+                                const SizedBox(width: 8),
+                                Text(tiempoRestante(n.dueAt!, done: n.done),
+                                    style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w600,
+                                        color: urgencyColor(context, n))),
+                              ],
+                            ),
+                          ],
                         ],
                       ),
                     ),
@@ -670,8 +831,9 @@ class _SyncIndicator extends StatelessWidget {
 }
 
 class _EmptyList extends StatelessWidget {
-  const _EmptyList({required this.searching});
+  const _EmptyList({required this.searching, this.timeView = false});
   final bool searching;
+  final bool timeView;
 
   @override
   Widget build(BuildContext context) {
@@ -680,13 +842,28 @@ class _EmptyList extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(searching ? Icons.search_off : Icons.sticky_note_2_outlined,
+          Icon(
+                  searching
+                      ? Icons.search_off
+                      : (timeView
+                          ? Icons.alarm_outlined
+                          : Icons.sticky_note_2_outlined),
                   size: 56, color: color)
               .animate(onPlay: (c) => c.repeat(reverse: true))
               .moveY(begin: 0, end: -6, duration: 1600.ms, curve: Curves.easeInOut),
           const SizedBox(height: 12),
-          Text(searching ? 'Sin resultados' : 'Aún no tienes notas',
+          Text(
+              searching
+                  ? 'Sin resultados'
+                  : (timeView
+                      ? 'No hay notas temporales'
+                      : 'Aún no hay notas aquí'),
               style: TextStyle(color: color, fontSize: 16)),
+          if (timeView && !searching) ...[
+            const SizedBox(height: 6),
+            Text('Crea una con el lápiz y ponle fecha límite',
+                style: TextStyle(color: color, fontSize: 13)),
+          ],
         ],
       )
           .animate()

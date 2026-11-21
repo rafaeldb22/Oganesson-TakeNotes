@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../config.dart';
 import '../data/notes_repository.dart';
+import '../data/reminders.dart';
 import 'login_screen.dart';
 import 'notes_home.dart';
 
@@ -46,10 +47,13 @@ class _NotesShellState extends State<NotesShell> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    repo.addListener(_reprogramar);
     repo.start().then((_) {
       if (AppConfig.demo) repo.seedDemo();
     });
   }
+
+  void _reprogramar() => Reminders.instance.schedule(repo.notes);
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
@@ -59,6 +63,7 @@ class _NotesShellState extends State<NotesShell> with WidgetsBindingObserver {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    repo.removeListener(_reprogramar);
     repo.dispose();
     super.dispose();
   }

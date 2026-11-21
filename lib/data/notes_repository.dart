@@ -10,7 +10,7 @@ import 'widget_bridge.dart';
 
 enum SyncStatus { syncing, synced, pending, offline }
 
-/// Guarda las notas en local (funciona sin internet) y las sincroniza
+/// Guarda notas y carpetas en local (funciona sin internet) y las sincroniza
 /// con Supabase: sube los cambios pendientes y recibe los de otros
 /// dispositivos en tiempo real. Si hay conflicto gana la edición más reciente.
 class NotesRepository extends ChangeNotifier {
@@ -20,11 +20,17 @@ class NotesRepository extends ChangeNotifier {
   final String userId;
 
   final Map<String, Note> _notes = {};
-  final Set<String> _dirty = {}; // cambios aún no subidos
-  final Set<String> _fresh = {}; // creadas y todavía sin escribir nada
+  final Set<String> _dirty = {}; // notas con cambios aún no subidos
+  final Set<String> _fresh = {}; // notas creadas y todavía vacías
+
+  final Map<String, Folder> _folders = {};
+  final Set<String> _dirtyFolders = {};
 
   SyncStatus status = SyncStatus.syncing;
   bool loaded = false;
+
+  /// Sube cada vez que cambia algo: sirve para no recalcular listas.
+  int version = 0;
 
   RealtimeChannel? _channel;
   Timer? _periodic;
@@ -37,17 +43,42 @@ class NotesRepository extends ChangeNotifier {
 
   String get _cacheKey => 'notas_cache_$userId';
   String get _dirtyKey => 'notas_dirty_$userId';
+  String get _foldersKey => 'carpetas_cache_$userId';
+  String get _dirtyFoldersKey => 'carpetas_dirty_$userId';
+
+  // ------------------------------------------------------------ lecturas
+
+  List<Note>? _sortedCache;
+  int _sortedVersion = -1;
 
   List<Note> get notes {
+    if (_sortedCache != null && _sortedVersion == version) return _sortedCache!;
     final list = _notes.values.where((n) => !n.deleted).toList()
       ..sort((a, b) {
         if (a.pinned != b.pinned) return a.pinned ? -1 : 1;
         return b.updatedAt.compareTo(a.updatedAt);
       });
+    _sortedCache = list;
+    _sortedVersion = version;
     return list;
   }
 
+  /// Notas temporales ordenadas por fecha límite.
+  List<Note> get temporales => notes
+      .where((n) => n.isTemporal && !n.isEmpty)
+      .toList()
+    ..sort((a, b) => a.dueAt!.compareTo(b.dueAt!));
+
+  List<Folder> get folders => _folders.values
+      .where((f) => !f.deleted)
+      .toList()
+    ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+
   Note? byId(String id) => _notes[id];
+  Folder? folderById(String? id) => id == null ? null : _folders[id];
+
+  int countIn(String folderId) =>
+      notes.where((n) => n.folderId == folderId && !n.isEmpty).length;
 
   // ---------------------------------------------------------------- ciclo
 
@@ -76,30 +107,60 @@ class NotesRepository extends ChangeNotifier {
     super.dispose();
   }
 
-  // ------------------------------------------------------------- cambios
+  // ------------------------------------------------------- cambios notas
 
-  Note createNote() {
+  Note createNote({String? folderId, DateTime? dueAt, DateTime? remindAt}) {
     final now = DateTime.now().toUtc();
-    final n = Note(id: newNoteId(), content: '', createdAt: now, updatedAt: now);
+    final n = Note(
+      id: newNoteId(),
+      content: '',
+      createdAt: now,
+      updatedAt: now,
+      folderId: folderId,
+      dueAt: dueAt,
+      remindAt: remindAt,
+    );
     _notes[n.id] = n;
     _fresh.add(n.id);
     _notify();
     return n;
   }
 
-  void updateContent(String id, String content) {
+  void updateContent(String id, String content, {String? rich}) {
     final n = _notes[id];
-    if (_disposed || n == null || n.content == content) return;
+    if (_disposed || n == null) return;
+    if (n.content == content && n.rich == rich) return;
     n.content = content;
+    n.rich = rich;
     n.updatedAt = DateTime.now().toUtc();
     _touch(id);
   }
 
-  void togglePin(String id) {
+  void togglePin(String id) => _edit(id, (n) => n.pinned = !n.pinned);
+
+  void toggleDone(String id) => _edit(id, (n) => n.done = !n.done);
+
+  void moveToFolder(String id, String? folderId) =>
+      _edit(id, (n) => n.folderId = folderId);
+
+  void setSchedule(String id, {DateTime? remindAt, DateTime? dueAt}) =>
+      _edit(id, (n) {
+        n.remindAt = remindAt?.toUtc();
+        n.dueAt = dueAt?.toUtc();
+        if (dueAt == null) n.done = false;
+      });
+
+  void _edit(String id, void Function(Note n) change) {
     final n = _notes[id];
     if (_disposed || n == null) return;
-    n.pinned = !n.pinned;
+    change(n);
     n.updatedAt = DateTime.now().toUtc();
+    // Una nota "fresca" con fecha o carpeta ya cuenta como nota real
+    // solo cuando tenga texto; si sigue vacía se descartará al cerrar.
+    if (_fresh.contains(id) && n.isEmpty) {
+      _notify();
+      return;
+    }
     _touch(id);
   }
 
@@ -115,26 +176,6 @@ class NotesRepository extends ChangeNotifier {
     n.deleted = true;
     n.updatedAt = DateTime.now().toUtc();
     _touch(id);
-  }
-
-  /// Notas de ejemplo (solo modo DEMO de las pruebas automáticas).
-  void seedDemo() {
-    if (_disposed || notes.isNotEmpty) return;
-    const textos = [
-      'Lista de la compra\nLeche, pan, huevos y café',
-      'Ideas para el proyecto\nApp de notas sincronizada con widget',
-      'Examen de historia\nRepasar temas 4, 5 y 6 el jueves',
-      'Pelis pendientes\nDune 2, Oppenheimer, Interstellar',
-      'Gimnasio\nLunes pierna, miércoles espalda, viernes pecho',
-    ];
-    for (var i = 0; i < textos.length; i++) {
-      final n = createNote();
-      n.content = textos[i];
-      n.pinned = i == 0;
-      n.updatedAt = DateTime.now().toUtc().subtract(Duration(hours: i * 20));
-      _fresh.remove(n.id);
-    }
-    _notify();
   }
 
   /// Deshace un borrado (botón "Deshacer").
@@ -156,6 +197,51 @@ class NotesRepository extends ChangeNotifier {
   void _touch(String id) {
     _fresh.remove(id);
     _dirty.add(id);
+    _changed();
+  }
+
+  // ----------------------------------------------------- cambios carpetas
+
+  Folder createFolder(String name, {int? color}) {
+    final now = DateTime.now().toUtc();
+    final f = Folder(
+        id: newNoteId(),
+        name: name.trim(),
+        color: color,
+        createdAt: now,
+        updatedAt: now);
+    _folders[f.id] = f;
+    _dirtyFolders.add(f.id);
+    _changed();
+    return f;
+  }
+
+  void renameFolder(String id, String name, {int? color}) {
+    final f = _folders[id];
+    if (_disposed || f == null) return;
+    f.name = name.trim();
+    if (color != null) f.color = color;
+    f.updatedAt = DateTime.now().toUtc();
+    _dirtyFolders.add(id);
+    _changed();
+  }
+
+  /// Borra la carpeta; sus notas pasan a "Todas" (no se borran).
+  void deleteFolder(String id) {
+    final f = _folders[id];
+    if (_disposed || f == null) return;
+    f.deleted = true;
+    f.updatedAt = DateTime.now().toUtc();
+    _dirtyFolders.add(id);
+    for (final n in _notes.values.where((n) => n.folderId == id).toList()) {
+      n.folderId = null;
+      n.updatedAt = DateTime.now().toUtc();
+      _dirty.add(n.id);
+    }
+    _changed();
+  }
+
+  void _changed() {
     if (status != SyncStatus.offline) status = SyncStatus.pending;
     _schedulePersist();
     _pushDebounce?.cancel();
@@ -175,14 +261,22 @@ class NotesRepository extends ChangeNotifier {
     _setStatus(SyncStatus.syncing);
     try {
       await _pushDirty();
-      final rows = await _client.from('notes').select();
       var changed = false;
+      final rows = await _client.from('notes').select();
       for (final r in rows) {
-        if (_mergeRemote(Note.fromRow(r))) changed = true;
+        if (_mergeNote(Note.fromRow(r))) changed = true;
+      }
+      try {
+        final frows = await _client.from('folders').select();
+        for (final r in frows) {
+          if (_mergeFolder(Folder.fromRow(r))) changed = true;
+        }
+      } catch (e) {
+        debugPrint('Carpetas: $e');
       }
       _persist();
       if (changed) _notify();
-      _setStatus(_dirty.isEmpty ? SyncStatus.synced : SyncStatus.pending);
+      _setStatus(_isClean ? SyncStatus.synced : SyncStatus.pending);
     } catch (e) {
       debugPrint('Error al sincronizar: $e');
       _setStatus(SyncStatus.offline);
@@ -195,6 +289,8 @@ class NotesRepository extends ChangeNotifier {
     }
   }
 
+  bool get _isClean => _dirty.isEmpty && _dirtyFolders.isEmpty;
+
   Future<void> _pushNow() async {
     if (_disposed) return;
     if (_syncing) {
@@ -205,7 +301,7 @@ class NotesRepository extends ChangeNotifier {
     try {
       await _pushDirty();
       _persist();
-      _setStatus(_dirty.isEmpty ? SyncStatus.synced : SyncStatus.pending);
+      _setStatus(_isClean ? SyncStatus.synced : SyncStatus.pending);
     } catch (e) {
       debugPrint('Error al subir: $e');
       _setStatus(SyncStatus.offline);
@@ -219,6 +315,27 @@ class NotesRepository extends ChangeNotifier {
   }
 
   Future<void> _pushDirty() async {
+    // Primero carpetas (las notas pueden apuntar a ellas).
+    if (_dirtyFolders.isNotEmpty) {
+      final sent = <String, DateTime>{};
+      final rows = <Map<String, dynamic>>[];
+      for (final id in _dirtyFolders.toList()) {
+        final f = _folders[id];
+        if (f == null) {
+          _dirtyFolders.remove(id);
+          continue;
+        }
+        sent[id] = f.updatedAt;
+        rows.add(f.toRow(userId: userId));
+      }
+      if (rows.isNotEmpty) {
+        await _client.from('folders').upsert(rows);
+        sent.forEach((id, ts) {
+          if (_folders[id]?.updatedAt == ts) _dirtyFolders.remove(id);
+        });
+      }
+    }
+
     if (_dirty.isEmpty) return;
     final sent = <String, DateTime>{};
     final rows = <Map<String, dynamic>>[];
@@ -240,7 +357,7 @@ class NotesRepository extends ChangeNotifier {
   }
 
   /// Devuelve true si la versión remota sustituye a la local.
-  bool _mergeRemote(Note remote) {
+  bool _mergeNote(Note remote) {
     final local = _notes[remote.id];
     if (local != null && !remote.updatedAt.isAfter(local.updatedAt)) {
       return false;
@@ -248,6 +365,16 @@ class NotesRepository extends ChangeNotifier {
     _notes[remote.id] = remote;
     _dirty.remove(remote.id);
     _fresh.remove(remote.id);
+    return true;
+  }
+
+  bool _mergeFolder(Folder remote) {
+    final local = _folders[remote.id];
+    if (local != null && !remote.updatedAt.isAfter(local.updatedAt)) {
+      return false;
+    }
+    _folders[remote.id] = remote;
+    _dirtyFolders.remove(remote.id);
     return true;
   }
 
@@ -262,12 +389,29 @@ class NotesRepository extends ChangeNotifier {
             final rec = payload.newRecord;
             if (_disposed || rec.isEmpty) return;
             try {
-              if (_mergeRemote(Note.fromRow(rec))) {
+              if (_mergeNote(Note.fromRow(rec))) {
                 _schedulePersist();
                 _notify();
               }
             } catch (e) {
-              debugPrint('Realtime: $e');
+              debugPrint('Realtime notas: $e');
+            }
+          },
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'folders',
+          callback: (payload) {
+            final rec = payload.newRecord;
+            if (_disposed || rec.isEmpty) return;
+            try {
+              if (_mergeFolder(Folder.fromRow(rec))) {
+                _schedulePersist();
+                _notify();
+              }
+            } catch (e) {
+              debugPrint('Realtime carpetas: $e');
             }
           },
         )
@@ -292,7 +436,20 @@ class NotesRepository extends ChangeNotifier {
       _dirty.addAll(prefs.getStringList(_dirtyKey) ?? const []);
       _dirty.removeWhere((id) => !_notes.containsKey(id));
     } catch (e) {
-      debugPrint('Caché local dañada, se ignora: $e');
+      debugPrint('Caché de notas dañada, se ignora: $e');
+    }
+    try {
+      final raw = prefs.getString(_foldersKey);
+      if (raw != null) {
+        for (final m in jsonDecode(raw) as List) {
+          final f = Folder.fromRow(Map<String, dynamic>.from(m as Map));
+          _folders[f.id] = f;
+        }
+      }
+      _dirtyFolders.addAll(prefs.getStringList(_dirtyFoldersKey) ?? const []);
+      _dirtyFolders.removeWhere((id) => !_folders.containsKey(id));
+    } catch (e) {
+      debugPrint('Caché de carpetas dañada, se ignora: $e');
     }
   }
 
@@ -305,6 +462,9 @@ class NotesRepository extends ChangeNotifier {
         .toList();
     prefs.setString(_cacheKey, jsonEncode(list));
     prefs.setStringList(_dirtyKey, _dirty.toList());
+    prefs.setString(
+        _foldersKey, jsonEncode(_folders.values.map((f) => f.toRow()).toList()));
+    prefs.setStringList(_dirtyFoldersKey, _dirtyFolders.toList());
   }
 
   void _schedulePersist() {
@@ -320,7 +480,43 @@ class NotesRepository extends ChangeNotifier {
 
   void _notify() {
     if (_disposed) return;
+    version++;
     notifyListeners();
     WidgetBridge.schedule(notes);
+  }
+
+  // --------------------------------------------------------------- demo
+
+  /// Notas de ejemplo (solo modo DEMO de las pruebas automáticas).
+  void seedDemo() {
+    if (_disposed || notes.isNotEmpty) return;
+    final now = DateTime.now().toUtc();
+    final clase = createFolder('Clase', color: 0xFF5C8DF6);
+    createFolder('Personal', color: 0xFFE76F51);
+    const textos = [
+      'Lista de la compra\nLeche, pan, huevos y café',
+      'Ideas para el proyecto\nApp de notas sincronizada con widget',
+      'Examen de historia\nRepasar temas 4, 5 y 6',
+      'Pelis pendientes\nDune 2, Oppenheimer, Interstellar',
+      'Entregar trabajo de física\nPráctica del péndulo',
+    ];
+    for (var i = 0; i < textos.length; i++) {
+      final n = createNote();
+      n.content = textos[i];
+      n.pinned = i == 0;
+      n.updatedAt = now.subtract(Duration(hours: i * 20));
+      if (i == 2) {
+        n.folderId = clase.id;
+        n.remindAt = now.subtract(const Duration(days: 4));
+        n.dueAt = now.add(const Duration(days: 3));
+      }
+      if (i == 4) {
+        n.folderId = clase.id;
+        n.remindAt = now.subtract(const Duration(days: 10));
+        n.dueAt = now.add(const Duration(hours: 20));
+      }
+      _fresh.remove(n.id);
+    }
+    _notify();
   }
 }

@@ -12,6 +12,7 @@ rm -rf test
 
 if [[ "$PLAT" == *android* ]]; then
   cp -r plataforma/android/app/. android/app/
+  python3 scripts/parchear_android.py
 fi
 
 if [[ "$PLAT" == *windows* && -f windows/runner/main.cpp ]]; then

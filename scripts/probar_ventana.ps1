@@ -43,8 +43,11 @@ if ($script:h -eq [IntPtr]::Zero) { throw "No se encontró la ventana" }
 Start-Sleep 6
 Size 1000 700; Start-Sleep 3; Shot "01-inicio"
 
-# Abrir la primera nota (lista a la izquierda)
-Click 200 375; Start-Sleep 2; Shot "02-nota-abierta"
+# Abrir una nota (lista a la izquierda)
+Click 200 430; Start-Sleep 3; Shot "02-nota-abierta"
+Click 210 200; Start-Sleep 3; Shot "02b-temporales"
+Click 330 200; Start-Sleep 3; Shot "02c-calendario"
+Click 105 200; Start-Sleep 2
 
 # Arrastre simulado: ir estrechando poco a poco (como con el ratón)
 for ($w = 1000; $w -ge 600; $w -= 20) { Size $w 700; Start-Sleep -Milliseconds 16 }

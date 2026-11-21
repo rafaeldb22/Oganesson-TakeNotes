@@ -6,10 +6,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:flutter_quill/flutter_quill.dart' show FlutterQuillLocalizations;
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'config.dart';
+import 'data/reminders.dart';
 import 'data/widget_bridge.dart';
 import 'ui/auth_gate.dart';
 import 'ui/theme.dart';
@@ -35,6 +37,7 @@ Future<void> main() async {
   }
 
   await themeSettings.load();
+  unawaited(Reminders.instance.init());
   themeSettings.onThemeChanged = WidgetBridge.refresh;
 
   if (AppConfig.isConfigured) {
@@ -67,10 +70,6 @@ class _RepaintOnWindowChange with WindowListener {
   void onWindowUnmaximize() => _schedule();
   @override
   void onWindowRestore() => _schedule();
-  @override
-  void onWindowFocus() => _schedule();
-  @override
-  void onWindowMoved() => _schedule();
 }
 
 void forceFullRepaint() {
@@ -115,6 +114,7 @@ class NotasApp extends StatelessWidget {
         GlobalMaterialLocalizations.delegate,
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
+        FlutterQuillLocalizations.delegate,
       ],
       home: AppConfig.isConfigured ? const AuthGate() : const _MissingConfig(),
       ),

@@ -1,36 +1,20 @@
+import 'dart:convert';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:flutter_quill/flutter_quill.dart';
 
 import '../data/notes_repository.dart';
+import '../models/note.dart';
 import 'anim.dart';
 import 'format.dart';
+import 'schedule_sheet.dart';
 import 'theme.dart';
+import 'urgency.dart';
 
-/// Pinta la primera línea en grande y en negrita (título), como en iPhone.
-class _TitleController extends TextEditingController {
-  _TitleController({super.text});
-
-  @override
-  TextSpan buildTextSpan({
-    required BuildContext context,
-    TextStyle? style,
-    required bool withComposing,
-  }) {
-    final base = style ?? const TextStyle();
-    final titleStyle = base.copyWith(
-        fontSize: 26, fontWeight: FontWeight.w700, height: 1.3);
-    final t = text;
-    final nl = t.indexOf('\n');
-    if (nl == -1) return TextSpan(style: titleStyle, text: t);
-    return TextSpan(style: base, children: [
-      TextSpan(text: t.substring(0, nl), style: titleStyle),
-      TextSpan(text: t.substring(nl)),
-    ]);
-  }
-}
-
+/// Editor de una nota con formato (negrita, títulos, listas, casillas,
+/// colores, alineación…) usando flutter_quill.
 class NoteEditor extends StatefulWidget {
   const NoteEditor({
     super.key,
@@ -51,7 +35,7 @@ class NoteEditor extends StatefulWidget {
   /// Borrar la nota (lo gestiona la pantalla principal para poder deshacer).
   final void Function(String id) onDelete;
 
-  /// true en pantallas estrechas (móvil/ventana pequeña): botón "< Notas".
+  /// true en pantallas estrechas (móvil/ventana pequeña): botón "< notas".
   final bool showBack;
   final bool autofocus;
 
@@ -60,16 +44,47 @@ class NoteEditor extends StatefulWidget {
 }
 
 class _NoteEditorState extends State<NoteEditor> {
-  late final _TitleController _ctrl;
+  late final QuillController _ctrl;
   final _focus = FocusNode();
+  final _scroll = ScrollController();
   DateTime _lastTyped = DateTime(2000);
   bool _closing = false;
+  bool _applyingRemote = false;
+  bool _toolbarOpen = true;
+  String _lastSaved = '';
+
+  NotesRepository get repo => widget.repo;
+
+  static Document _docFor(Note? n) {
+    if (n?.rich != null) {
+      try {
+        return Document.fromJson(jsonDecode(n!.rich!) as List);
+      } catch (_) {}
+    }
+    final d = Document();
+    final text = n?.content ?? '';
+    if (text.isNotEmpty) d.insert(0, text);
+    return d;
+  }
+
+  String _plain() {
+    final t = _ctrl.document.toPlainText();
+    return t.endsWith('\n') ? t.substring(0, t.length - 1) : t;
+  }
+
+  String _richJson() => jsonEncode(_ctrl.document.toDelta().toJson());
 
   @override
   void initState() {
     super.initState();
-    _ctrl = _TitleController(text: widget.repo.byId(widget.noteId)?.content);
-    widget.repo.addListener(_onRepo);
+    final n = repo.byId(widget.noteId);
+    _ctrl = QuillController(
+      document: _docFor(n),
+      selection: const TextSelection.collapsed(offset: 0),
+    );
+    _lastSaved = _richJson();
+    _ctrl.addListener(_onEdit);
+    repo.addListener(_onRepo);
     _focus.addListener(_onFocus);
   }
 
@@ -77,10 +92,19 @@ class _NoteEditorState extends State<NoteEditor> {
     if (mounted) setState(() {});
   }
 
+  void _onEdit() {
+    if (_applyingRemote || _closing) return;
+    final rich = _richJson();
+    if (rich == _lastSaved) return; // solo cambió el cursor
+    _lastSaved = rich;
+    _lastTyped = DateTime.now();
+    repo.updateContent(widget.noteId, _plain(), rich: rich);
+  }
+
   /// Cambios que llegan desde el otro dispositivo mientras la nota está abierta.
   void _onRepo() {
     if (!mounted || _closing) return;
-    final n = widget.repo.byId(widget.noteId);
+    final n = repo.byId(widget.noteId);
     if (n == null || n.deleted) {
       _closing = true;
       WidgetsBinding.instance.addPostFrameCallback((_) => widget.onClose());
@@ -88,31 +112,48 @@ class _NoteEditorState extends State<NoteEditor> {
     }
     final recentlyTyped =
         DateTime.now().difference(_lastTyped) < const Duration(seconds: 2);
-    if (n.content != _ctrl.text && !recentlyTyped) {
+    final remoteRich = n.rich ?? jsonEncode(_docFor(n).toDelta().toJson());
+    if (!recentlyTyped && remoteRich != _lastSaved) {
+      _applyingRemote = true;
       final sel = _ctrl.selection.baseOffset;
-      final off = min(sel < 0 ? n.content.length : sel, n.content.length);
-      _ctrl.value = TextEditingValue(
-        text: n.content,
-        selection: TextSelection.collapsed(offset: off),
-      );
+      _ctrl.document = _docFor(n);
+      final len = max(0, _ctrl.document.length - 1);
+      _ctrl.updateSelection(
+          TextSelection.collapsed(offset: min(max(sel, 0), len)),
+          ChangeSource.local);
+      _lastSaved = _richJson();
+      _applyingRemote = false;
     }
     setState(() {});
   }
 
   @override
   void dispose() {
-    widget.repo.removeListener(_onRepo);
+    repo.removeListener(_onRepo);
+    _ctrl.removeListener(_onEdit);
     _focus.removeListener(_onFocus);
     _ctrl.dispose();
     _focus.dispose();
+    _scroll.dispose();
     super.dispose();
   }
 
+  Widget _iconAction({
+    required String tooltip,
+    required Widget icon,
+    required VoidCallback onPressed,
+  }) =>
+      Bouncy(
+        pressedScale: 0.85,
+        child: IconButton(tooltip: tooltip, onPressed: onPressed, icon: icon),
+      );
+
   @override
   Widget build(BuildContext context) {
-    final n = widget.repo.byId(widget.noteId);
+    final n = repo.byId(widget.noteId);
     final accent = Palette.accent(context);
     final pinned = n?.pinned ?? false;
+    final folder = repo.folderById(n?.folderId);
 
     return Scaffold(
       backgroundColor: Palette.card(context),
@@ -126,40 +167,69 @@ class _NoteEditorState extends State<NoteEditor> {
                   style: TextButton.styleFrom(foregroundColor: accent),
                   onPressed: widget.onClose,
                   icon: const Icon(Icons.arrow_back_ios_new, size: 18),
-                  label: const Text('Notas', style: TextStyle(fontSize: 17)),
+                  label: const Text('notas',
+                      style: TextStyle(fontFamily: 'Shrikhand', fontSize: 17)),
                 ),
               )
             : null,
         actions: [
+          // Carpeta
+          PopupMenuButton<String>(
+            tooltip: 'Mover a carpeta',
+            icon: Icon(folder == null ? Icons.folder_outlined : Icons.folder,
+                color: folder?.color != null ? Color(folder!.color!) : accent),
+            onSelected: (v) =>
+                repo.moveToFolder(widget.noteId, v == '' ? null : v),
+            itemBuilder: (_) => [
+              CheckedPopupMenuItem(
+                  value: '',
+                  checked: n?.folderId == null,
+                  child: const Text('Sin carpeta')),
+              for (final f in repo.folders)
+                CheckedPopupMenuItem(
+                    value: f.id,
+                    checked: n?.folderId == f.id,
+                    child: Text(f.name)),
+            ],
+          ),
+          // Fechas / recordatorio
+          _iconAction(
+            tooltip: 'Nota temporal y avisos',
+            icon: Icon(
+              n?.isTemporal == true
+                  ? Icons.alarm_on
+                  : Icons.alarm_add_outlined,
+            ),
+            onPressed: () => showScheduleSheet(context, repo, widget.noteId),
+          ),
           if (n != null)
-            Bouncy(
-              pressedScale: 0.85,
-              child: IconButton(
-                tooltip: pinned ? 'Desfijar' : 'Fijar arriba',
-                onPressed: () => widget.repo.togglePin(widget.noteId),
-                icon: AnimatedSwitcher(
-                  duration: Anim.medium,
-                  transitionBuilder: (c, a) => RotationTransition(
-                    turns: Tween(begin: -0.15, end: 0.0).animate(a),
-                    child: ScaleTransition(scale: a, child: c),
-                  ),
-                  child: Icon(
-                    pinned ? Icons.push_pin : Icons.push_pin_outlined,
-                    key: ValueKey(pinned),
-                  ),
+            _iconAction(
+              tooltip: pinned ? 'Desfijar' : 'Fijar arriba',
+              onPressed: () => repo.togglePin(widget.noteId),
+              icon: AnimatedSwitcher(
+                duration: Anim.medium,
+                transitionBuilder: (c, a) => RotationTransition(
+                  turns: Tween(begin: -0.15, end: 0.0).animate(a),
+                  child: ScaleTransition(scale: a, child: c),
+                ),
+                child: Icon(
+                  pinned ? Icons.push_pin : Icons.push_pin_outlined,
+                  key: ValueKey(pinned),
                 ),
               ),
             ),
-          Bouncy(
-            pressedScale: 0.85,
-            child: IconButton(
-              tooltip: 'Eliminar nota',
-              icon: const Icon(Icons.delete_outline),
-              onPressed: () {
-                _closing = true;
-                widget.onDelete(widget.noteId);
-              },
-            ),
+          _iconAction(
+            tooltip: _toolbarOpen ? 'Ocultar formato' : 'Mostrar formato',
+            icon: Icon(_toolbarOpen ? Icons.text_format : Icons.text_fields),
+            onPressed: () => setState(() => _toolbarOpen = !_toolbarOpen),
+          ),
+          _iconAction(
+            tooltip: 'Eliminar nota',
+            icon: const Icon(Icons.delete_outline),
+            onPressed: () {
+              _closing = true;
+              widget.onDelete(widget.noteId);
+            },
           ),
           // Botón OK: aparece con un pequeño "pop", siempre centrado.
           AnimatedSize(
@@ -189,68 +259,143 @@ class _NoteEditorState extends State<NoteEditor> {
       ),
       body: SafeArea(
         top: false,
-        child: _EditorBodyIntro(
-          child: Center(
-          child: ConstrainedBox(
-            // En ventanas muy anchas el texto no se estira de lado a lado.
-            constraints: const BoxConstraints(maxWidth: 860),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: Column(
-                children: [
-                  if (n != null)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 10),
-                      child: AnimatedSwitcher(
-                        duration: Anim.medium,
-                        child: Text(
-                          fechaLarga(n.updatedAt),
-                          key: ValueKey(fechaLarga(n.updatedAt)),
-                          style: TextStyle(
-                              color: Palette.secondary(context), fontSize: 13),
+        child: Column(
+          children: [
+            // Barra de formato (se puede ocultar).
+            AnimatedSize(
+              duration: Anim.medium,
+              curve: Anim.curve,
+              alignment: Alignment.topCenter,
+              child: _toolbarOpen
+                  ? Container(
+                      width: double.infinity,
+                      decoration: BoxDecoration(
+                        border: Border(
+                            bottom:
+                                BorderSide(color: Palette.separator(context))),
+                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      child: QuillSimpleToolbar(
+                        controller: _ctrl,
+                        config: const QuillSimpleToolbarConfig(
+                          multiRowsDisplay: false,
+                          showFontFamily: false,
+                          showSearchButton: false,
+                          showSubscript: false,
+                          showSuperscript: false,
+                          showDirection: false,
+                          showClipboardCut: false,
+                          showClipboardCopy: false,
+                          showClipboardPaste: false,
+                          showInlineCode: false,
                         ),
                       ),
-                    ),
-                  Expanded(
-                    child: TextField(
-                      controller: _ctrl,
-                      focusNode: _focus,
-                      autofocus: widget.autofocus,
-                      maxLines: null,
-                      expands: true,
-                      keyboardType: TextInputType.multiline,
-                      textCapitalization: TextCapitalization.sentences,
-                      textAlignVertical: TextAlignVertical.top,
-                      style: const TextStyle(fontSize: 17, height: 1.45),
-                      decoration: const InputDecoration.collapsed(
-                          hintText: 'Escribe algo…'),
-                      onChanged: (t) {
-                        _lastTyped = DateTime.now();
-                        widget.repo.updateContent(widget.noteId, t);
-                      },
+                    )
+                  : const SizedBox(width: double.infinity),
+            ),
+            Expanded(
+              child: Center(
+                child: ConstrainedBox(
+                  // En ventanas muy anchas el texto no se estira de lado a lado.
+                  constraints: const BoxConstraints(maxWidth: 860),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    child: Column(
+                      children: [
+                        const SizedBox(height: 8),
+                        if (n != null && n.isTemporal)
+                          _TemporalBanner(
+                            note: n,
+                            onToggleDone: () => repo.toggleDone(n.id),
+                            onEdit: () =>
+                                showScheduleSheet(context, repo, n.id),
+                          ),
+                        if (n != null)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 8),
+                            child: Text(
+                              fechaLarga(n.updatedAt),
+                              style: TextStyle(
+                                  color: Palette.secondary(context),
+                                  fontSize: 13),
+                            ),
+                          ),
+                        Expanded(
+                          child: QuillEditor(
+                            controller: _ctrl,
+                            focusNode: _focus,
+                            scrollController: _scroll,
+                            config: QuillEditorConfig(
+                              placeholder: 'Escribe algo…',
+                              autoFocus: widget.autofocus,
+                              expands: true,
+                              padding: const EdgeInsets.only(bottom: 40),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                ],
+                ),
               ),
             ),
-          ),
-        ),
+          ],
         ),
       ),
-    );
+    ).animate().fadeIn(duration: Anim.medium, curve: Anim.curve);
   }
 }
 
-/// Al abrir una nota, el texto aparece subiendo y fundiéndose suavemente.
-class _EditorBodyIntro extends StatelessWidget {
-  const _EditorBodyIntro({required this.child});
-  final Widget child;
+class _TemporalBanner extends StatelessWidget {
+  const _TemporalBanner({
+    required this.note,
+    required this.onToggleDone,
+    required this.onEdit,
+  });
+
+  final Note note;
+  final VoidCallback onToggleDone;
+  final VoidCallback onEdit;
 
   @override
   Widget build(BuildContext context) {
-    return child
-        .animate()
-        .fadeIn(delay: 60.ms, duration: Anim.slow, curve: Anim.curve)
-        .slideY(begin: 0.04, duration: Anim.slow, curve: Anim.curve);
+    final color = urgencyColor(context, note);
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.fromLTRB(6, 8, 12, 10),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Row(
+        children: [
+          IconButton(
+            tooltip: note.done ? 'Marcar pendiente' : 'Completar',
+            onPressed: onToggleDone,
+            icon: AnimatedSwitcher(
+              duration: Anim.medium,
+              transitionBuilder: (c, a) => ScaleTransition(
+                  scale: CurvedAnimation(parent: a, curve: Curves.easeOutBack),
+                  child: c),
+              child: Icon(
+                note.done ? Icons.check_circle : Icons.radio_button_unchecked,
+                key: ValueKey(note.done),
+                color: color,
+              ),
+            ),
+          ),
+          Expanded(
+            child: InkWell(
+              onTap: onEdit,
+              borderRadius: BorderRadius.circular(8),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: TimeBar(note: note),
+              ),
+            ),
+          ),
+        ],
+      ),
+    ).animate().fadeIn(duration: Anim.medium).slideY(begin: -0.2);
   }
 }
