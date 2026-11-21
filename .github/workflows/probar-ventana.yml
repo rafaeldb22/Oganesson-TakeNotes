@@ -1,0 +1,35 @@
+name: Probar ventana Windows
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  capturas:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Preparar y compilar (modo DEMO)
+        shell: pwsh
+        run: |
+          flutter create --org com.rafa --project-name notas --platforms=windows .
+          if (Test-Path test) { Remove-Item -Recurse -Force test }
+          flutter pub get
+          flutter build windows --release --dart-define=DEMO=true
+
+      - name: Abrir, redimensionar y capturar
+        shell: pwsh
+        run: ./scripts/probar_ventana.ps1 -Exe "build\windows\x64\runner\Release\notas.exe"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: capturas
+          path: capturas/

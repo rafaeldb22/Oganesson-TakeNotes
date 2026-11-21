@@ -7,6 +7,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'config.dart';
+import 'data/widget_bridge.dart';
 import 'ui/auth_gate.dart';
 import 'ui/theme.dart';
 
@@ -29,6 +30,9 @@ Future<void> main() async {
     });
   }
 
+  await themeSettings.load();
+  themeSettings.onThemeChanged = WidgetBridge.refresh;
+
   if (AppConfig.isConfigured) {
     await Supabase.initialize(
       url: AppConfig.supabaseUrl,
@@ -43,11 +47,17 @@ class NotasApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
+    return ListenableBuilder(
+      listenable: themeSettings,
+      builder: (context, _) => MaterialApp(
       title: 'Notas',
       debugShowCheckedModeBanner: false,
-      theme: buildTheme(Brightness.light),
-      darkTheme: buildTheme(Brightness.dark),
+      theme: buildTheme(themeSettings.theme, Brightness.light),
+      darkTheme: buildTheme(themeSettings.theme, Brightness.dark),
+      themeMode: themeSettings.mode,
+      // Cambio de tema animado: los colores se funden en vez de saltar.
+      themeAnimationDuration: const Duration(milliseconds: 450),
+      themeAnimationCurve: Curves.easeInOutCubic,
       locale: const Locale('es'),
       supportedLocales: const [Locale('es'), Locale('en')],
       localizationsDelegates: const [
@@ -56,6 +66,7 @@ class NotasApp extends StatelessWidget {
         GlobalCupertinoLocalizations.delegate,
       ],
       home: AppConfig.isConfigured ? const AuthGate() : const _MissingConfig(),
+      ),
     );
   }
 }

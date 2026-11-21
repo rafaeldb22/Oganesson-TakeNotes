@@ -1,6 +1,7 @@
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 
 import '../data/notes_repository.dart';
 import 'anim.dart';
@@ -160,27 +161,28 @@ class _NoteEditorState extends State<NoteEditor> {
               },
             ),
           ),
-          AnimatedSwitcher(
+          // Botón OK: aparece con un pequeño "pop", siempre centrado.
+          AnimatedSize(
             duration: Anim.medium,
-            transitionBuilder: (c, a) => FadeTransition(
-              opacity: a,
-              child: SizeTransition(
-                sizeFactor: a,
-                axis: Axis.horizontal,
-                child: ScaleTransition(scale: a, child: c),
-              ),
-            ),
+            curve: Anim.curve,
             child: _focus.hasFocus
-                ? TextButton(
-                    key: const ValueKey('ok'),
-                    onPressed: () => _focus.unfocus(),
-                    child: Text('OK',
-                        style: TextStyle(
-                            color: accent,
-                            fontWeight: FontWeight.w700,
-                            fontSize: 16)),
+                ? Center(
+                    child: TextButton(
+                      onPressed: () => _focus.unfocus(),
+                      child: Text('OK',
+                          style: TextStyle(
+                              color: accent,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 16)),
+                    )
+                        .animate()
+                        .fadeIn(duration: Anim.fast)
+                        .scale(
+                            begin: const Offset(0.6, 0.6),
+                            curve: Curves.easeOutBack,
+                            duration: Anim.medium),
                   )
-                : const SizedBox(key: ValueKey('nada')),
+                : const SizedBox(height: kToolbarHeight),
           ),
           const SizedBox(width: 6),
         ],

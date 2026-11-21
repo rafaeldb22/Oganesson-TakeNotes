@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../config.dart';
 import '../data/notes_repository.dart';
 import 'login_screen.dart';
 import 'notes_home.dart';
@@ -11,6 +12,9 @@ class AuthGate extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (AppConfig.demo) {
+      return const NotesShell(key: ValueKey('demo'), userId: 'demo');
+    }
     final auth = Supabase.instance.client.auth;
     return StreamBuilder<AuthState>(
       stream: auth.onAuthStateChange,
@@ -42,7 +46,9 @@ class _NotesShellState extends State<NotesShell> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    repo.start();
+    repo.start().then((_) {
+      if (AppConfig.demo) repo.seedDemo();
+    });
   }
 
   @override

@@ -13,6 +13,7 @@ import 'anim.dart';
 import 'format.dart';
 import 'note_editor.dart';
 import 'theme.dart';
+import 'theme_picker.dart';
 
 /// Pantalla principal. Un único estado ("qué nota está abierta") que se
 /// pinta de dos formas según el ancho disponible:
@@ -31,6 +32,7 @@ class _NotesHomeState extends State<NotesHome> {
   final _search = TextEditingController();
   String _query = '';
   String? _openId;
+  final Set<String> _removing = {}; // filas que se están plegando
   bool _openAutofocus = false;
   StreamSubscription<Uri?>? _widgetSub;
 
@@ -83,6 +85,18 @@ class _NotesHomeState extends State<NotesHome> {
     repo.finishEditing(prev);
   }
 
+  /// Pliega la fila con animación y después la borra.
+  void _deleteAnimated(String id) {
+    if (_removing.contains(id)) return;
+    if (_openId == id) _openId = null;
+    setState(() => _removing.add(id));
+    Future.delayed(Anim.medium, () {
+      if (!mounted) return;
+      _removing.remove(id);
+      _deleteNote(id);
+    });
+  }
+
   void _deleteNote(String id) {
     final n = repo.byId(id);
     final hadContent = n != null && !n.isEmpty;
@@ -125,7 +139,7 @@ class _NotesHomeState extends State<NotesHome> {
                   const Text('Eliminar', style: TextStyle(color: Colors.red)),
               onTap: () {
                 Navigator.pop(ctx);
-                _deleteNote(n.id);
+                _deleteAnimated(n.id);
               },
             ),
           ],
@@ -165,7 +179,7 @@ class _NotesHomeState extends State<NotesHome> {
       showBack: showBack,
       autofocus: _openAutofocus,
       onClose: _close,
-      onDelete: _deleteNote,
+      onDelete: _deleteAnimated,
     );
   }
 
@@ -294,12 +308,32 @@ class _NotesHomeState extends State<NotesHome> {
           PopupMenuButton<String>(
             icon: const Icon(Icons.more_horiz),
             onSelected: (v) {
+              if (v == 'tema') showThemePicker(context);
               if (v == 'sync') repo.sync();
               if (v == 'logout') _signOut();
             },
             itemBuilder: (_) => const [
-              PopupMenuItem(value: 'sync', child: Text('Sincronizar ahora')),
-              PopupMenuItem(value: 'logout', child: Text('Cerrar sesión')),
+              PopupMenuItem(
+                  value: 'tema',
+                  child: ListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      leading: Icon(Icons.palette_outlined),
+                      title: Text('Tema y colores'))),
+              PopupMenuItem(
+                  value: 'sync',
+                  child: ListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      leading: Icon(Icons.sync),
+                      title: Text('Sincronizar ahora'))),
+              PopupMenuItem(
+                  value: 'logout',
+                  child: ListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      leading: Icon(Icons.logout),
+                      title: Text('Cerrar sesión'))),
             ],
           ),
           const SizedBox(width: 4),
@@ -416,6 +450,7 @@ class _NotesHomeState extends State<NotesHome> {
             if (i > 0)
               Divider(height: 1, indent: 16, color: Palette.separator(context)),
             _NoteTile(
+              removing: _removing.contains(n.id),
               note: n,
               selected: wide && n.id == _openId,
               onTap: () => _open(n.id),
@@ -455,6 +490,7 @@ class _NotesHomeState extends State<NotesHome> {
 
 class _NoteTile extends StatefulWidget {
   const _NoteTile({
+    required this.removing,
     required this.note,
     required this.selected,
     required this.onTap,
@@ -462,6 +498,7 @@ class _NoteTile extends StatefulWidget {
     required this.onDismissed,
   });
 
+  final bool removing;
   final Note note;
   final bool selected;
   final VoidCallback onTap;
@@ -478,13 +515,11 @@ class _NoteTileState extends State<_NoteTile> {
   @override
   Widget build(BuildContext context) {
     final n = widget.note;
-    final dark = Theme.of(context).brightness == Brightness.dark;
-    final hoverColor = dark ? const Color(0xFF2C2C2E) : const Color(0xFFF2F2F7);
     final bg = widget.selected
         ? Palette.selected(context)
-        : (_hover ? hoverColor : Palette.card(context));
+        : (_hover ? Palette.hover(context) : Palette.card(context));
 
-    return Dismissible(
+    final tile = Dismissible(
       key: ValueKey('desliza-${n.id}'),
       direction: DismissDirection.endToStart,
       background: Container(
@@ -561,6 +596,26 @@ class _NoteTileState extends State<_NoteTile> {
                 ),
               ),
             ),
+          ),
+        ),
+      ),
+    );
+
+    // Al borrar: la fila se desliza, se desvanece y se pliega.
+    return ClipRect(
+      child: AnimatedAlign(
+        duration: Anim.medium,
+        curve: Curves.easeInOutCubic,
+        alignment: Alignment.topCenter,
+        heightFactor: widget.removing ? 0 : 1,
+        child: AnimatedSlide(
+          duration: Anim.medium,
+          curve: Curves.easeInCubic,
+          offset: widget.removing ? const Offset(-0.25, 0) : Offset.zero,
+          child: AnimatedOpacity(
+            duration: Anim.fast,
+            opacity: widget.removing ? 0 : 1,
+            child: tile,
           ),
         ),
       ),

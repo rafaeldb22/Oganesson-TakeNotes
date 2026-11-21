@@ -117,6 +117,26 @@ class NotesRepository extends ChangeNotifier {
     _touch(id);
   }
 
+  /// Notas de ejemplo (solo modo DEMO de las pruebas automáticas).
+  void seedDemo() {
+    if (_disposed || notes.isNotEmpty) return;
+    const textos = [
+      'Lista de la compra\nLeche, pan, huevos y café',
+      'Ideas para el proyecto\nApp de notas sincronizada con widget',
+      'Examen de historia\nRepasar temas 4, 5 y 6 el jueves',
+      'Pelis pendientes\nDune 2, Oppenheimer, Interstellar',
+      'Gimnasio\nLunes pierna, miércoles espalda, viernes pecho',
+    ];
+    for (var i = 0; i < textos.length; i++) {
+      final n = createNote();
+      n.content = textos[i];
+      n.pinned = i == 0;
+      n.updatedAt = DateTime.now().toUtc().subtract(Duration(hours: i * 20));
+      _fresh.remove(n.id);
+    }
+    _notify();
+  }
+
   /// Deshace un borrado (botón "Deshacer").
   void restore(String id) {
     final n = _notes[id];

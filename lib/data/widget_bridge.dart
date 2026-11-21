@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:home_widget/home_widget.dart';
 
 import '../models/note.dart';
+import '../ui/theme.dart';
 
 /// Puente con el widget 2x2 de Android. En Windows no hace nada.
 class WidgetBridge {
@@ -13,8 +14,14 @@ class WidgetBridge {
   static Timer? _debounce;
   static bool _initialHandled = false;
 
+  static List<Note> _last = const [];
+
+  /// Vuelve a pintar el widget (p. ej. al cambiar de tema).
+  static void refresh() => schedule(_last);
+
   static void schedule(List<Note> notes) {
     if (!supported) return;
+    _last = notes;
     _debounce?.cancel();
     _debounce = Timer(const Duration(milliseconds: 700), () => _push(notes));
   }
@@ -33,6 +40,15 @@ class WidgetBridge {
               : (latest.preview == 'Sin texto adicional' ? '' : latest.preview));
       await HomeWidget.saveWidgetData<String>(
           'total', real.length == 1 ? '1 nota' : '${real.length} notas');
+      final t = themeSettings.theme;
+      await HomeWidget.saveWidgetData<int>(
+          'acento_claro', t.light.accent.toARGB32());
+      await HomeWidget.saveWidgetData<int>(
+          'acento_oscuro', t.dark.accent.toARGB32());
+      await HomeWidget.saveWidgetData<int>(
+          'texto_boton_claro', t.light.onAccent.toARGB32());
+      await HomeWidget.saveWidgetData<int>(
+          'texto_boton_oscuro', t.dark.onAccent.toARGB32());
       await HomeWidget.updateWidget(androidName: 'NotasWidget');
     } catch (e) {
       debugPrint('Widget: $e');
