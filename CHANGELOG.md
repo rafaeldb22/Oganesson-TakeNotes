@@ -2,6 +2,17 @@
 
 All notable changes to Oganesson TakeNotes (formerly *Notas* / *BabuNotes*).
 
+## [1.5.0] — 2026-11-21
+
+### Added
+- **Startup animation**: when the app opens, the gold logo line draws itself on the navy
+  background like a pen (with a spark at the tip), the name appears and everything fades into
+  the app (under 2 seconds; on Windows the title bar stays usable).
+
+### Changed
+- The logo's stroke and colours live in `lib/ui/logo.dart`, shared by the startup animation and
+  the icon generator.
+
 ## [1.4.2] — 2026-11-21
 
 ### Added

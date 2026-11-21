@@ -16,6 +16,7 @@ import 'data/reminders.dart';
 import 'data/widget_bridge.dart';
 import 'ui/auth_gate.dart';
 import 'ui/i18n.dart';
+import 'ui/logo.dart';
 import 'ui/theme.dart';
 import 'ui/title_bar.dart';
 
@@ -133,14 +134,17 @@ class NotasApp extends StatelessWidget {
           FlutterQuillLocalizations.delegate,
         ],
         // En Windows, barra de título propia encima de todas las pantallas.
+        // Animación de inicio (el logo se dibuja) por encima de la app; en
+        // Windows la barra de título queda fuera para poder usarla.
         builder: (context, child) => isDesktopWindows
             ? Column(
                 children: [
                   const AppTitleBar(),
-                  Expanded(child: child ?? const SizedBox()),
+                  Expanded(
+                      child: StartupSplash(child: child ?? const SizedBox())),
                 ],
               )
-            : (child ?? const SizedBox()),
+            : StartupSplash(child: child ?? const SizedBox()),
         // Al cambiar de idioma se vuelve a montar la app con los textos nuevos.
         home: KeyedSubtree(
           key: ValueKey(appLanguage.code),

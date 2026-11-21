@@ -97,6 +97,8 @@ that it still arrives. On Windows, check toasts are enabled first:
 - `supabase/migrations/` — schema, RLS, realtime, colour column, delete policy, `vaults`
   table (005). Migrations are run by hand in the Supabase SQL Editor.
 - `installer/oganesson.iss` — Inno Setup script for `Oganesson-Setup.exe`.
+- `lib/ui/logo.dart` — logo stroke/colours (`logoGlyphPath`) and the `StartupSplash` animation
+  (wraps the app in `main.dart`).
 - `tool/generate_icon_test.dart` — draws the logo with Flutter and writes `assets/icon/*.png`
   and `docs/icon.png` (`flutter test tool/generate_icon_test.dart`).
 - `.github/workflows/build.yml` — builds APK + Windows installer/zip and publishes a

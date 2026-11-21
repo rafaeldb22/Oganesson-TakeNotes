@@ -9,40 +9,13 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:notas/ui/logo.dart';
 
-/// Fondo del logo: azul marino con degradado.
-const navyTop = Color(0xFF243049);
-const navyBottom = Color(0xFF0E1420);
-
-/// Dorado del trazo: claro → oro → bronce.
-const goldStops = [Color(0xFFFBE6A8), Color(0xFFE2B866), Color(0xFFB07C2E)];
-
-/// El trazo: una sola línea continua con dos bucles unidos por una curva
-/// (como una "e" doble manuscrita), en coordenadas de 0 a 1.
-Path glyphPath(Size s) {
-  final p = Path();
-  Offset o(double x, double y) => Offset(x * s.width, y * s.height);
-  void c(double x1, double y1, double x2, double y2, double x, double y) {
-    final a = o(x1, y1), b = o(x2, y2), e = o(x, y);
-    p.cubicTo(a.dx, a.dy, b.dx, b.dy, e.dx, e.dy);
-  }
-
-  final start = o(0.225, 0.270);
-  p.moveTo(start.dx, start.dy);
-  // Entrada y primer bucle (alto y estrecho, inclinado a la derecha).
-  c(0.215, 0.335, 0.255, 0.405, 0.305, 0.405);
-  c(0.355, 0.405, 0.402, 0.335, 0.396, 0.280);
-  c(0.390, 0.228, 0.338, 0.222, 0.330, 0.282);
-  // Bajada en curva hasta la base.
-  c(0.320, 0.350, 0.332, 0.475, 0.392, 0.560);
-  c(0.452, 0.645, 0.565, 0.668, 0.642, 0.600);
-  // Segundo bucle.
-  c(0.722, 0.533, 0.775, 0.420, 0.750, 0.368);
-  c(0.726, 0.318, 0.664, 0.342, 0.660, 0.420);
-  // Cola larga hacia abajo a la derecha.
-  c(0.655, 0.520, 0.715, 0.690, 0.790, 0.770);
-  return p;
-}
+// Trazo y colores compartidos con la animación de inicio.
+const navyTop = logoNavyTop;
+const navyBottom = logoNavyBottom;
+const goldStops = logoGold;
+Path glyphPath(Size s) => logoGlyphPath(s);
 
 class LogoPainter extends CustomPainter {
   LogoPainter({this.background = true, this.glyphScale = 1});
@@ -88,7 +61,7 @@ class LogoPainter extends CustomPainter {
     canvas.save();
     canvas.translate(offset.dx, offset.dy);
     final path = glyphPath(Size(g, g));
-    final stroke = g * 0.043;
+    final stroke = g * logoStroke;
     // Sombra suave para dar relieve.
     canvas.drawPath(
         path.shift(Offset(0, stroke * 0.35)),
