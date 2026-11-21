@@ -138,11 +138,15 @@ class _ContextMenuLayout extends StatelessWidget {
           parent: animation,
           curve: Curves.easeOutCubic,
           reverseCurve: Curves.easeInCubic);
+      final top = position.dy.clamp(8.0, size.height - 60);
+      // Alto disponible hasta el borde: si el menú no cabe, se desplaza por
+      // dentro en vez de salirse de la pantalla.
+      final maxHeight = openUp ? position.dy - 8 : size.height - top - 8;
       return Stack(
         children: [
           Positioned(
             left: left.clamp(8.0, size.width - width - 8),
-            top: openUp ? null : position.dy.clamp(8.0, size.height - 60),
+            top: openUp ? null : top,
             bottom: openUp
                 ? (size.height - position.dy).clamp(8.0, size.height - 60)
                 : null,
@@ -157,7 +161,10 @@ class _ContextMenuLayout extends StatelessWidget {
                     begin: Offset(0, openUp ? 0.03 : -0.03),
                     end: Offset.zero,
                   ).animate(curved),
-                  child: child,
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(maxHeight: maxHeight),
+                    child: child,
+                  ),
                 ),
               ),
             ),

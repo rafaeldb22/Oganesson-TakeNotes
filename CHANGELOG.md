@@ -2,6 +2,15 @@
 
 All notable changes to Oganesson TakeNotes (formerly *Notas* / *BabuNotes*).
 
+## [1.3.4] — 2026-11-21
+
+### Fixed
+- Calendar task lines change colour smoothly again: each day is a gradient from the colour at
+  its start to the colour at its end (using the task's real times), and the time that has
+  already passed is drawn slightly darker (today splits at the current time).
+- *Sign out* was unreachable: the ⋯ menu was taller than the window. The menu now fits the
+  screen (scrolling inside if needed) and has a sign-out button next to the account at the top.
+
 ## [1.3.3] — 2026-11-21
 
 ### Fixed

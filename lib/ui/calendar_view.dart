@@ -490,28 +490,76 @@ class _MonthGrid extends StatelessWidget {
     final e = _day(n.dueAt!.toLocal());
     final isStart = day == s || day.weekday == DateTime.monday;
     final isEnd = day == e || day.weekday == DateTime.sunday;
-    final total = e.difference(s).inDays;
-    final t = total <= 0 ? 1.0 : day.difference(s).inDays / total;
-    final passed = !day.isAfter(_day(DateTime.now()));
-    final color = n.done
-        ? Palette.secondary(context)
-        : paletteAt(fusePalette(n.color), t);
-    return Padding(
-      padding: EdgeInsets.only(
-          left: isStart ? 4 : 0, right: isEnd ? 4 : 0, bottom: 2),
-      child: Container(
-        height: 5,
-        decoration: BoxDecoration(
-          // Lo ya consumido en color pleno, lo que queda más suave.
-          color: color.withValues(
-              alpha: (passed ? 0.95 : 0.38) * (inMonth ? 1 : 0.45)),
-          borderRadius: BorderRadius.horizontal(
-            left: Radius.circular(isStart ? 3 : 0),
-            right: Radius.circular(isEnd ? 3 : 0),
-          ),
-        ),
-      ),
+    final radius = BorderRadius.horizontal(
+      left: Radius.circular(isStart ? 3 : 0),
+      right: Radius.circular(isEnd ? 3 : 0),
     );
+    final fade = inMonth ? 1.0 : 0.45;
+
+    Widget bar(Decoration d) => Padding(
+          padding: EdgeInsets.only(
+              left: isStart ? 4 : 0, right: isEnd ? 4 : 0, bottom: 2),
+          child: Container(height: 5, decoration: d),
+        );
+
+    if (n.done) {
+      return bar(BoxDecoration(
+        color: Palette.secondary(context).withValues(alpha: 0.6 * fade),
+        borderRadius: radius,
+      ));
+    }
+
+    // Degradado continuo: el tramo de cada día va del color de su inicio
+    // al de su final (con las horas reales de la tarea), así la línea
+    // cambia de color suavemente de un día a otro.
+    final start = n.periodStart.toLocal();
+    final due = n.dueAt!.toLocal();
+    final span = due.difference(start).inSeconds.toDouble();
+    double tAt(DateTime x) => span <= 0
+        ? 1.0
+        : (x.difference(start).inSeconds / span).clamp(0.0, 1.0);
+    final dayStart = day;
+    final dayEnd = day.add(const Duration(days: 1));
+    final t0 = tAt(dayStart), t1 = tAt(dayEnd);
+    final stops = fusePalette(n.color);
+    Color colorAt(double f) => paletteAt(stops, t0 + (t1 - t0) * f);
+
+    // Lo que ya pasó, un poco más oscuro; hoy se parte en la hora actual.
+    final now = DateTime.now();
+    final past = (now.difference(dayStart).inSeconds / 86400).clamp(0.0, 1.0);
+    Color darker(Color c) {
+      final hsl = HSLColor.fromColor(c);
+      return hsl
+          .withLightness((hsl.lightness - 0.16).clamp(0.0, 1.0))
+          .toColor();
+    }
+
+    final colors = <Color>[];
+    final positions = <double>[];
+    void add(double f, bool isPast) {
+      final c = colorAt(f);
+      colors.add((isPast ? darker(c) : c).withValues(alpha: 0.95 * fade));
+      positions.add(f);
+    }
+
+    if (past >= 1) {
+      add(0, true);
+      add(0.5, true);
+      add(1, true);
+    } else if (past <= 0) {
+      add(0, false);
+      add(0.5, false);
+      add(1, false);
+    } else {
+      add(0, true);
+      add(past, true);
+      add(past, false);
+      add(1, false);
+    }
+    return bar(BoxDecoration(
+      gradient: LinearGradient(colors: colors, stops: positions),
+      borderRadius: radius,
+    ));
   }
 }
 

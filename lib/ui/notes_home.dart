@@ -84,7 +84,6 @@ class _NotesHomeState extends State<NotesHome> {
   /// Desplazamiento suave de la lista con la rueda del ratón.
   final _listScroll = SmoothScrollController();
 
-
   /// Carpetas desplegadas en la lista (como las carpetas de Zen).
   final Set<String> _openFolders = {};
   static const _kOpenFolders = 'carpetas_abiertas';
@@ -1755,6 +1754,14 @@ class _MenuHeader extends StatelessWidget {
                       style: TextStyle(fontSize: 11.5, color: p.secondary)),
               ],
             ),
+          ),
+          // Cerrar sesión siempre a la vista, junto a la cuenta.
+          IconButton(
+            tooltip: tr('Cerrar sesión'),
+            visualDensity: VisualDensity.compact,
+            icon: Icon(Icons.logout_rounded,
+                size: 19, color: Theme.of(context).colorScheme.error),
+            onPressed: () => Navigator.of(context).pop('logout'),
           ),
         ],
       ),
