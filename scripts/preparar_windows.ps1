@@ -8,4 +8,5 @@ if (Test-Path test) { Remove-Item -Recurse -Force test }
 (Get-Content windows\runner\Runner.rc) -replace '"notas"', '"BabuNotes"' -replace 'notas\.exe', 'BabuNotes.exe' | Set-Content windows\runner\Runner.rc
 
 flutter pub get
-dart run flutter_launcher_icons
+dart run flutter_launcher_icons -f iconos-windows.yaml
+if ($LASTEXITCODE -ne 0) { throw "Fallo al generar el icono" }

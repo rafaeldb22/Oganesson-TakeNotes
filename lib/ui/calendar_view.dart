@@ -72,6 +72,10 @@ class _CalendarViewState extends State<CalendarView> {
           Expanded(
             child: AnimatedSwitcher(
               duration: Anim.medium,
+              layoutBuilder: (current, previous) => Stack(
+                alignment: Alignment.centerLeft,
+                children: [...previous, if (current != null) current],
+              ),
               transitionBuilder: (c, a) => FadeTransition(
                 opacity: a,
                 child: SlideTransition(
@@ -204,7 +208,7 @@ class _CalendarViewState extends State<CalendarView> {
         );
 
         return LayoutBuilder(builder: (context, c) {
-          final side = c.maxWidth >= 700;
+          final side = c.maxWidth >= 640;
 
           if (side) {
             // Calendario a la izquierda (llena el alto disponible) y las
@@ -228,9 +232,9 @@ class _CalendarViewState extends State<CalendarView> {
               child: ResizableSplit(
                 storageKey: 'calendario',
                 initialFraction: 0.64,
-                minLeft: 400,
+                minLeft: 380,
                 maxLeft: 1100,
-                minRight: 260,
+                minRight: 240,
                 left: RepaintBoundary(child: calendar),
                 right: RepaintBoundary(child: dayPanel),
               ),

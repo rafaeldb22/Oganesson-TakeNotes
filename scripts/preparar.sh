@@ -16,4 +16,4 @@ if [[ "$PLAT" == *android* ]]; then
 fi
 
 flutter pub get
-dart run flutter_launcher_icons
+dart run flutter_launcher_icons -f iconos-android.yaml
