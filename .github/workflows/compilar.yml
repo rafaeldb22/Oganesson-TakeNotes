@@ -3,6 +3,9 @@ name: Compilar Notas
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - '.github/workflows/probar-ventana.yml'
+      - 'scripts/probar_ventana.ps1'
   workflow_dispatch:
 
 permissions:

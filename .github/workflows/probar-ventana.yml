@@ -5,6 +5,9 @@ on:
     branches: [main]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   capturas:
     runs-on: windows-latest
@@ -33,3 +36,15 @@ jobs:
         with:
           name: capturas
           path: capturas/
+
+      - name: Guardar capturas en la rama "capturas"
+        if: always()
+        shell: pwsh
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git checkout --orphan capturas
+          git rm -r -q --cached .
+          git add capturas
+          git commit -q -m "capturas $env:GITHUB_RUN_NUMBER"
+          git push -f -q origin capturas
