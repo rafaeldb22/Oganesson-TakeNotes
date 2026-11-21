@@ -41,19 +41,19 @@ for ($i = 0; $i -lt 60 -and $script:h -eq [IntPtr]::Zero; $i++) {
 if ($script:h -eq [IntPtr]::Zero) { throw "No se encontró la ventana" }
 [W]::SetForegroundWindow($script:h) | Out-Null
 Start-Sleep 6
-Size 1200 780; Start-Sleep 3; Shot "01-inicio-1200"
+Size 1000 700; Start-Sleep 3; Shot "01-inicio"
 
 # Abrir la primera nota (lista a la izquierda)
-Click 200 300; Start-Sleep 2; Shot "02-nota-abierta"
+Click 200 375; Start-Sleep 2; Shot "02-nota-abierta"
 
 # Arrastre simulado: ir estrechando poco a poco (como con el ratón)
-for ($w = 1200; $w -ge 600; $w -= 20) { Size $w 780; Start-Sleep -Milliseconds 16 }
+for ($w = 1000; $w -ge 600; $w -= 20) { Size $w 700; Start-Sleep -Milliseconds 16 }
 Start-Sleep 2; Shot "03-tras-estrechar-600"
 
-for ($w = 600; $w -le 1400; $w += 20) { Size $w 860; Start-Sleep -Milliseconds 16 }
-Start-Sleep 2; Shot "04-tras-ensanchar-1400"
+for ($w = 600; $w -le 980; $w += 20) { Size $w 700; Start-Sleep -Milliseconds 16 }
+Start-Sleep 2; Shot "04-tras-ensanchar"
 
-for ($hh = 860; $hh -ge 560; $hh -= 15) { Size 1000 $hh; Start-Sleep -Milliseconds 16 }
+for ($hh = 700; $hh -ge 560; $hh -= 15) { Size 1000 $hh; Start-Sleep -Milliseconds 16 }
 Start-Sleep 2; Shot "05-tras-bajar-altura"
 
 [W]::ShowWindow($script:h, 3) | Out-Null; Start-Sleep 3; Shot "06-maximizada"

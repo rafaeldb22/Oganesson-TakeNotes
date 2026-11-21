@@ -189,7 +189,8 @@ class _NoteEditorState extends State<NoteEditor> {
       ),
       body: SafeArea(
         top: false,
-        child: Center(
+        child: _EditorBodyIntro(
+          child: Center(
           child: ConstrainedBox(
             // En ventanas muy anchas el texto no se estira de lado a lado.
             constraints: const BoxConstraints(maxWidth: 860),
@@ -234,7 +235,22 @@ class _NoteEditorState extends State<NoteEditor> {
             ),
           ),
         ),
+        ),
       ),
     );
+  }
+}
+
+/// Al abrir una nota, el texto aparece subiendo y fundiéndose suavemente.
+class _EditorBodyIntro extends StatelessWidget {
+  const _EditorBodyIntro({required this.child});
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return child
+        .animate()
+        .fadeIn(delay: 60.ms, duration: Anim.slow, curve: Anim.curve)
+        .slideY(begin: 0.04, duration: Anim.slow, curve: Anim.curve);
   }
 }

@@ -1,7 +1,10 @@
+import 'dart:async';
 import 'dart:io' show Platform;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:window_manager/window_manager.dart';
@@ -28,6 +31,7 @@ Future<void> main() async {
       await windowManager.show();
       await windowManager.focus();
     });
+    windowManager.addListener(_RepaintOnWindowChange());
   }
 
   await themeSettings.load();
@@ -40,6 +44,53 @@ Future<void> main() async {
     );
   }
   runApp(const NotasApp());
+}
+
+/// Algunas gráficas en Windows dejan zonas negras o sin texto tras cambiar
+/// el tamaño de la ventana. Al terminar cada cambio forzamos a repintar
+/// toda la interfaz desde cero (sin perder nada de lo que haya abierto).
+class _RepaintOnWindowChange with WindowListener {
+  Timer? _debounce;
+
+  void _schedule() {
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 120), forceFullRepaint);
+  }
+
+  @override
+  void onWindowResized() => _schedule();
+  @override
+  void onWindowResize() => _schedule();
+  @override
+  void onWindowMaximize() => _schedule();
+  @override
+  void onWindowUnmaximize() => _schedule();
+  @override
+  void onWindowRestore() => _schedule();
+  @override
+  void onWindowFocus() => _schedule();
+  @override
+  void onWindowMoved() => _schedule();
+}
+
+void forceFullRepaint() {
+  void visit(RenderObject o) {
+    o.markNeedsPaint();
+    o.visitChildren(visit);
+  }
+
+  for (final view in RendererBinding.instance.renderViews) {
+    visit(view);
+  }
+  SchedulerBinding.instance.scheduleForcedFrame();
+  // Un segundo pase un instante después, por si el primero llegó antes
+  // de que la gráfica terminara de redimensionar su superficie.
+  Timer(const Duration(milliseconds: 250), () {
+    for (final view in RendererBinding.instance.renderViews) {
+      visit(view);
+    }
+    SchedulerBinding.instance.scheduleForcedFrame();
+  });
 }
 
 class NotasApp extends StatelessWidget {
