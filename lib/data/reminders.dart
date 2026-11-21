@@ -106,14 +106,14 @@ class Reminders {
         (base + 1, due.subtract(const Duration(hours: 1)), 'Queda 1 hora: ${n.title}'),
         (base + 2, due, 'Se acaba el tiempo: ${n.title}'),
       ];
-      for (final (id, when, title) in avisos) {
-        if (!when.isAfter(now)) continue;
+      for (final (id, at, title) in avisos) {
+        if (!at.isAfter(now)) continue;
         try {
           await _plugin.zonedSchedule(
             id,
             title,
             n.preview == 'Sin texto adicional' ? null : n.preview,
-            tz.TZDateTime.from(when, tz.UTC),
+            tz.TZDateTime.from(at, tz.UTC),
             const NotificationDetails(
               android: AndroidNotificationDetails(
                 'recordatorios',
