@@ -2,6 +2,20 @@
 
 All notable changes to Oganesson TakeNotes (formerly *Notas* / *BabuNotes*).
 
+## [1.3.2] — 2026-11-21
+
+### Changed
+- Rounded swipe backgrounds: archiving / deleting now shows a rounded pill sliding over a
+  rounded tinted background (no square corners).
+- Better drag & drop: drop a note on the top or bottom half of another note to place it before
+  or after it (the insertion line shows where), including notes inside other folders or in
+  *Sin carpeta*, so you no longer have to aim at the folder name. The list scrolls by itself
+  when you drag near the top or bottom edge, and the dragged note follows the cursor.
+
+### Fixed
+- Windows: the time bar inside a note lagged behind when resizing the window; it now resizes
+  in the same frame (and the window repaints every frame while resizing).
+
 ## [1.3.1] — 2026-11-21
 
 ### Fixed

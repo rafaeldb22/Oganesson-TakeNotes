@@ -951,6 +951,9 @@ class _NotesHomeState extends State<NotesHome> {
                   ? _deleteNote(n.id)
                   : _archiveNote(n.id),
               onDropBefore: (dragged) => _dropBefore(dragged, n, notes),
+              onDropAfter: (dragged) =>
+                  _dropBefore(dragged, n, notes, after: true),
+              onDragMove: _autoScroll,
               onDragState: (dragging) =>
                   setState(() => _draggingNote = dragging ? n.id : null),
             ),
@@ -1042,19 +1045,47 @@ class _NotesHomeState extends State<NotesHome> {
 
   /// Soltar una nota encima de otra: se coloca justo antes, en su grupo
   /// (fijadas, su carpeta o sin carpeta).
-  void _dropBefore(String draggedId, Note target, List<Note> group) {
+  void _dropBefore(String draggedId, Note target, List<Note> group,
+      {bool after = false}) {
     final dragged = repo.byId(draggedId);
     if (dragged == null || draggedId == target.id) return;
     _ensureManualOrder();
     final g = group.where((n) => n.id != draggedId).toList()..sort(_byPosition);
     final i = g.indexWhere((n) => n.id == target.id);
     final cur = target.position ?? 0;
-    final prev = i > 0 ? g[i - 1].position : null;
-    final pos = prev == null ? cur - 1000 : (prev + cur) / 2;
+    final double pos;
+    if (after) {
+      final next = i + 1 < g.length ? g[i + 1].position : null;
+      pos = next == null ? cur + 1000 : (cur + next) / 2;
+    } else {
+      final prev = i > 0 ? g[i - 1].position : null;
+      pos = prev == null ? cur - 1000 : (prev + cur) / 2;
+    }
     repo.moveNote(draggedId,
         folderId: target.pinned ? dragged.folderId : target.folderId,
         position: pos);
     if (dragged.pinned != target.pinned) repo.togglePin(draggedId);
+  }
+
+  /// Arrastrando cerca del borde de arriba o de abajo, la lista se
+  /// desplaza sola (más rápido cuanto más cerca del borde).
+  void _autoScroll(Offset global) {
+    if (!_listScroll.hasClients) return;
+    final pos = _listScroll.position;
+    final box =
+        pos.context.notificationContext?.findRenderObject() as RenderBox?;
+    if (box == null || !box.hasSize) return;
+    final y = box.globalToLocal(global).dy;
+    const edge = 60.0;
+    double delta = 0;
+    if (y < edge) {
+      delta = -14 * (1 - (y / edge).clamp(0.0, 1.0));
+    } else if (y > box.size.height - edge) {
+      delta = 14 * (1 - ((box.size.height - y) / edge).clamp(0.0, 1.0));
+    }
+    if (delta == 0) return;
+    pos.jumpTo(
+        (pos.pixels + delta).clamp(pos.minScrollExtent, pos.maxScrollExtent));
   }
 
   /// Soltar una nota en una carpeta, en "Sin carpeta" o en "Fijadas".
@@ -1102,7 +1133,9 @@ class _NoteTile extends StatefulWidget {
     required this.onOptions,
     required this.onDismissed,
     required this.onDropBefore,
+    required this.onDropAfter,
     required this.onDragState,
+    required this.onDragMove,
   });
 
   final bool removing;
@@ -1116,8 +1149,14 @@ class _NoteTile extends StatefulWidget {
   /// Deslizar: hacia la derecha elimina, hacia la izquierda archiva.
   final void Function(DismissDirection direction) onDismissed;
 
-  /// Se ha soltado otra nota encima: colocarla antes de esta.
+  /// Se ha soltado otra nota en la mitad de arriba: colocarla antes.
   final void Function(String draggedId) onDropBefore;
+
+  /// Se ha soltado otra nota en la mitad de abajo: colocarla después.
+  final void Function(String draggedId) onDropAfter;
+
+  /// El cursor se mueve arrastrando esta nota (para desplazar la lista).
+  final void Function(Offset globalPosition) onDragMove;
 
   /// Empieza (true) o termina (false) el arrastre de esta nota.
   final void Function(bool dragging) onDragState;
@@ -1129,6 +1168,10 @@ class _NoteTile extends StatefulWidget {
 class _NoteTileState extends State<_NoteTile> {
   bool _hover = false;
   bool _dropHover = false; // otra nota arrastrada encima
+  bool _dropAfter = false; // ...en la mitad de abajo
+
+  /// Punto de la nota arrastrada que queda bajo el cursor.
+  static const _anchor = Offset(26, 22);
   double _dragDistance = 0;
 
   @override
@@ -1159,10 +1202,14 @@ class _NoteTileState extends State<_NoteTile> {
                 color: color, fontWeight: FontWeight.w700, fontSize: 13.5)),
       ];
       return Container(
-        color: Color.alphaBlend(
-            color.withValues(alpha: 0.12), Palette.card(context)),
+        margin: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
+        decoration: BoxDecoration(
+          color: Color.alphaBlend(
+              color.withValues(alpha: 0.14), Palette.card(context)),
+          borderRadius: BorderRadius.circular(10),
+        ),
         alignment: left ? Alignment.centerLeft : Alignment.centerRight,
-        padding: const EdgeInsets.symmetric(horizontal: 18),
+        padding: const EdgeInsets.symmetric(horizontal: 14),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: left ? content : content.reversed.toList(),
@@ -1188,114 +1235,109 @@ class _NoteTileState extends State<_NoteTile> {
         onExit: (_) => setState(() => _hover = false),
         child: Bouncy(
           pressedScale: 0.975,
-          child: ColoredBox(
-            color: Palette.card(context),
-            child: AnimatedContainer(
-              duration: Anim.medium,
-              curve: Anim.curve,
-              margin: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
-              clipBehavior: Clip.antiAlias,
-              decoration: BoxDecoration(
-                color: bg,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: InkWell(
-                // El fondo ya cambia con _hover: sin capa gris del InkWell.
-                hoverColor: Colors.transparent,
-                borderRadius: BorderRadius.circular(10),
-                onTap: widget.onTap,
-                // En Android la pulsación larga arrastra la nota (si se suelta
-                // sin moverla, abre las opciones).
-                onLongPress: _touchDrag ? null : () => widget.onOptions(null),
-                onSecondaryTapUp: (d) => widget.onOptions(d.globalPosition),
-                child: Padding(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 11, vertical: 8),
-                  child: Row(
-                    children: [
-                      // Franja con el color elegido para la nota.
-                      AnimatedContainer(
-                        duration: Anim.medium,
-                        width: n.color == null ? 0 : 4,
-                        height: 38,
-                        margin:
-                            EdgeInsets.only(right: n.color == null ? 0 : 12),
-                        decoration: BoxDecoration(
-                          gradient: n.color == null
-                              ? null
-                              : LinearGradient(
-                                  begin: Alignment.topCenter,
-                                  end: Alignment.bottomCenter,
-                                  colors: fusePalette(n.color)),
-                          borderRadius: BorderRadius.circular(2),
-                        ),
+          child: AnimatedContainer(
+            duration: Anim.medium,
+            curve: Anim.curve,
+            margin: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
+            clipBehavior: Clip.antiAlias,
+            decoration: BoxDecoration(
+              color: bg,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: InkWell(
+              // El fondo ya cambia con _hover: sin capa gris del InkWell.
+              hoverColor: Colors.transparent,
+              borderRadius: BorderRadius.circular(10),
+              onTap: widget.onTap,
+              // En Android la pulsación larga arrastra la nota (si se suelta
+              // sin moverla, abre las opciones).
+              onLongPress: _touchDrag ? null : () => widget.onOptions(null),
+              onSecondaryTapUp: (d) => widget.onOptions(d.globalPosition),
+              child: Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 11, vertical: 8),
+                child: Row(
+                  children: [
+                    // Franja con el color elegido para la nota.
+                    AnimatedContainer(
+                      duration: Anim.medium,
+                      width: n.color == null ? 0 : 4,
+                      height: 38,
+                      margin: EdgeInsets.only(right: n.color == null ? 0 : 12),
+                      decoration: BoxDecoration(
+                        gradient: n.color == null
+                            ? null
+                            : LinearGradient(
+                                begin: Alignment.topCenter,
+                                end: Alignment.bottomCenter,
+                                colors: fusePalette(n.color)),
+                        borderRadius: BorderRadius.circular(2),
                       ),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              n.title,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                  fontSize: 16, fontWeight: FontWeight.w600),
-                            ),
-                            const SizedBox(height: 3),
-                            Row(
-                              children: [
-                                Text(fechaCorta(n.updatedAt),
-                                    style: const TextStyle(fontSize: 14)),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Text(
-                                    n.preview,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(
-                                        fontSize: 14,
-                                        color: Palette.secondary(context)),
-                                  ),
+                    ),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            n.title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                                fontSize: 16, fontWeight: FontWeight.w600),
+                          ),
+                          const SizedBox(height: 3),
+                          Row(
+                            children: [
+                              Text(fechaCorta(n.updatedAt),
+                                  style: const TextStyle(fontSize: 14)),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  n.preview,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                      fontSize: 14,
+                                      color: Palette.secondary(context)),
                                 ),
-                              ],
-                            ),
-                            if (n.isTemporal) ...[
-                              const SizedBox(height: 7),
-                              Row(
-                                children: [
-                                  Icon(Icons.alarm,
-                                      size: 13,
-                                      color: urgencyColor(context, n)),
-                                  const SizedBox(width: 6),
-                                  Expanded(
-                                      child: TimeBar(note: n, compact: true)),
-                                  const SizedBox(width: 8),
-                                  Text(tiempoRestante(n.dueAt!, done: n.done),
-                                      style: TextStyle(
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.w600,
-                                          color: urgencyColor(context, n))),
-                                ],
                               ),
                             ],
+                          ),
+                          if (n.isTemporal) ...[
+                            const SizedBox(height: 7),
+                            Row(
+                              children: [
+                                Icon(Icons.alarm,
+                                    size: 13, color: urgencyColor(context, n)),
+                                const SizedBox(width: 6),
+                                Expanded(
+                                    child: TimeBar(note: n, compact: true)),
+                                const SizedBox(width: 8),
+                                Text(tiempoRestante(n.dueAt!, done: n.done),
+                                    style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w600,
+                                        color: urgencyColor(context, n))),
+                              ],
+                            ),
                           ],
-                        ),
+                        ],
                       ),
-                      AnimatedSwitcher(
-                        duration: Anim.medium,
-                        transitionBuilder: (c, a) =>
-                            ScaleTransition(scale: a, child: c),
-                        child: n.pinned
-                            ? Padding(
-                                key: const ValueKey('pin'),
-                                padding: const EdgeInsets.only(left: 8),
-                                child: Icon(Icons.push_pin,
-                                    size: 16, color: Palette.accent(context)),
-                              )
-                            : const SizedBox(key: ValueKey('nopin')),
-                      ),
-                    ],
-                  ),
+                    ),
+                    AnimatedSwitcher(
+                      duration: Anim.medium,
+                      transitionBuilder: (c, a) =>
+                          ScaleTransition(scale: a, child: c),
+                      child: n.pinned
+                          ? Padding(
+                              key: const ValueKey('pin'),
+                              padding: const EdgeInsets.only(left: 8),
+                              child: Icon(Icons.push_pin,
+                                  size: 16, color: Palette.accent(context)),
+                            )
+                          : const SizedBox(key: ValueKey('nopin')),
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -1325,24 +1367,39 @@ class _NoteTileState extends State<_NoteTile> {
     );
 
     // Soltar otra nota encima: línea de inserción arriba.
+    // Soltar otra nota encima: en la mitad de arriba va antes, en la de
+    // abajo después (la línea de inserción lo muestra).
     final target = DragTarget<String>(
-      onWillAcceptWithDetails: (d) {
-        final ok = d.data != n.id;
-        if (ok != _dropHover) setState(() => _dropHover = ok);
-        return ok;
+      onWillAcceptWithDetails: (d) => d.data != n.id,
+      onMove: (d) {
+        if (d.data == n.id) return;
+        final box = context.findRenderObject() as RenderBox?;
+        if (box == null) return;
+        final local = box.globalToLocal(d.offset + _anchor);
+        final after = local.dy > box.size.height / 2;
+        if (!_dropHover || after != _dropAfter) {
+          setState(() {
+            _dropHover = true;
+            _dropAfter = after;
+          });
+        }
       },
       onLeave: (_) => setState(() => _dropHover = false),
       onAcceptWithDetails: (d) {
+        final after = _dropAfter;
         setState(() => _dropHover = false);
-        widget.onDropBefore(d.data);
+        after ? widget.onDropAfter(d.data) : widget.onDropBefore(d.data);
       },
       builder: (context, _, __) => Stack(
         children: [
           animated,
-          Positioned(
-            left: 12,
-            right: 12,
-            top: 0,
+          AnimatedPositioned(
+            duration: Anim.fast,
+            curve: Anim.curve,
+            left: 14,
+            right: 14,
+            top: _dropAfter ? null : 0,
+            bottom: _dropAfter ? 0 : null,
             child: AnimatedContainer(
               duration: Anim.fast,
               height: _dropHover ? 3 : 0,
@@ -1406,7 +1463,11 @@ class _NoteTileState extends State<_NoteTile> {
           childWhenDragging: dimmed,
           hapticFeedbackOnStart: true,
           onDragStarted: started,
-          onDragUpdate: (d) => _dragDistance += d.delta.distance,
+          dragAnchorStrategy: (_, __, ___) => _anchor,
+          onDragUpdate: (d) {
+            _dragDistance += d.delta.distance;
+            widget.onDragMove(d.globalPosition);
+          },
           onDragEnd: (d) {
             ended();
             // Soltada casi sin moverla: era una pulsación larga normal.
@@ -1420,6 +1481,8 @@ class _NoteTileState extends State<_NoteTile> {
         affinity: Axis.vertical,
         feedback: feedback,
         childWhenDragging: dimmed,
+        dragAnchorStrategy: (_, __, ___) => _anchor,
+        onDragUpdate: (d) => widget.onDragMove(d.globalPosition),
         onDragStarted: started,
         onDragEnd: (_) => ended(),
         child: target,

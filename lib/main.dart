@@ -63,16 +63,31 @@ Future<void> main() async {
 /// toda la interfaz desde cero (sin perder nada de lo que haya abierto).
 class _RepaintOnWindowChange with WindowListener {
   Timer? _debounce;
+  bool _framePending = false;
 
   void _schedule() {
     _debounce?.cancel();
     _debounce = Timer(const Duration(milliseconds: 220), forceFullRepaint);
   }
 
+  /// Mientras se arrastra el borde: repintar en cada frame (como mucho una
+  /// vez por frame) para que todo siga a la ventana sin retraso.
+  void _duringResize() {
+    if (!_framePending) {
+      _framePending = true;
+      SchedulerBinding.instance.addPostFrameCallback((_) {
+        _framePending = false;
+        forceFullRepaint();
+      });
+      SchedulerBinding.instance.scheduleFrame();
+    }
+    _schedule();
+  }
+
   @override
   void onWindowResized() => _schedule();
   @override
-  void onWindowResize() => _schedule();
+  void onWindowResize() => _duringResize();
   @override
   void onWindowMaximize() => _schedule();
   @override

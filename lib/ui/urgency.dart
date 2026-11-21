@@ -205,18 +205,22 @@ class _FuseBarState extends State<FuseBar> with TickerProviderStateMixin {
       child: SizedBox(
         height: widget.height + pad * 2,
         width: double.infinity,
-        child: CustomPaint(
-          painter: _FusePainter(
-            progress: widget.progress,
-            barHeight: widget.height,
-            track: track,
-            flicker: _flicker,
-            grow: CurvedAnimation(parent: _grow, curve: Anim.curve),
-            spark: widget.spark,
-            dimmed: widget.dimmed,
-            colors: widget.colors,
-          ),
-        ),
+        // El ancho va al pintor: al cambiar el tamaño de la ventana la mecha
+        // se repinta en el mismo frame (antes esperaba al repintado tardío).
+        child: LayoutBuilder(
+            builder: (context, c) => CustomPaint(
+                  painter: _FusePainter(
+                    width: c.maxWidth,
+                    progress: widget.progress,
+                    barHeight: widget.height,
+                    track: track,
+                    flicker: _flicker,
+                    grow: CurvedAnimation(parent: _grow, curve: Anim.curve),
+                    spark: widget.spark,
+                    dimmed: widget.dimmed,
+                    colors: widget.colors,
+                  ),
+                )),
       ),
     );
   }
@@ -224,6 +228,7 @@ class _FuseBarState extends State<FuseBar> with TickerProviderStateMixin {
 
 class _FusePainter extends CustomPainter {
   _FusePainter({
+    required this.width,
     required this.progress,
     required this.barHeight,
     required this.track,
@@ -243,6 +248,7 @@ class _FusePainter extends CustomPainter {
   final Animation<double> grow;
   final bool spark;
   final bool dimmed;
+  final double width;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -292,6 +298,7 @@ class _FusePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_FusePainter old) =>
+      old.width != width ||
       old.progress != progress ||
       old.track != track ||
       old.spark != spark ||
