@@ -66,7 +66,12 @@ class _NoteEditorState extends State<NoteEditor> {
     }
     final d = Document();
     final text = n?.content ?? '';
-    if (text.isNotEmpty) d.insert(0, text);
+    if (text.isNotEmpty) {
+      d.insert(0, text);
+      // La primera línea de las notas de texto plano se ve como título.
+      final first = text.indexOf('\n');
+      d.format(0, first == -1 ? text.length : first, Attribute.h1);
+    }
     return d;
   }
 
@@ -85,6 +90,11 @@ class _NoteEditorState extends State<NoteEditor> {
       document: _docFor(n),
       selection: const TextSelection.collapsed(offset: 0),
     );
+    // Nota nueva: lo primero que escribas sale en grande, como un título.
+    // Al pulsar Intro la siguiente línea ya es texto normal.
+    if (_ctrl.document.toPlainText().trim().isEmpty) {
+      _ctrl.formatSelection(Attribute.h1);
+    }
     _lastSaved = _richJson();
     _ctrl.addListener(_onEdit);
     repo.addListener(_onRepo);

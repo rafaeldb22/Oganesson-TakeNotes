@@ -1,15 +1,17 @@
-name: Probar ventana Windows
+name: Windows window test
 
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - '**.md'
   workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
-  capturas:
+  screenshots:
     runs-on: windows-2022
     steps:
       - uses: actions/checkout@v4
@@ -19,30 +21,30 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Preparar y compilar (modo DEMO)
+      - name: Prepare and build (DEMO mode, sample notes)
         shell: pwsh
         run: |
-          ./scripts/preparar_windows.ps1
+          ./scripts/prepare_windows.ps1
           flutter build windows --release --dart-define=DEMO=true
 
-      - name: Abrir, redimensionar y capturar
+      - name: Open, resize and take screenshots
         shell: pwsh
-        run: ./scripts/probar_ventana.ps1 -Exe "build\windows\x64\runner\Release\BabuNotes.exe"
+        run: ./scripts/window_test.ps1 -Exe "build\windows\x64\runner\Release\Oganesson.exe"
 
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: capturas
-          path: capturas/
+          name: screenshots
+          path: screenshots/
 
-      - name: Guardar capturas en la rama "capturas"
+      - name: Store screenshots in the "screenshots" branch
         if: always()
         shell: pwsh
         run: |
           git config user.name "github-actions"
           git config user.email "actions@github.com"
-          git checkout --orphan capturas
+          git checkout --orphan screenshots
           git rm -r -q --cached .
-          git add capturas
-          git commit -q -m "capturas $env:GITHUB_RUN_NUMBER"
-          git push -f -q origin capturas
+          git add screenshots
+          git commit -q -m "screenshots $env:GITHUB_RUN_NUMBER"
+          git push -f -q origin screenshots

@@ -18,7 +18,7 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="BabuNotes"
+            android:text="Oganesson"
             android:textColor="@color/widget_accent"
             android:textSize="13sp"
             android:textStyle="bold" />

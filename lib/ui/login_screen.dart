@@ -125,7 +125,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     const SizedBox(height: 12),
                     ...<Widget>[
                     const Center(
-                        child: WaveTitle(text: 'babunotes', fontSize: 40)),
+                        child: WaveTitle(text: 'oganesson', fontSize: 40)),
                     const SizedBox(height: 8),
                     Text(
                       'Usa la misma cuenta en el móvil y en el PC para que '

@@ -1,4 +1,4 @@
--- Migración 2: carpetas, texto con formato y notas temporales.
+-- Migration 2: folders, rich text and temporary notes (deadlines).
 alter table public.notes add column if not exists folder_id uuid;
 alter table public.notes add column if not exists rich text;
 alter table public.notes add column if not exists remind_at timestamptz;

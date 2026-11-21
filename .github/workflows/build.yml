@@ -1,0 +1,148 @@
+name: Build Oganesson
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - '.github/workflows/window-test.yml'
+      - 'scripts/window_test.ps1'
+      - '**.md'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  android:
+    name: Android APK
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Prepare Android project
+        run: bash scripts/prepare_android.sh
+
+      - name: Fixed signing key (so updates install over the previous version)
+        run: |
+          mkdir -p ~/.android
+          cp platform/android/debug.keystore ~/.android/debug.keystore
+
+      - name: Build APK
+        run: flutter build apk --release --build-number=${{ github.run_number }}
+
+      - run: cp build/app/outputs/flutter-apk/app-release.apk Oganesson.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android
+          path: Oganesson.apk
+
+  windows:
+    name: Windows app + installer
+    # VS 2022: the Windows notifications plugin does not build with MSVC 14.52.
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Prepare Windows project
+        shell: pwsh
+        run: ./scripts/prepare_windows.ps1
+
+      - name: Build
+        shell: pwsh
+        run: flutter build windows --release --build-number=${{ github.run_number }}
+
+      - name: Bundle the Visual C++ runtime DLLs
+        shell: pwsh
+        run: |
+          $out = "build\windows\x64\runner\Release"
+          foreach ($dll in "msvcp140.dll", "vcruntime140.dll", "vcruntime140_1.dll") {
+            $src = Join-Path $env:WINDIR "System32\$dll"
+            if (Test-Path $src) { Copy-Item $src $out }
+          }
+
+      - name: Build installer (Inno Setup)
+        shell: pwsh
+        run: |
+          $version = (Select-String -Path pubspec.yaml -Pattern '^version:\s*([0-9.]+)').Matches[0].Groups[1].Value
+          $env:APP_VERSION = $version
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) {
+            choco install innosetup -y --no-progress
+          }
+          & $iscc installer\oganesson.iss
+          if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed" }
+
+      - name: Portable zip
+        shell: pwsh
+        run: Compress-Archive -Path "build\windows\x64\runner\Release\*" -DestinationPath dist\Oganesson-Windows-portable.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: |
+            dist/Oganesson-Setup.exe
+            dist/Oganesson-Windows-portable.zip
+
+  release:
+    name: Publish release
+    needs: [android, windows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Release notes from CHANGELOG.md
+        id: notes
+        run: |
+          VERSION=$(grep '^version:' pubspec.yaml | sed -E 's/version: *//; s/\+.*//')
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          {
+            echo "## Download"
+            echo
+            echo "| Platform | File |"
+            echo "|---|---|"
+            echo "| Windows (installer) | **Oganesson-Setup.exe** |"
+            echo "| Windows (portable) | Oganesson-Windows-portable.zip |"
+            echo "| Android | **Oganesson.apk** |"
+            echo
+            echo "## What's new"
+            echo
+            awk -v v="$VERSION" '
+              $0 ~ "^## \\[" v "\\]" {found=1; next}
+              found && /^## \[/ {exit}
+              found {print}
+            ' CHANGELOG.md
+            echo
+            echo "_Build ${{ github.run_number }}_"
+          } > dist/notes.md
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.notes.outputs.version }}
+          name: Oganesson ${{ steps.notes.outputs.version }}
+          body_path: dist/notes.md
+          make_latest: true
+          files: |
+            dist/Oganesson.apk
+            dist/Oganesson-Setup.exe
+            dist/Oganesson-Windows-portable.zip

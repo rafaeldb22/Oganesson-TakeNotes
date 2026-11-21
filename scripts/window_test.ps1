@@ -1,8 +1,8 @@
-# Abre la app (modo DEMO), cambia el tamaño de la ventana de varias formas
-# y hace capturas para comprobar que se repinta bien.
+# Opens the app (DEMO mode), resizes the window in several ways and takes
+# screenshots to check that it repaints correctly.
 param([string]$Exe)
 $ErrorActionPreference = 'Stop'
-New-Item -ItemType Directory -Force -Path capturas | Out-Null
+New-Item -ItemType Directory -Force -Path screenshots | Out-Null
 
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing
 Add-Type @"
@@ -23,9 +23,9 @@ function Shot($name) {
   $bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height
   $g = [System.Drawing.Graphics]::FromImage($bmp)
   $g.CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size)
-  $bmp.Save("capturas\$name.png")
+  $bmp.Save("screenshots\$name.png")
   $g.Dispose(); $bmp.Dispose()
-  Write-Host "captura $name"
+  Write-Host "screenshot $name"
 }
 function Click($x, $y) {
   [W]::SetCursorPos($x, $y) | Out-Null; Start-Sleep -Milliseconds 100
@@ -38,30 +38,30 @@ $script:h = [IntPtr]::Zero
 for ($i = 0; $i -lt 60 -and $script:h -eq [IntPtr]::Zero; $i++) {
   Start-Sleep -Milliseconds 500; $p.Refresh(); $script:h = $p.MainWindowHandle
 }
-if ($script:h -eq [IntPtr]::Zero) { throw "No se encontró la ventana" }
+if ($script:h -eq [IntPtr]::Zero) { throw "Window not found" }
 [W]::SetForegroundWindow($script:h) | Out-Null
 Start-Sleep 6
-Size 1000 700; Start-Sleep 3; Shot "01-inicio"
+Size 1000 700; Start-Sleep 3; Shot "01-start"
 
-# Abrir una nota (lista a la izquierda)
-Click 200 430; Start-Sleep 3; Shot "02-nota-abierta"
-Click 210 200; Start-Sleep 3; Shot "02b-temporales"
-Click 330 200; Start-Sleep 3; Shot "02c-calendario"
+# Open a note (list on the left)
+Click 200 430; Start-Sleep 3; Shot "02-note-open"
+Click 210 200; Start-Sleep 3; Shot "02b-folder"
+Click 282 703; Start-Sleep 3; Shot "02c-calendar"
 Click 105 200; Start-Sleep 2
 
-# Arrastre simulado: ir estrechando poco a poco (como con el ratón)
+# Simulated drag: shrink step by step (like dragging with the mouse)
 for ($w = 1000; $w -ge 600; $w -= 20) { Size $w 700; Start-Sleep -Milliseconds 16 }
-Start-Sleep 2; Shot "03-tras-estrechar-600"
+Start-Sleep 2; Shot "03-after-shrinking"
 
 for ($w = 600; $w -le 980; $w += 20) { Size $w 700; Start-Sleep -Milliseconds 16 }
-Start-Sleep 2; Shot "04-tras-ensanchar"
+Start-Sleep 2; Shot "04-after-widening"
 
 for ($hh = 700; $hh -ge 560; $hh -= 15) { Size 1000 $hh; Start-Sleep -Milliseconds 16 }
-Start-Sleep 2; Shot "05-tras-bajar-altura"
+Start-Sleep 2; Shot "05-after-lower-height"
 
-[W]::ShowWindow($script:h, 3) | Out-Null; Start-Sleep 3; Shot "06-maximizada"
-[W]::ShowWindow($script:h, 9) | Out-Null; Start-Sleep 3; Shot "07-restaurada"
+[W]::ShowWindow($script:h, 3) | Out-Null; Start-Sleep 3; Shot "06-maximized"
+[W]::ShowWindow($script:h, 9) | Out-Null; Start-Sleep 3; Shot "07-restored"
 [W]::ShowWindow($script:h, 6) | Out-Null; Start-Sleep 2
-[W]::ShowWindow($script:h, 9) | Out-Null; Start-Sleep 3; Shot "08-tras-minimizar"
+[W]::ShowWindow($script:h, 9) | Out-Null; Start-Sleep 3; Shot "08-after-minimize"
 
 Stop-Process -Id $p.Id -Force

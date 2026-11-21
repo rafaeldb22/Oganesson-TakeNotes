@@ -15,6 +15,7 @@ import 'data/reminders.dart';
 import 'data/widget_bridge.dart';
 import 'ui/auth_gate.dart';
 import 'ui/theme.dart';
+import 'ui/title_bar.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -27,7 +28,9 @@ Future<void> main() async {
       size: Size(1100, 720),
       minimumSize: Size(760, 540),
       center: true,
-      title: 'BabuNotes',
+      title: 'Oganesson',
+      // Sin la barra de Windows: la app dibuja la suya (como Chrome).
+      titleBarStyle: TitleBarStyle.hidden,
     );
     windowManager.waitUntilReadyToShow(options, () async {
       await windowManager.show();
@@ -92,7 +95,7 @@ class NotasApp extends StatelessWidget {
     return ListenableBuilder(
       listenable: themeSettings,
       builder: (context, _) => MaterialApp(
-      title: 'BabuNotes',
+      title: 'Oganesson',
       debugShowCheckedModeBanner: false,
       theme: buildTheme(themeSettings.theme, Brightness.light),
       darkTheme: buildTheme(themeSettings.theme, Brightness.dark),
@@ -108,6 +111,15 @@ class NotasApp extends StatelessWidget {
         GlobalCupertinoLocalizations.delegate,
         FlutterQuillLocalizations.delegate,
       ],
+      // En Windows, barra de título propia encima de todas las pantallas.
+      builder: (context, child) => isDesktopWindows
+          ? Column(
+              children: [
+                const AppTitleBar(),
+                Expanded(child: child ?? const SizedBox()),
+              ],
+            )
+          : (child ?? const SizedBox()),
       home: AppConfig.isConfigured ? const AuthGate() : const _MissingConfig(),
       ),
     );

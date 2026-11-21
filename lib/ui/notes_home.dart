@@ -45,7 +45,7 @@ class _NotesHomeState extends State<NotesHome> {
   bool _openAutofocus = false;
   StreamSubscription<Uri?>? _widgetSub;
 
-  /// 'todas' | 'temporales' | 'calendario' | id de carpeta
+  /// 'todas' | 'calendario' | id de carpeta
   String _filter = 'todas';
 
   // Cachés para que al redimensionar la ventana no se reconstruya todo.
@@ -55,7 +55,7 @@ class _NotesHomeState extends State<NotesHome> {
   Object? _editorKey;
 
   bool get _isFolderFilter =>
-      !const {'todas', 'temporales', 'calendario'}.contains(_filter);
+      !const {'todas', 'calendario'}.contains(_filter);
 
   NotesRepository get repo => widget.repo;
 
@@ -93,7 +93,7 @@ class _NotesHomeState extends State<NotesHome> {
   void _newNote() {
     final n = repo.createNote(folderId: _isFolderFilter ? _filter : null);
     _open(n.id, autofocus: true);
-    if (_filter == 'temporales' || _filter == 'calendario') {
+    if (_filter == 'calendario') {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) showScheduleSheet(context, repo, n.id);
       });
@@ -374,12 +374,10 @@ class _NotesHomeState extends State<NotesHome> {
 
   Widget _buildList(BuildContext context, bool wide) {
     final q = _query.toLowerCase();
-    final timeView = _filter == 'temporales' || _filter == 'calendario';
     final all = repo.notes
         .where((n) => !n.isEmpty || n.id == _openId)
         .where((n) => q.isEmpty || n.content.toLowerCase().contains(q))
         .where((n) => !_isFolderFilter || n.folderId == _filter)
-        .where((n) => !timeView || n.isTemporal)
         .toList();
     final pinned = all.where((n) => n.pinned).toList();
     final others = all.where((n) => !n.pinned).toList();
@@ -392,9 +390,7 @@ class _NotesHomeState extends State<NotesHome> {
     } else if (_filter == 'calendario' && !wide) {
       body = _calendar();
     } else if (all.isEmpty) {
-      body = _EmptyList(searching: q.isNotEmpty, timeView: timeView);
-    } else if (timeView) {
-      body = _timeList(context, all);
+      body = _EmptyList(searching: q.isNotEmpty);
     } else {
       var index = 0;
       body = RefreshIndicator(
@@ -418,7 +414,7 @@ class _NotesHomeState extends State<NotesHome> {
       appBar: AppBar(
         centerTitle: false,
         titleSpacing: 20,
-        title: const WaveTitle(text: 'babunotes', fontSize: 30)
+        title: const WaveTitle(text: 'oganesson', fontSize: 30)
             .animate()
             .fadeIn(duration: Anim.slow),
         actions: [
@@ -584,55 +580,6 @@ class _NotesHomeState extends State<NotesHome> {
           ),
         ),
       ),
-    );
-  }
-
-  Widget _timeList(BuildContext context, List<Note> notes) {
-    final sorted = [...notes]..sort((a, b) => a.dueAt!.compareTo(b.dueAt!));
-    final groups = <String, List<Note>>{};
-    for (final n in sorted) {
-      groups.putIfAbsent(grupoTemporal(n.dueAt!, done: n.done), () => []).add(n);
-    }
-    var i = 0;
-    return ListView(
-      key: PageStorageKey('lista-tiempo-$_filter'),
-      padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
-      children: [
-        for (final g in ordenGrupos)
-          if (groups[g] != null) ...[
-            Padding(
-              padding: const EdgeInsets.fromLTRB(4, 14, 4, 8),
-              child: Row(
-                children: [
-                  Text(g,
-                      style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w700,
-                          color: g == 'Vencidas'
-                              ? const Color(0xFFE5484D)
-                              : null)),
-                  const SizedBox(width: 8),
-                  Text('${groups[g]!.length}',
-                      style: TextStyle(color: Palette.secondary(context))),
-                ],
-              ),
-            ),
-            for (final n in groups[g]!)
-              Padding(
-                key: ValueKey('t-${n.id}'),
-                padding: const EdgeInsets.only(bottom: 10),
-                child: TempCard(
-                  note: n,
-                  onOpen: () => _open(n.id),
-                  onEditDates: () => showScheduleSheet(context, repo, n.id),
-                  onToggleDone: () => repo.toggleDone(n.id),
-                )
-                    .animate(delay: (min(i++, 10) * 40).ms)
-                    .fadeIn(duration: Anim.medium)
-                    .slideY(begin: 0.2, curve: Anim.curve),
-              ),
-          ],
-      ],
     );
   }
 

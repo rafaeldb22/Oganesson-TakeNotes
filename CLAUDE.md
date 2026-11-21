@@ -1,70 +1,67 @@
-# BabuNotes
+# Oganesson TakeNotes
 
-App de notas estilo iPhone para **Android (APK + widget 2x2)** y **Windows**, hecha en
-**Flutter** y sincronizada en tiempo real con **Supabase**. El usuario (Rafa) habla en
-español: responde y escribe los textos de la interfaz en español.
+iPhone-style notes app for **Android (APK + home-screen widgets)** and **Windows**, built
+with **Flutter** and synced in real time with **Supabase**. The owner (Rafa) speaks
+Spanish: reply to him in Spanish and keep the app's UI text in Spanish. Repository
+documentation, workflows and commit messages are in English.
 
-## Ejecutar en local (Windows)
+## Run locally (Windows)
 
-Requisitos: Flutter estable (3.50+), Git y Visual Studio **2022** con la carga
-"Desarrollo para el escritorio con C++" (VS 2026 / MSVC 14.52 no compila el plugin
-de notificaciones de Windows por `/await`).
+Requirements: Flutter stable (3.50+), Git and Visual Studio **2022** with the
+"Desktop development with C++" workload (VS 2026 / MSVC 14.52 cannot build the Windows
+notifications plugin because of `/await`).
 
 ```powershell
-./scripts/preparar_windows.ps1     # genera windows/, nombre BabuNotes e icono
-flutter run -d windows              # o: flutter build windows --release
+./scripts/prepare_windows.ps1     # generates windows/, sets the Oganesson name and icon
+flutter run -d windows             # or: flutter build windows --release
 ```
 
-Android (con un móvil conectado o un emulador):
+Android (device or emulator connected):
 
 ```bash
-bash scripts/preparar.sh android    # genera android/, copia widget/manifest, parchea desugaring, iconos
-flutter run -d <id-del-movil>
+bash scripts/prepare_android.sh    # generates android/, copies widgets/manifest, desugaring, icons
+flutter run -d <device-id>
 ```
 
-`android/`, `windows/` y `test/` **no** están en git: se generan con `flutter create`
-mediante los scripts. Los archivos propios de Android viven en `plataforma/android/`
-y se copian encima (widget Kotlin, layout, manifest con permisos de notificaciones).
+`android/`, `windows/` and `test/` are **not** in git: the scripts generate them with
+`flutter create`. Custom Android files live in `platform/android/` and are copied on top
+(Kotlin widgets, layouts, manifest with notification permissions).
 
-Modo demo sin cuenta (notas de ejemplo): `--dart-define=DEMO=true`.
+Demo mode without an account (sample notes): `--dart-define=DEMO=true`.
 
-## Estructura
+## Structure
 
-- `lib/main.dart` — arranque, ventana de Windows (window_manager 0.5.x, tamaño mínimo,
-  repintado tras redimensionar), tema animado.
-- `lib/config.dart` — URL y clave *publishable* de Supabase (públicas por diseño; la
-  seguridad es RLS).
-- `lib/models/note.dart` — `Note` (texto plano + `rich` Delta Quill, carpeta,
-  `remindAt`/`dueAt`/`done` para temporales) y `Folder`.
-- `lib/data/notes_repository.dart` — caché local (SharedPreferences), cola de cambios,
-  upsert a Supabase, realtime de `notes` y `folders`, gana la edición más reciente.
-- `lib/data/reminders.dart` — avisos con flutter_local_notifications (Android y Windows).
-- `lib/data/widget_bridge.dart` — datos del widget Android (home_widget).
-- `lib/ui/` — pantallas: `notes_home.dart` (lista/editor, filtros, cachés para
-  redimensionar sin tirones), `note_editor.dart` + `editor_toolbar.dart` (flutter_quill
-  con barra propia), `calendar_view.dart` (mes actual ±3), `schedule_sheet.dart`
-  (mini calendario + rueda de hora), `urgency.dart` (barra "mecha"), `split.dart`
-  (separador ajustable), `theme.dart` (5 temas claro/oscuro), `wave_title.dart`
-  (título retro Shrikhand con ola suave), `note_color_sheet.dart`
-  (color por nota; también tiñe su mecha y sus barras del calendario),
-  `trash_sheet.dart` (papelera de 3 días), `calendar_widget_image.dart` (contenido del
-  widget Android 4x2 de calendario, renderizado como imagen con home_widget).
-- `supabase/schema.sql` + `migracion_2.sql` + `migracion_3.sql` — tablas, RLS, realtime
-  columna `color` y política de borrado (migración 4, papelera).
-- Recuperar contraseña con código: requiere SMTP propio en Supabase (las plantillas
-  por defecto solo llevan enlace); no implementado.
-- `.github/workflows/compilar.yml` — compila APK + Windows y publica un Release.
-- `.github/workflows/probar-ventana.yml` — abre la app en Windows (modo demo),
-  redimensiona y guarda capturas en la rama `capturas`.
+- `lib/main.dart` — startup, Windows window (window_manager 0.5.x, hidden system title
+  bar, minimum size, repaint after resizing), animated theme.
+- `lib/config.dart` — Supabase URL and *publishable* key (public by design; security is RLS).
+- `lib/models/note.dart` — `Note` (plain text + `rich` Quill Delta, folder, colour,
+  `remindAt`/`dueAt`/`done` for deadlines) and `Folder`.
+- `lib/data/notes_repository.dart` — local cache (SharedPreferences), change queue,
+  upsert to Supabase, realtime for `notes` and `folders`, last edit wins, 3-day trash.
+- `lib/data/reminders.dart` — notifications at 7/3/1 days before the deadline.
+- `lib/data/widget_bridge.dart` — data for the Android widgets (home_widget).
+- `lib/ui/` — `notes_home.dart` (list/editor, filters, cached panels), `note_editor.dart`
+  + `editor_toolbar.dart` (flutter_quill with a custom toolbar), `calendar_view.dart`
+  (current month ±3), `schedule_sheet.dart` (mini calendar + time wheel), `urgency.dart`
+  (fuse bar), `split.dart` (resizable divider), `theme.dart` (10 light/dark themes),
+  `wave_title.dart` (retro Shrikhand title), `title_bar.dart` (custom Windows title bar),
+  `note_color_sheet.dart`, `trash_sheet.dart`, `calendar_widget_image.dart` (Android 4x2
+  calendar widget, rendered as an image with home_widget).
+- `supabase/migrations/` — schema, RLS, realtime, colour column, delete policy.
+- `installer/oganesson.iss` — Inno Setup script for `Oganesson-Setup.exe`.
+- `.github/workflows/build.yml` — builds APK + Windows installer/zip and publishes a
+  release (tag `v<pubspec version>`, notes taken from `CHANGELOG.md`).
+- `.github/workflows/window-test.yml` — opens the app on Windows (demo mode), resizes
+  it and stores screenshots in the `screenshots` branch.
 
-## Convenciones
+## Conventions
 
-- En Windows la ventana mínima es de 760 px de ancho: siempre vista de dos paneles
-  (breakpoint 700) para que no haya saltos de diseño al redimensionar.
-
-- Versiones de paquetes acotadas en `pubspec.yaml` (window_manager <0.6 porque 0.6
-  cambió la API; flutter_local_notifications 19.x).
-- Animaciones con `flutter_animate` y los helpers de `lib/ui/anim.dart` (`Anim.*`,
-  `Bouncy`, `fadeThrough`, `pushTransition`).
-- Colores siempre vía `Palette.*` (ThemeExtension `NotasColors`), nunca fijos.
-- Antes de dar algo por terminado: `flutter analyze` y, si es posible, ejecutarlo.
+- Bump `version:` in `pubspec.yaml` and add a section to `CHANGELOG.md` for each release.
+- Windows minimum window width is 760 px: always the two-panel layout (breakpoint 700).
+- Package versions are pinned in `pubspec.yaml` (window_manager <0.6 because 0.6 changed
+  its API; flutter_local_notifications 19.x).
+- Animations use `flutter_animate` and the helpers in `lib/ui/anim.dart`.
+- Colours always through `Palette.*` (ThemeExtension `NotasColors`), never hard-coded.
+- Password reset with an email code needs custom SMTP in Supabase (default templates
+  only contain a link); not implemented.
+- Before calling something done: `flutter analyze` and, if possible, run it.

@@ -1,4 +1,4 @@
--- Ejecuta esto UNA vez en Supabase → SQL Editor → New query → Run.
+-- Run ONCE in Supabase → SQL Editor → New query → Run.
 
 create table if not exists public.notes (
   id          uuid primary key,
@@ -13,7 +13,7 @@ create table if not exists public.notes (
 
 create index if not exists notes_user_idx on public.notes (user_id);
 
--- Cada usuario solo puede ver y tocar sus propias notas.
+-- Each user can only read and modify their own notes.
 alter table public.notes enable row level security;
 
 drop policy if exists "notas_leer" on public.notes;
@@ -30,10 +30,10 @@ create policy "notas_editar" on public.notes
   for update to authenticated
   using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
--- Permite que la app (usuarios con sesión) acceda a la tabla por la API.
+-- Lets the app (signed-in users) access the table through the API.
 grant select, insert, update on public.notes to authenticated;
 
--- Activa el tiempo real (lo que hace que el PC se actualice solo).
+-- Enables realtime (this is what makes other devices update instantly).
 do $$
 begin
   alter publication supabase_realtime add table public.notes;

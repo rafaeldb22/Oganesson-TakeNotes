@@ -1,5 +1,5 @@
 name: notas
-description: Notas sincronizadas entre Android y Windows (Flutter + Supabase).
+description: Oganesson TakeNotes — synced notes for Android and Windows (Flutter + Supabase).
 publish_to: 'none'
 version: 1.0.0+1
 

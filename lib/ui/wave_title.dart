@@ -4,11 +4,11 @@ import 'package:flutter/material.dart';
 
 import 'theme.dart';
 
-/// "babunotes" en letra retro (Shrikhand), en minúsculas, con una ola lenta:
+/// "oganesson" en letra retro (Shrikhand), en minúsculas, con una ola lenta:
 /// cada letra sube y baja con un pequeño desfase y el color va pasando
 /// del acento a un tono más claro, como un brillo que recorre la palabra.
 class WaveTitle extends StatefulWidget {
-  const WaveTitle({super.key, this.text = 'babunotes', this.fontSize = 30});
+  const WaveTitle({super.key, this.text = 'oganesson', this.fontSize = 30});
 
   final String text;
   final double fontSize;

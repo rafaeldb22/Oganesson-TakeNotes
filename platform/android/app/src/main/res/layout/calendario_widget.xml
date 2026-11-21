@@ -19,7 +19,7 @@
         android:background="@drawable/widget_bg"
         android:gravity="center"
         android:padding="12dp"
-        android:text="Abre BabuNotes para cargar el calendario"
+        android:text="Abre Oganesson para cargar el calendario"
         android:textColor="@color/widget_text"
         android:textSize="13sp"
         android:visibility="gone" />
