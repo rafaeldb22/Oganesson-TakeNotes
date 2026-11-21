@@ -19,6 +19,7 @@ import 'schedule_sheet.dart';
 import 'split.dart';
 import 'theme.dart';
 import 'theme_picker.dart';
+import 'trash_sheet.dart';
 import 'urgency.dart';
 import 'wave_title.dart';
 
@@ -40,6 +41,7 @@ class _NotesHomeState extends State<NotesHome> {
   String _query = '';
   String? _openId;
   final Set<String> _removing = {}; // filas que se están plegando
+  ScaffoldFeatureController<SnackBar, SnackBarClosedReason>? _lastBar;
   bool _openAutofocus = false;
   StreamSubscription<Uri?>? _widgetSub;
 
@@ -77,6 +79,10 @@ class _NotesHomeState extends State<NotesHome> {
 
   void _onWidgetUri(Uri? uri) {
     if (uri == null || !mounted) return;
+    if (uri.host == 'calendario') {
+      _setFilter('calendario');
+      return;
+    }
     if (uri.host == 'nueva') {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _newNote();
@@ -151,16 +157,25 @@ class _NotesHomeState extends State<NotesHome> {
     if (!hadContent || !mounted) return;
     final messenger = ScaffoldMessenger.of(context);
     messenger.hideCurrentSnackBar();
-    messenger.showSnackBar(SnackBar(
-      content: const Text('Nota eliminada'),
+    final bar = messenger.showSnackBar(SnackBar(
+      content: const Text('Nota movida a la papelera'),
       behavior: SnackBarBehavior.floating,
       width: 340,
-      duration: const Duration(seconds: 4),
+      duration: const Duration(seconds: 3),
       action: SnackBarAction(
         label: 'Deshacer',
         onPressed: () => repo.restore(id),
       ),
     ));
+    // Las versiones nuevas de Flutter dejan fijos los avisos con botón;
+    // lo cerramos nosotros a los 3 segundos.
+    _lastBar = bar;
+    bar.closed.then((_) {
+      if (identical(_lastBar, bar)) _lastBar = null;
+    });
+    Timer(const Duration(seconds: 3), () {
+      if (identical(_lastBar, bar)) bar.close();
+    });
   }
 
   Future<void> _options(Note n) async {
@@ -369,6 +384,7 @@ class _NotesHomeState extends State<NotesHome> {
     final pinned = all.where((n) => n.pinned).toList();
     final others = all.where((n) => !n.pinned).toList();
     final total = repo.notes.where((n) => !n.isEmpty).length;
+    final pendientes = repo.temporales.where((n) => !n.done).length;
 
     Widget body;
     if (!repo.loaded) {
@@ -411,11 +427,12 @@ class _NotesHomeState extends State<NotesHome> {
             icon: const Icon(Icons.more_horiz),
             onSelected: (v) {
               if (v == 'tema') showThemePicker(context);
+              if (v == 'papelera') showTrash(context, repo);
               if (v == 'sync') repo.sync();
               if (v == 'logout') _signOut();
             },
-            itemBuilder: (_) => const [
-              PopupMenuItem(
+            itemBuilder: (_) => [
+              const PopupMenuItem(
                   value: 'tema',
                   child: ListTile(
                       dense: true,
@@ -423,13 +440,25 @@ class _NotesHomeState extends State<NotesHome> {
                       leading: Icon(Icons.palette_outlined),
                       title: Text('Tema y colores'))),
               PopupMenuItem(
+                  value: 'papelera',
+                  child: ListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(Icons.delete_outline),
+                      title: const Text('Papelera'),
+                      trailing: repo.trash.isEmpty
+                          ? null
+                          : Text('${repo.trash.length}',
+                              style: TextStyle(
+                                  color: Palette.secondary(context))))),
+              const PopupMenuItem(
                   value: 'sync',
                   child: ListTile(
                       dense: true,
                       contentPadding: EdgeInsets.zero,
                       leading: Icon(Icons.sync),
                       title: Text('Sincronizar ahora'))),
-              PopupMenuItem(
+              const PopupMenuItem(
                   value: 'logout',
                   child: ListTile(
                       dense: true,
@@ -493,54 +522,64 @@ class _NotesHomeState extends State<NotesHome> {
           ),
         ],
       ),
-      // En el calendario del móvil la barra inferior se oculta: el propio
-      // calendario ya tiene su botón de nueva tarea y así nada se monta.
-      bottomNavigationBar: (_filter == 'calendario' && !wide)
-          ? null
-          : SafeArea(
+      // Barra inferior: nueva carpeta · nº de notas · calendario · nueva nota.
+      bottomNavigationBar: SafeArea(
         child: SizedBox(
-          height: 56,
-          child: Stack(
-            alignment: Alignment.center,
+          height: 58,
+          child: Row(
             children: [
-              AnimatedSwitcher(
-                duration: Anim.medium,
-                transitionBuilder: (c, a) => FadeTransition(
-                  opacity: a,
-                  child: SlideTransition(
-                    position: Tween(
-                            begin: const Offset(0, 0.6), end: Offset.zero)
-                        .animate(a),
-                    child: c,
+              const SizedBox(width: 8),
+              _BarButton(
+                tooltip: 'Nueva carpeta',
+                icon: Icons.create_new_folder_outlined,
+                onTap: () async {
+                  final f = await editFolderDialog(context, repo);
+                  if (f != null) _setFilter(f.id);
+                },
+              ),
+              Expanded(
+                child: Center(
+                  child: AnimatedSwitcher(
+                    duration: Anim.medium,
+                    transitionBuilder: (c, a) => FadeTransition(
+                      opacity: a,
+                      child: SlideTransition(
+                        position: Tween(
+                                begin: const Offset(0, 0.6), end: Offset.zero)
+                            .animate(a),
+                        child: c,
+                      ),
+                    ),
+                    child: Text(
+                      _filter == 'calendario'
+                          ? (pendientes == 1
+                              ? '1 tarea pendiente'
+                              : '$pendientes tareas pendientes')
+                          : (total == 1 ? '1 nota' : '$total notas'),
+                      key: ValueKey('$_filter-$total-$pendientes'),
+                      style: TextStyle(
+                          fontSize: 12, color: Palette.secondary(context)),
+                    ),
                   ),
                 ),
-                child: Text(
-                  total == 1 ? '1 nota' : '$total notas',
-                  key: ValueKey(total),
-                  style: TextStyle(
-                      fontSize: 12, color: Palette.secondary(context)),
-                ),
               ),
-              Positioned(
-                right: 8,
-                child: Bouncy(
-                  pressedScale: 0.8,
-                  hoverScale: 1.12,
-                  child: IconButton(
-                    tooltip: 'Nueva nota (Ctrl+N)',
-                    iconSize: 30,
-                    color: Palette.accent(context),
-                    icon: const Icon(Icons.edit_note),
-                    onPressed: _newNote,
-                  ),
-                )
-                    .animate()
-                    .scale(
-                        begin: const Offset(0.4, 0.4),
-                        duration: Anim.slow,
-                        curve: Curves.easeOutBack)
-                    .fadeIn(),
+              _BarButton(
+                tooltip: 'Calendario',
+                icon: _filter == 'calendario'
+                    ? Icons.calendar_month
+                    : Icons.calendar_month_outlined,
+                active: _filter == 'calendario',
+                onTap: () =>
+                    _setFilter(_filter == 'calendario' ? 'todas' : 'calendario'),
               ),
+              const SizedBox(width: 4),
+              _BarButton(
+                tooltip: 'Nueva nota (Ctrl+N)',
+                icon: Icons.edit_note,
+                big: true,
+                onTap: _newNote,
+              ),
+              const SizedBox(width: 8),
             ],
           ),
         ),
@@ -937,6 +976,51 @@ class _EmptyPane extends StatelessWidget {
           ),
         ],
       ).animate().fadeIn(duration: Anim.slow).slideY(begin: 0.05),
+    );
+  }
+}
+
+
+/// Botón de la barra inferior, con estado activo (tinte del acento).
+class _BarButton extends StatelessWidget {
+  const _BarButton({
+    required this.tooltip,
+    required this.icon,
+    required this.onTap,
+    this.active = false,
+    this.big = false,
+  });
+
+  final String tooltip;
+  final IconData icon;
+  final VoidCallback onTap;
+  final bool active;
+  final bool big;
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = Palette.accent(context);
+    return Tooltip(
+      message: tooltip,
+      waitDuration: const Duration(milliseconds: 400),
+      child: Bouncy(
+        pressedScale: 0.82,
+        hoverScale: 1.08,
+        child: GestureDetector(
+          onTap: onTap,
+          child: AnimatedContainer(
+            duration: Anim.medium,
+            curve: Anim.curve,
+            width: 46,
+            height: 42,
+            decoration: BoxDecoration(
+              color: active ? accent.withValues(alpha: 0.16) : Colors.transparent,
+              borderRadius: BorderRadius.circular(13),
+            ),
+            child: Icon(icon, size: big ? 30 : 24, color: accent),
+          ),
+        ),
+      ),
     );
   }
 }

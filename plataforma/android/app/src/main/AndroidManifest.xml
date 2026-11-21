@@ -46,6 +46,19 @@
                 android:resource="@xml/notas_widget_info" />
         </receiver>
 
+        <!-- Widget 4x2: calendario + tareas -->
+        <receiver
+            android:name=".CalendarioWidget"
+            android:exported="false"
+            android:label="BabuNotes · Calendario">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/calendario_widget_info" />
+        </receiver>
+
         <!-- Avisos programados (flutter_local_notifications) -->
         <receiver
             android:exported="false"

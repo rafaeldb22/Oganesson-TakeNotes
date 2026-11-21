@@ -1,4 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="widget_desc">Última nota y botón para escribir una nueva</string>
+    <string name="widget_calendario_desc">Calendario del mes y tareas por fecha límite</string>
 </resources>

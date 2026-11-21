@@ -13,8 +13,8 @@ import '../models/note.dart';
 /// notas sincronizadas, así que el aviso llega aunque la nota se creara
 /// en el otro.
 ///
-/// Avisos por nota: al empezar el periodo (si se puso "avisar desde"),
-/// 1 hora antes de la fecha límite y a la hora límite.
+/// Avisos por nota ("Recordatorio: …"): cuando quedan 7 días, 3 días y
+/// 1 día para la fecha límite (solo los que aún no han pasado).
 class Reminders {
   Reminders._();
   static final instance = Reminders._();
@@ -70,7 +70,7 @@ class Reminders {
         .where((n) => n.isTemporal && !n.done && !n.deleted && !n.isEmpty)
         .toList();
     final sig = relevant
-        .map((n) => '${n.id}|${n.remindAt}|${n.dueAt}|${n.title}')
+        .map((n) => '${n.id}|${n.dueAt}|${n.title}')
         .join(';');
     if (sig == _lastSignature) return;
     _lastSignature = sig;
@@ -101,18 +101,19 @@ class Reminders {
     for (final n in notes) {
       final base = (n.id.hashCode & 0x0fffffff) * 4;
       final due = n.dueAt!;
-      final avisos = <(int, DateTime, String)>[
-        if (n.remindAt != null) (base, n.remindAt!, 'Empieza: ${n.title}'),
-        (base + 1, due.subtract(const Duration(hours: 1)), 'Queda 1 hora: ${n.title}'),
-        (base + 2, due, 'Se acaba el tiempo: ${n.title}'),
-      ];
-      for (final (id, at, title) in avisos) {
+      // Avisos solo cuando quedan menos de 7 días, menos de 3 y menos de 1.
+      final avisos = <(int, DateTime, String, String)>[
+        (base, due.subtract(const Duration(days: 7)), 'Quedan 7 días'),
+        (base + 1, due.subtract(const Duration(days: 3)), 'Quedan 3 días'),
+        (base + 2, due.subtract(const Duration(days: 1)), 'Queda 1 día'),
+      ].map((a) => (a.$1, a.$2, 'Recordatorio: ${n.title}', a.$3)).toList();
+      for (final (id, at, title, body) in avisos) {
         if (!at.isAfter(now)) continue;
         try {
           await _plugin.zonedSchedule(
             id,
             title,
-            n.preview == 'Sin texto adicional' ? null : n.preview,
+            body,
             tz.TZDateTime.from(at, tz.UTC),
             const NotificationDetails(
               android: AndroidNotificationDetails(

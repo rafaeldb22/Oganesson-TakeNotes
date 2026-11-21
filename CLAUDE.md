@@ -45,10 +45,14 @@ Modo demo sin cuenta (notas de ejemplo): `--dart-define=DEMO=true`.
   con barra propia), `calendar_view.dart` (mes actual ±3), `schedule_sheet.dart`
   (mini calendario + rueda de hora), `urgency.dart` (barra "mecha"), `split.dart`
   (separador ajustable), `theme.dart` (5 temas claro/oscuro), `wave_title.dart`
-  (título pixel Pixelify Sans con ola a saltos), `note_color_sheet.dart`
-  (color por nota; también tiñe su mecha y sus barras del calendario).
+  (título retro Shrikhand con ola suave), `note_color_sheet.dart`
+  (color por nota; también tiñe su mecha y sus barras del calendario),
+  `trash_sheet.dart` (papelera de 3 días), `calendar_widget_image.dart` (contenido del
+  widget Android 4x2 de calendario, renderizado como imagen con home_widget).
 - `supabase/schema.sql` + `migracion_2.sql` + `migracion_3.sql` — tablas, RLS, realtime
-  y columna `color` de las notas.
+  columna `color` y política de borrado (migración 4, papelera).
+- Recuperar contraseña con código: requiere SMTP propio en Supabase (las plantillas
+  por defecto solo llevan enlace); no implementado.
 - `.github/workflows/compilar.yml` — compila APK + Windows y publica un Release.
 - `.github/workflows/probar-ventana.yml` — abre la app en Windows (modo demo),
   redimensiona y guarda capturas en la rama `capturas`.

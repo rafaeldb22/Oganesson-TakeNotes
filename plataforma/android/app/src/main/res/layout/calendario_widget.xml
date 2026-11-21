@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/calendario_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <ImageView
+        android:id="@+id/calendario_img"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:adjustViewBounds="true"
+        android:contentDescription="Calendario y tareas"
+        android:scaleType="fitCenter" />
+
+    <TextView
+        android:id="@+id/calendario_vacio"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@drawable/widget_bg"
+        android:gravity="center"
+        android:padding="12dp"
+        android:text="Abre BabuNotes para cargar el calendario"
+        android:textColor="@color/widget_text"
+        android:textSize="13sp"
+        android:visibility="gone" />
+</FrameLayout>

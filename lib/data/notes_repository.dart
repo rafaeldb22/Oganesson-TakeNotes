@@ -23,6 +23,11 @@ class NotesRepository extends ChangeNotifier {
   final Set<String> _dirty = {}; // notas con cambios aún no subidos
   final Set<String> _fresh = {}; // notas creadas y todavía vacías
 
+  final Set<String> _purge = {}; // borrados definitivos pendientes de subir
+
+  /// Días que una nota pasa en la papelera antes de borrarse del todo.
+  static const trashDays = 3;
+
   final Map<String, Folder> _folders = {};
   final Set<String> _dirtyFolders = {};
 
@@ -45,6 +50,7 @@ class NotesRepository extends ChangeNotifier {
   String get _dirtyKey => 'notas_dirty_$userId';
   String get _foldersKey => 'carpetas_cache_$userId';
   String get _dirtyFoldersKey => 'carpetas_dirty_$userId';
+  String get _purgeKey => 'notas_purga_$userId';
 
   // ------------------------------------------------------------ lecturas
 
@@ -73,6 +79,55 @@ class NotesRepository extends ChangeNotifier {
       .where((f) => !f.deleted)
       .toList()
     ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+
+  /// Notas en la papelera (borradas hace menos de 3 días), más recientes antes.
+  List<Note> get trash {
+    final limit =
+        DateTime.now().toUtc().subtract(const Duration(days: trashDays));
+    return _notes.values
+        .where((n) =>
+            n.deleted && !n.isEmpty && !_purge.contains(n.id) &&
+            n.updatedAt.isAfter(limit))
+        .toList()
+      ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+  }
+
+  /// Cuándo se borrará del todo una nota de la papelera.
+  DateTime purgeDate(Note n) =>
+      n.updatedAt.add(const Duration(days: trashDays));
+
+  /// Borra para siempre (de este dispositivo y de la nube).
+  void deleteForever(String id) {
+    if (_disposed || !_notes.containsKey(id)) return;
+    _notes.remove(id);
+    _dirty.remove(id);
+    _purge.add(id);
+    _changed();
+  }
+
+  void emptyTrash() {
+    for (final n in trash) {
+      _notes.remove(n.id);
+      _dirty.remove(n.id);
+      _purge.add(n.id);
+    }
+    _changed();
+  }
+
+  /// Pasa a borrado definitivo lo que lleva más de 3 días en la papelera.
+  void _autoPurge() {
+    final limit =
+        DateTime.now().toUtc().subtract(const Duration(days: trashDays));
+    final old = _notes.values
+        .where((n) => n.deleted && !n.updatedAt.isAfter(limit))
+        .map((n) => n.id)
+        .toList();
+    for (final id in old) {
+      _notes.remove(id);
+      _dirty.remove(id);
+      _purge.add(id);
+    }
+  }
 
   Note? byId(String id) => _notes[id];
   Folder? folderById(String? id) => id == null ? null : _folders[id];
@@ -291,7 +346,8 @@ class NotesRepository extends ChangeNotifier {
     }
   }
 
-  bool get _isClean => _dirty.isEmpty && _dirtyFolders.isEmpty;
+  bool get _isClean =>
+      _dirty.isEmpty && _dirtyFolders.isEmpty && _purge.isEmpty;
 
   Future<void> _pushNow() async {
     if (_disposed) return;
@@ -317,6 +373,14 @@ class NotesRepository extends ChangeNotifier {
   }
 
   Future<void> _pushDirty() async {
+    _autoPurge();
+    // Borrados definitivos.
+    if (_purge.isNotEmpty) {
+      final ids = _purge.toList();
+      await _client.from('notes').delete().inFilter('id', ids);
+      _purge.removeAll(ids);
+    }
+
     // Primero carpetas (las notas pueden apuntar a ellas).
     if (_dirtyFolders.isNotEmpty) {
       final sent = <String, DateTime>{};
@@ -360,6 +424,7 @@ class NotesRepository extends ChangeNotifier {
 
   /// Devuelve true si la versión remota sustituye a la local.
   bool _mergeNote(Note remote) {
+    if (_purge.contains(remote.id)) return false;
     final local = _notes[remote.id];
     if (local != null && !remote.updatedAt.isAfter(local.updatedAt)) {
       return false;
@@ -449,6 +514,7 @@ class NotesRepository extends ChangeNotifier {
         }
       }
       _dirtyFolders.addAll(prefs.getStringList(_dirtyFoldersKey) ?? const []);
+      _purge.addAll(prefs.getStringList(_purgeKey) ?? const []);
       _dirtyFolders.removeWhere((id) => !_folders.containsKey(id));
     } catch (e) {
       debugPrint('Caché de carpetas dañada, se ignora: $e');
@@ -467,6 +533,7 @@ class NotesRepository extends ChangeNotifier {
     prefs.setString(
         _foldersKey, jsonEncode(_folders.values.map((f) => f.toRow()).toList()));
     prefs.setStringList(_dirtyFoldersKey, _dirtyFolders.toList());
+    prefs.setStringList(_purgeKey, _purge.toList());
   }
 
   void _schedulePersist() {
@@ -513,6 +580,7 @@ class NotesRepository extends ChangeNotifier {
         n.dueAt = now.add(const Duration(days: 3));
       }
       if (i == 4) {
+        n.color = 0xFFB197FC;
         n.folderId = clase.id;
         n.remindAt = now.subtract(const Duration(days: 10));
         n.dueAt = now.add(const Duration(hours: 20));

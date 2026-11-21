@@ -29,7 +29,3 @@ flutter:
     - family: Shrikhand
       fonts:
         - asset: assets/fonts/Shrikhand-Regular.ttf
-    - family: PixelifySans
-      fonts:
-        - asset: assets/fonts/PixelifySans-Bold.ttf
-          weight: 700

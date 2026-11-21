@@ -34,34 +34,15 @@ class FilterChips extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final folders = repo.folders;
-    final temporales = repo.temporales.where((n) => !n.done).length;
-    final vencidas = repo.temporales.where((n) => n.isOverdue()).length;
-
+    // Arriba solo "Todas" y las carpetas creadas. El calendario y crear
+    // carpeta están en la barra inferior.
     final chips = <Widget>[
       _chip(context, 'todas', 'Todas', Icons.notes),
-      _chip(context, 'temporales', 'Temporales', Icons.alarm,
-          badge: temporales == 0 ? null : '$temporales',
-          badgeColor: vencidas > 0 ? const Color(0xFFE5484D) : null),
-      _chip(context, 'calendario', 'Calendario', Icons.calendar_month),
       for (final f in folders)
         _chip(context, f.id, f.name, Icons.folder,
             color: f.color == null ? null : Color(f.color!),
             badge: '${repo.countIn(f.id)}',
             onLongPress: () => editFolderDialog(context, repo, folder: f)),
-      Padding(
-        padding: const EdgeInsets.only(left: 2),
-        child: Bouncy(
-          pressedScale: 0.9,
-          child: ActionChip(
-            avatar: const Icon(Icons.create_new_folder_outlined, size: 18),
-            label: const Text('Carpeta'),
-            onPressed: () async {
-              final f = await editFolderDialog(context, repo);
-              if (f != null) onSelect(f.id);
-            },
-          ),
-        ),
-      ),
     ];
 
     return SizedBox(
