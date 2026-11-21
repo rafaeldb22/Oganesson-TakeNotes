@@ -9,6 +9,10 @@ const enStrings = <String, String>{
   'Seleccionar todo': 'Select all',
   'Descargar en el navegador': 'Download in the browser',
 
+  // --- Widget
+  'Nada para hoy': 'Nothing for today',
+  'Próximas': 'Upcoming',
+
   // --- Archivadas y orden
   'Archivar': 'Archive',
   'Archivadas': 'Archived',

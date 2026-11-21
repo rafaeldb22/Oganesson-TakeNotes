@@ -410,6 +410,9 @@ class _MonthGrid extends StatelessWidget {
       behavior: HitTestBehavior.opaque,
       onTap: () => onSelect(day),
       child: Stack(
+        // La columna ocupa toda la celda: el número y el círculo de hoy
+        // quedan centrados (antes, sin tareas, se iban a la izquierda).
+        fit: StackFit.expand,
         children: [
           Positioned.fill(
             child: AnimatedContainer(

@@ -4,23 +4,20 @@ import 'anim.dart';
 import 'theme.dart';
 
 /// Zona donde soltar una nota arrastrada (cabecera de "Fijadas",
-/// "Sin carpeta"…). Se ilumina al pasar una nota por encima.
+/// "Sin carpeta", principio o final de la lista). No dibuja recuadros: al
+/// pasar una nota por encima solo aparece la línea de inserción, igual que
+/// entre notas. Sin [child] es una franja fija de [height] de alto.
 class DropZone extends StatefulWidget {
   const DropZone({
     super.key,
-    required this.active,
     required this.onDrop,
-    required this.child,
-    this.hint,
+    this.child,
+    this.height = 14,
   });
 
-  /// Hay una nota arrastrándose (muestra la zona aunque esté vacía).
-  final bool active;
   final void Function(String noteId) onDrop;
-  final Widget child;
-
-  /// Texto cuando la zona no tiene notas ("Suelta aquí").
-  final String? hint;
+  final Widget? child;
+  final double height;
 
   @override
   State<DropZone> createState() => _DropZoneState();
@@ -31,7 +28,16 @@ class _DropZoneState extends State<DropZone> {
 
   @override
   Widget build(BuildContext context) {
-    final p = Palette.of(context);
+    final line = AnimatedContainer(
+      duration: Anim.fast,
+      curve: Anim.curve,
+      height: _over ? 3 : 0,
+      margin: const EdgeInsets.symmetric(horizontal: 14),
+      decoration: BoxDecoration(
+        color: Palette.accent(context),
+        borderRadius: BorderRadius.circular(2),
+      ),
+    );
     return DragTarget<String>(
       onWillAcceptWithDetails: (_) {
         setState(() => _over = true);
@@ -42,33 +48,16 @@ class _DropZoneState extends State<DropZone> {
         setState(() => _over = false);
         widget.onDrop(d.data);
       },
-      builder: (context, _, __) => AnimatedContainer(
-        duration: Anim.fast,
-        curve: Anim.curve,
-        decoration: BoxDecoration(
-          color: _over ? p.accent.withValues(alpha: 0.12) : Colors.transparent,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(
-            color: _over
-                ? p.accent.withValues(alpha: 0.6)
-                : (widget.active ? p.separator : Colors.transparent),
-            width: 1.2,
-          ),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            widget.child,
-            if (widget.active && widget.hint != null)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
-                child: Text(widget.hint!,
-                    style: TextStyle(fontSize: 12.5, color: p.secondary)),
-              ),
-          ],
-        ),
-      ),
+      builder: (context, _, __) => widget.child == null
+          ? SizedBox(
+              height: widget.height,
+              child: Center(child: line),
+            )
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              mainAxisSize: MainAxisSize.min,
+              children: [widget.child!, line],
+            ),
     );
   }
 }

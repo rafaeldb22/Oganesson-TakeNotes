@@ -153,47 +153,95 @@ class CalendarWidgetImage extends StatelessWidget {
 
     // Cuántas tareas caben: alto de cada fila con margen para fuentes
     // más altas que la de diseño (la imagen se dibuja en el móvil).
-    const rowHeight = 39.0, headerHeight = 24.0, moreHeight = 14.0;
+    const rowHeight = 39.0, headerHeight = 24.0, labelHeight = 16.0;
+    // Tareas de hoy (activas este día) primero; después las próximas.
+    bool activeToday(Note n) {
+      final st = _d(n.periodStart.toLocal());
+      final e = _d(n.dueAt!.toLocal());
+      return !today.isBefore(st) && !today.isAfter(e);
+    }
+
+    final todayTasks = pending.where(activeToday).toList();
+    final upcoming = pending.where((n) => !activeToday(n)).toList();
+    final mes = tr(mesesNombre[now.month - 1]);
+
     final tasks = LayoutBuilder(builder: (context, c) {
-      var fit = ((c.maxHeight - headerHeight) / rowHeight).floor();
-      if (fit < pending.length) {
-        fit = ((c.maxHeight - headerHeight - moreHeight) / rowHeight).floor();
+      var room = c.maxHeight - headerHeight;
+      final rows = <Widget>[];
+      Widget label(String t) => Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: Text(t.toUpperCase(),
+                style: TextStyle(
+                    color: colors.secondary,
+                    fontSize: 8.5,
+                    letterSpacing: 0.8,
+                    fontWeight: FontWeight.w800)),
+          );
+      if (todayTasks.isEmpty) {
+        rows.add(Padding(
+          padding: const EdgeInsets.only(bottom: 6),
+          child: Text(tr('Nada para hoy'),
+              style: TextStyle(color: colors.secondary, fontSize: 10)),
+        ));
+        room -= labelHeight;
       }
-      final shown = fit.clamp(1, pending.isEmpty ? 1 : pending.length);
+      for (final n in todayTasks) {
+        if (room < rowHeight) break;
+        rows.add(Padding(
+          padding: const EdgeInsets.only(bottom: 6),
+          child: _TaskRow(note: n, fg: fg, colors: colors),
+        ));
+        room -= rowHeight;
+      }
+      if (upcoming.isNotEmpty && room >= rowHeight + labelHeight) {
+        rows.add(label(tr('Próximas')));
+        room -= labelHeight;
+        for (final n in upcoming) {
+          if (room < rowHeight) break;
+          rows.add(Padding(
+            padding: const EdgeInsets.only(bottom: 6),
+            child: _TaskRow(note: n, fg: fg, colors: colors),
+          ));
+          room -= rowHeight;
+        }
+      }
+      if (pending.isEmpty) {
+        rows
+          ..clear()
+          ..add(Expanded(
+            child: Center(
+              child: Text(tr('Sin tareas pendientes'),
+                  style: TextStyle(color: colors.secondary, fontSize: 10)),
+            ),
+          ));
+      }
       return ClipRect(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
+              crossAxisAlignment: CrossAxisAlignment.baseline,
+              textBaseline: TextBaseline.alphabetic,
               children: [
-                Text(tr('Tareas'),
+                Text(tr('Hoy'),
                     style: TextStyle(
                         color: fg, fontSize: 13, fontWeight: FontWeight.w800)),
-                const Spacer(),
-                Text('${pending.length}',
+                const SizedBox(width: 6),
+                Text('${now.day} ${mes.substring(0, 3)}',
                     style: TextStyle(
                         color: colors.secondary,
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.w600)),
+                const Spacer(),
+                Text('${todayTasks.length}',
+                    style: TextStyle(
+                        color: colors.accent,
                         fontSize: 11,
-                        fontWeight: FontWeight.w700)),
+                        fontWeight: FontWeight.w800)),
               ],
             ),
             const SizedBox(height: 6),
-            if (pending.isEmpty)
-              Expanded(
-                child: Center(
-                  child: Text(tr('Sin tareas pendientes'),
-                      style: TextStyle(color: colors.secondary, fontSize: 10)),
-                ),
-              )
-            else
-              for (final n in pending.take(shown))
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 6),
-                  child: _TaskRow(note: n, fg: fg, colors: colors),
-                ),
-            if (pending.length > shown)
-              Text(trf('+{0} más', [pending.length - shown]),
-                  style: TextStyle(color: colors.secondary, fontSize: 9)),
+            ...rows,
           ],
         ),
       );
@@ -209,17 +257,18 @@ class CalendarWidgetImage extends StatelessWidget {
         ),
         child: switch (size) {
           CalendarWidgetSize.small => calendar,
+          // 4x2: las tareas del día a la izquierda y el mes a la derecha.
           CalendarWidgetSize.medium => Row(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Expanded(flex: 10, child: calendar),
+                Expanded(flex: 11, child: tasks),
                 Container(
                   width: 1,
                   margin:
                       const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   color: colors.separator,
                 ),
-                Expanded(flex: 11, child: tasks),
+                Expanded(flex: 10, child: calendar),
               ],
             ),
           CalendarWidgetSize.large => Column(

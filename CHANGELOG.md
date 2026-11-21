@@ -2,6 +2,22 @@
 
 All notable changes to Oganesson TakeNotes (formerly *Notas* / *BabuNotes*).
 
+## [1.3.3] — 2026-11-21
+
+### Fixed
+- Swiping a note no longer shows a square block: the rounded background pill is drawn whole
+  behind the row instead of using the (rectangular-clipped) swipe background.
+- Drag & drop: no more boxes when dragging — drop zones only show the insertion line, like
+  between notes, and the list no longer shifts when a drag starts. Drop on the top or bottom
+  half of any note (also in other folders) to place it before or after it; drop at the very top
+  of the list to pin, at the very bottom to leave it without folder.
+- Calendar: day numbers were off-centre (the today circle went outside its cell); they are
+  centred again.
+
+### Changed
+- Android calendar widget: the 4×2 size shows today's tasks on the left (then upcoming ones)
+  and the month on the right; 4×4 shows today's tasks too.
+
 ## [1.3.2] — 2026-11-21
 
 ### Changed

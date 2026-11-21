@@ -84,8 +84,6 @@ class _NotesHomeState extends State<NotesHome> {
   /// Desplazamiento suave de la lista con la rueda del ratón.
   final _listScroll = SmoothScrollController();
 
-  /// Nota que se está arrastrando (muestra las zonas donde soltarla).
-  String? _draggingNote;
 
   /// Carpetas desplegadas en la lista (como las carpetas de Zen).
   final Set<String> _openFolders = {};
@@ -378,7 +376,6 @@ class _NotesHomeState extends State<NotesHome> {
       _filter,
       _sort,
       Object.hashAllUnordered(_openFolders),
-      _draggingNote,
       _openId,
       wide,
       _removing.length,
@@ -555,7 +552,7 @@ class _NotesHomeState extends State<NotesHome> {
           key: const PageStorageKey('lista-notas'),
           controller: _listScroll,
           physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.fromLTRB(12, 0, 12, 24),
+          padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
           children: [
             // Cabecera: solo el selector de orden.
             Padding(
@@ -568,7 +565,13 @@ class _NotesHomeState extends State<NotesHome> {
                 ],
               ),
             ),
-            if (pinned.isNotEmpty || _draggingNote != null)
+            // Soltar arriba del todo: fijar (solo se ve la línea).
+            DropZone(
+              key: const ValueKey('soltar-arriba'),
+              height: 10,
+              onDrop: (id) => _dropInto(id, folderId: null, pin: true),
+            ),
+            if (pinned.isNotEmpty)
               ..._section(context, tr('Fijadas'), pinned, wide, () => index++,
                   onDrop: (id) => _dropInto(id, folderId: null, pin: true)),
             for (final f in folders)
@@ -597,8 +600,7 @@ class _NotesHomeState extends State<NotesHome> {
                     );
                   },
                 ),
-            if (loose.isNotEmpty ||
-                (_draggingNote != null && folders.isNotEmpty))
+            if (loose.isNotEmpty)
               ..._section(
                   context,
                   folders.isEmpty && pinned.isEmpty ? null : tr('Sin carpeta'),
@@ -606,6 +608,12 @@ class _NotesHomeState extends State<NotesHome> {
                   wide,
                   () => index++,
                   onDrop: (id) => _dropInto(id, folderId: null)),
+            // Soltar abajo del todo: sin carpeta (solo se ve la línea).
+            DropZone(
+              key: const ValueKey('soltar-abajo'),
+              height: 56,
+              onDrop: (id) => _dropInto(id, folderId: null),
+            ),
           ],
         ),
       );
@@ -954,8 +962,7 @@ class _NotesHomeState extends State<NotesHome> {
               onDropAfter: (dragged) =>
                   _dropBefore(dragged, n, notes, after: true),
               onDragMove: _autoScroll,
-              onDragState: (dragging) =>
-                  setState(() => _draggingNote = dragging ? n.id : null),
+              onDragState: (_) {},
             ),
           ],
         )
@@ -995,14 +1002,8 @@ class _NotesHomeState extends State<NotesHome> {
     return [
       KeyedSubtree(
         key: ValueKey('titulo-$title'),
-        child: onDrop == null
-            ? header
-            : DropZone(
-                active: _draggingNote != null,
-                onDrop: onDrop,
-                hint: notes.isEmpty ? tr('Suelta aquí') : null,
-                child: header,
-              ),
+        child:
+            onDrop == null ? header : DropZone(onDrop: onDrop, child: header),
       ),
       if (notes.isNotEmpty)
         KeyedSubtree(
@@ -1170,6 +1171,10 @@ class _NoteTileState extends State<_NoteTile> {
   bool _dropHover = false; // otra nota arrastrada encima
   bool _dropAfter = false; // ...en la mitad de abajo
 
+  /// Deslizamiento en curso (dirección y cuánto), para dibujar el fondo.
+  DismissDirection? _swipeDir;
+  double _swipeProgress = 0;
+
   /// Punto de la nota arrastrada que queda bajo el cursor.
   static const _anchor = Offset(26, 22);
   double _dragDistance = 0;
@@ -1217,14 +1222,21 @@ class _NoteTileState extends State<_NoteTile> {
       );
     }
 
-    final tile = Dismissible(
+    // El fondo de Dismissible se recorta en rectángulo: en su lugar se
+    // dibuja detrás la pastilla redondeada completa según la dirección.
+    final dismissible = Dismissible(
       key: ValueKey('desliza-${n.id}'),
       direction: DismissDirection.horizontal,
-      // Hacia la derecha: eliminar. Hacia la izquierda: archivar.
-      background: swipeBg(
-          scheme.error, Icons.delete_outline_rounded, tr('Eliminar'), true),
-      secondaryBackground: swipeBg(Palette.accent(context),
-          Icons.archive_outlined, tr('Archivar'), false),
+      background: const SizedBox.shrink(),
+      onUpdate: (d) {
+        final dir = d.progress > 0 ? d.direction : null;
+        if (dir != _swipeDir || (d.progress - _swipeProgress).abs() > 0.01) {
+          setState(() {
+            _swipeDir = dir;
+            _swipeProgress = d.progress;
+          });
+        }
+      },
       // Doble comprobación en los dos casos.
       confirmDismiss: (d) => d == DismissDirection.startToEnd
           ? confirmDelete(context, n.title)
@@ -1344,6 +1356,24 @@ class _NoteTileState extends State<_NoteTile> {
           ),
         ),
       ),
+    );
+
+    // Hacia la derecha: eliminar. Hacia la izquierda: archivar.
+    final tile = Stack(
+      children: [
+        if (_swipeDir != null)
+          Positioned.fill(
+            child: Opacity(
+              opacity: (_swipeProgress * 4).clamp(0.0, 1.0),
+              child: _swipeDir == DismissDirection.startToEnd
+                  ? swipeBg(scheme.error, Icons.delete_outline_rounded,
+                      tr('Eliminar'), true)
+                  : swipeBg(Palette.accent(context), Icons.archive_outlined,
+                      tr('Archivar'), false),
+            ),
+          ),
+        dismissible,
+      ],
     );
 
     // Al borrar: la fila se desliza, se desvanece y se pliega.
