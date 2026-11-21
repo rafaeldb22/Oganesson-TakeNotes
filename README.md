@@ -26,6 +26,11 @@
   <img src="https://img.shields.io/badge/sync-Supabase-3ECF8E?logo=supabase&logoColor=white" alt="Supabase">
 </p>
 
+<p align="center">
+  <img src="docs/screenshot-windows.png" width="49%" alt="Notes on Windows">
+  <img src="docs/screenshot-calendar.png" width="49%" alt="Calendar on Windows">
+</p>
+
 ---
 
 ## Install
