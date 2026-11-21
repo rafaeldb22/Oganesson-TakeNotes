@@ -45,13 +45,18 @@ Modo demo sin cuenta (notas de ejemplo): `--dart-define=DEMO=true`.
   con barra propia), `calendar_view.dart` (mes actual ±3), `schedule_sheet.dart`
   (mini calendario + rueda de hora), `urgency.dart` (barra "mecha"), `split.dart`
   (separador ajustable), `theme.dart` (5 temas claro/oscuro), `wave_title.dart`
-  (título retro Shrikhand con ola).
-- `supabase/schema.sql` + `supabase/migracion_2.sql` — tablas, RLS y realtime.
+  (título pixel Pixelify Sans con ola a saltos), `note_color_sheet.dart`
+  (color por nota; también tiñe su mecha y sus barras del calendario).
+- `supabase/schema.sql` + `migracion_2.sql` + `migracion_3.sql` — tablas, RLS, realtime
+  y columna `color` de las notas.
 - `.github/workflows/compilar.yml` — compila APK + Windows y publica un Release.
 - `.github/workflows/probar-ventana.yml` — abre la app en Windows (modo demo),
   redimensiona y guarda capturas en la rama `capturas`.
 
 ## Convenciones
+
+- En Windows la ventana mínima es de 760 px de ancho: siempre vista de dos paneles
+  (breakpoint 700) para que no haya saltos de diseño al redimensionar.
 
 - Versiones de paquetes acotadas en `pubspec.yaml` (window_manager <0.6 porque 0.6
   cambió la API; flutter_local_notifications 19.x).

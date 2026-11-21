@@ -241,30 +241,53 @@ class _CalendarViewState extends State<CalendarView> {
             );
           }
 
-          // Estrecho: calendario arriba y tareas del día debajo.
+          // Estrecho (móvil): todo en un único desplazamiento, sin capas
+          // que se monten unas encima de otras.
           final cellH = ((c.maxWidth - 24) / 7 * 0.95).clamp(70.0, 88.0);
+          final dayNotes = activeOn(notes, _selected);
           return ColoredBox(
             color: Palette.card(context),
-            child: CustomScrollView(
-            slivers: [
-              SliverToBoxAdapter(
-                child: Column(
-                  children: [
-                    _header(context),
-                    _weekdays(context),
-                    const SizedBox(height: 6),
-                    grid(cellHeight: cellH),
-                  ],
+            child: ListView(
+              padding: const EdgeInsets.only(bottom: 32),
+              children: [
+                _header(context),
+                _weekdays(context),
+                const SizedBox(height: 6),
+                grid(cellHeight: cellH),
+                const SizedBox(height: 8),
+                Divider(height: 1, color: Palette.separator(context)),
+                _DayHeader(
+                  day: _selected,
+                  count: dayNotes.length,
+                  onNew: () => widget.onNewOnDay(_selected),
                 ),
-              ),
-              SliverFillRemaining(
-                hasScrollBody: true,
-                child: Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: dayPanel,
-                ),
-              ),
-            ],
+                if (dayNotes.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 28),
+                    child: Center(
+                      child: Text('Día libre',
+                          style:
+                              TextStyle(color: Palette.secondary(context))),
+                    ),
+                  )
+                else
+                  for (var i = 0; i < dayNotes.length; i++)
+                    Padding(
+                      key: ValueKey('m-${dayNotes[i].id}'),
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+                      child: TempCard(
+                        onCard: true,
+                        note: dayNotes[i],
+                        onOpen: () => widget.onOpenNote(dayNotes[i].id),
+                        onEditDates: () => widget.onEditDates(dayNotes[i].id),
+                        onToggleDone: () =>
+                            widget.repo.toggleDone(dayNotes[i].id),
+                      )
+                          .animate(delay: (40 * i).ms)
+                          .fadeIn(duration: Anim.medium)
+                          .slideY(begin: 0.12, curve: Anim.curve),
+                    ),
+              ],
             ),
           );
         });
@@ -432,7 +455,8 @@ class _MonthGrid extends StatelessWidget {
     final total = e.difference(s).inDays;
     final t = total <= 0 ? 1.0 : day.difference(s).inDays / total;
     final passed = !day.isAfter(_day(DateTime.now()));
-    final color = n.done ? Palette.secondary(context) : fuseColor(t);
+    final color =
+        n.done ? Palette.secondary(context) : paletteAt(fusePalette(n.color), t);
     return Padding(
       padding: EdgeInsets.only(
           left: isStart ? 4 : 0, right: isEnd ? 4 : 0, bottom: 2),
@@ -471,51 +495,10 @@ class _DayPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final year = day.year != DateTime.now().year ? ' de ${day.year}' : '';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(20, 20, 16, 4),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(_diasSemana[day.weekday - 1].toUpperCase(),
-                        style: TextStyle(
-                            fontSize: 11.5,
-                            letterSpacing: 1.2,
-                            fontWeight: FontWeight.w700,
-                            color: Palette.accent(context))),
-                    const SizedBox(height: 2),
-                    Text('${day.day} de ${mesesNombre[day.month - 1]}$year',
-                        style: const TextStyle(
-                            fontSize: 20, fontWeight: FontWeight.w800)),
-                  ],
-                ),
-              ),
-              Bouncy(
-                child: FilledButton.tonalIcon(
-                  onPressed: onNew,
-                  icon: const Icon(Icons.add, size: 18),
-                  label: const Text('Tarea'),
-                ),
-              ),
-            ],
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(20, 2, 20, 10),
-          child: Text(
-            notes.isEmpty
-                ? 'Sin tareas'
-                : (notes.length == 1 ? '1 tarea' : '${notes.length} tareas'),
-            style: TextStyle(color: Palette.secondary(context), fontSize: 13),
-          ),
-        ),
+        _DayHeader(day: day, count: notes.length, onNew: onNew),
         Expanded(
           child: AnimatedSwitcher(
             duration: Anim.medium,
@@ -649,6 +632,66 @@ class TempCard extends StatelessWidget {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+
+/// Cabecera del día seleccionado: día de la semana, fecha, nº de tareas y
+/// botón para crear una tarea ese día. El botón va en su propia fila para
+/// que nunca se monte sobre la fecha.
+class _DayHeader extends StatelessWidget {
+  const _DayHeader(
+      {required this.day, required this.count, required this.onNew});
+  final DateTime day;
+  final int count;
+  final VoidCallback onNew;
+
+  @override
+  Widget build(BuildContext context) {
+    final year = day.year != DateTime.now().year ? ' de ${day.year}' : '';
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 18, 16, 12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(_diasSemana[day.weekday - 1].toUpperCase(),
+                    style: TextStyle(
+                        fontSize: 11.5,
+                        letterSpacing: 1.2,
+                        fontWeight: FontWeight.w700,
+                        color: Palette.accent(context))),
+                const SizedBox(height: 2),
+                Text('${day.day} de ${mesesNombre[day.month - 1]}$year',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                        fontSize: 20, fontWeight: FontWeight.w800)),
+                const SizedBox(height: 2),
+                Text(
+                  count == 0
+                      ? 'Sin tareas'
+                      : (count == 1 ? '1 tarea' : '$count tareas'),
+                  style: TextStyle(
+                      color: Palette.secondary(context), fontSize: 13),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          Bouncy(
+            child: IconButton.filledTonal(
+              tooltip: 'Nueva tarea este día',
+              onPressed: onNew,
+              icon: const Icon(Icons.add_rounded),
+            ),
+          ),
+        ],
       ),
     );
   }

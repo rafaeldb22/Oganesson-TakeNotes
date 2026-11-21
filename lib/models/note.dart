@@ -14,11 +14,15 @@ class Note {
     this.remindAt,
     this.dueAt,
     this.done = false,
+    this.color,
     this.pinned = false,
     this.deleted = false,
   });
 
   final String id;
+
+  /// Color elegido para la nota (ARGB). null = colores por defecto.
+  int? color;
 
   /// Texto plano (para la lista, la búsqueda y el widget).
   String content;
@@ -92,6 +96,7 @@ class Note {
         'remind_at': remindAt?.toUtc().toIso8601String(),
         'due_at': dueAt?.toUtc().toIso8601String(),
         'done': done,
+        'color': color,
         'pinned': pinned,
         'deleted': deleted,
         'created_at': createdAt.toUtc().toIso8601String(),
@@ -108,6 +113,7 @@ class Note {
       remindAt: _parseDate(r['remind_at']),
       dueAt: _parseDate(r['due_at']),
       done: r['done'] == true,
+      color: r['color'] is num ? (r['color'] as num).toInt() : null,
       pinned: r['pinned'] == true,
       deleted: r['deleted'] == true,
       createdAt: _parseDate(r['created_at']) ?? updated,

@@ -25,18 +25,51 @@ const fuseStops = <Color>[
   Color(0xFFEF4444),
 ];
 
-/// Color de la mecha en el punto t (0 = recién encendida, 1 = se acaba).
-Color fuseColor(double t) {
-  final x = t.clamp(0.0, 1.0) * (fuseStops.length - 1);
-  final i = x.floor().clamp(0, fuseStops.length - 2);
-  return Color.lerp(fuseStops[i], fuseStops[i + 1], x - i)!;
+/// Colores que se pueden elegir para una nota (y su mecha).
+const noteColors = <(String, int)>[
+  ('Coral', 0xFFFF6B6B),
+  ('Naranja', 0xFFFF9F43),
+  ('Ámbar', 0xFFF7C948),
+  ('Lima', 0xFF8BD450),
+  ('Menta', 0xFF2DD4A7),
+  ('Cielo', 0xFF4DABF7),
+  ('Índigo', 0xFF6C7CFF),
+  ('Uva', 0xFFB197FC),
+  ('Rosa', 0xFFF783AC),
+];
+
+/// Degradado de la mecha para un color: de un tono claro y suave al color
+/// intenso y, al final, más oscuro (se "quema").
+List<Color> fusePalette(int? color) {
+  if (color == null) return fuseStops;
+  final c = Color(color);
+  final hsl = HSLColor.fromColor(c);
+  return [
+    hsl.withLightness((hsl.lightness + 0.28).clamp(0.0, 0.92)).toColor(),
+    c,
+    hsl
+        .withLightness((hsl.lightness - 0.18).clamp(0.08, 1.0))
+        .withSaturation((hsl.saturation + 0.1).clamp(0.0, 1.0))
+        .toColor(),
+  ];
 }
+
+/// Color de una paleta de mecha en el punto t (0 = recién encendida).
+Color paletteAt(List<Color> stops, double t) {
+  final x = t.clamp(0.0, 1.0) * (stops.length - 1);
+  final i = x.floor().clamp(0, stops.length - 2);
+  return Color.lerp(stops[i], stops[i + 1], x - i)!;
+}
+
+/// Color de la mecha por defecto en el punto t.
+Color fuseColor(double t) => paletteAt(fuseStops, t);
 
 /// Color representativo de una nota temporal según su tiempo consumido.
 Color urgencyColor(BuildContext context, Note n) {
   if (n.done) return Palette.secondary(context);
-  if (n.isOverdue()) return fuseStops.last;
-  return fuseColor(n.progress());
+  final stops = fusePalette(n.color);
+  if (n.isOverdue()) return stops.last;
+  return paletteAt(stops, n.progress());
 }
 
 /// Barra de tiempo con forma de mecha: el tramo consumido brilla con un
@@ -60,6 +93,7 @@ class TimeBar extends StatelessWidget {
           height: compact ? 4 : 6,
           spark: burning,
           dimmed: note.done,
+          colors: fusePalette(note.color),
         ),
         if (!compact) ...[
           const SizedBox(height: 6),
@@ -102,12 +136,14 @@ class FuseBar extends StatefulWidget {
     this.height = 6,
     this.spark = true,
     this.dimmed = false,
+    this.colors = fuseStops,
   });
 
   final double progress;
   final double height;
   final bool spark;
   final bool dimmed;
+  final List<Color> colors;
 
   @override
   State<FuseBar> createState() => _FuseBarState();
@@ -164,6 +200,7 @@ class _FuseBarState extends State<FuseBar> with TickerProviderStateMixin {
             grow: CurvedAnimation(parent: _grow, curve: Anim.curve),
             spark: widget.spark,
             dimmed: widget.dimmed,
+            colors: widget.colors,
           ),
         ),
       ),
@@ -180,7 +217,10 @@ class _FusePainter extends CustomPainter {
     required this.grow,
     required this.spark,
     required this.dimmed,
+    required this.colors,
   }) : super(repaint: Listenable.merge([flicker, grow]));
+
+  final List<Color> colors;
 
   final double progress;
   final double barHeight;
@@ -207,8 +247,8 @@ class _FusePainter extends CustomPainter {
     // Tramo consumido con el degradado de la mecha a lo largo de toda la barra.
     final shader = LinearGradient(
       colors: dimmed
-          ? fuseStops.map((c) => c.withValues(alpha: 0.35)).toList()
-          : fuseStops,
+          ? colors.map((c) => c.withValues(alpha: 0.35)).toList()
+          : colors,
     ).createShader(Rect.fromLTWH(0, 0, size.width, size.height));
     canvas.save();
     canvas.clipRect(Rect.fromLTWH(0, 0, x, size.height));
@@ -217,7 +257,7 @@ class _FusePainter extends CustomPainter {
 
     if (!spark) return;
     // Chispa: halo + núcleo que laten.
-    final c = fuseColor(p);
+    final c = paletteAt(colors, p);
     final f = flicker.value;
     final glowR = barHeight * (1.25 + 0.45 * f);
     canvas.drawCircle(
@@ -242,5 +282,6 @@ class _FusePainter extends CustomPainter {
       old.track != track ||
       old.spark != spark ||
       old.dimmed != dimmed ||
+      !identical(old.colors, colors) && old.colors.toString() != colors.toString() ||
       old.barHeight != barHeight;
 }

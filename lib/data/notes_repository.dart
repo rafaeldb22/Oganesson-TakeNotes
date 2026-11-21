@@ -140,6 +140,8 @@ class NotesRepository extends ChangeNotifier {
 
   void toggleDone(String id) => _edit(id, (n) => n.done = !n.done);
 
+  void setColor(String id, int? color) => _edit(id, (n) => n.color = color);
+
   void moveToFolder(String id, String? folderId) =>
       _edit(id, (n) => n.folderId = folderId);
 

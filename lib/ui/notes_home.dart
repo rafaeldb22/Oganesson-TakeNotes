@@ -13,6 +13,7 @@ import 'anim.dart';
 import 'calendar_view.dart';
 import 'folders.dart';
 import 'format.dart';
+import 'note_color_sheet.dart';
 import 'note_editor.dart';
 import 'schedule_sheet.dart';
 import 'split.dart';
@@ -56,7 +57,9 @@ class _NotesHomeState extends State<NotesHome> {
 
   NotesRepository get repo => widget.repo;
 
-  static const _wideBreakpoint = 760.0;
+  // En PC la ventana mínima es de 760 px, así que siempre se usa la vista de
+  // dos paneles y no hay saltos de diseño al redimensionar.
+  static const _wideBreakpoint = 700.0;
 
   @override
   void initState() {
@@ -182,6 +185,14 @@ class _NotesHomeState extends State<NotesHome> {
               onTap: () {
                 Navigator.pop(ctx);
                 showScheduleSheet(context, repo, n.id);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.palette_outlined),
+              title: const Text('Color'),
+              onTap: () {
+                Navigator.pop(ctx);
+                showNoteColorSheet(context, repo, n.id);
               },
             ),
             ListTile(
@@ -482,7 +493,11 @@ class _NotesHomeState extends State<NotesHome> {
           ),
         ],
       ),
-      bottomNavigationBar: SafeArea(
+      // En el calendario del móvil la barra inferior se oculta: el propio
+      // calendario ya tiene su botón de nueva tarea y así nada se monta.
+      bottomNavigationBar: (_filter == 'calendario' && !wide)
+          ? null
+          : SafeArea(
         child: SizedBox(
           height: 56,
           child: Stack(
@@ -693,6 +708,22 @@ class _NoteTileState extends State<_NoteTile> {
                     const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
                 child: Row(
                   children: [
+                    // Franja con el color elegido para la nota.
+                    AnimatedContainer(
+                      duration: Anim.medium,
+                      width: n.color == null ? 0 : 4,
+                      height: 38,
+                      margin: EdgeInsets.only(right: n.color == null ? 0 : 12),
+                      decoration: BoxDecoration(
+                        gradient: n.color == null
+                            ? null
+                            : LinearGradient(
+                                begin: Alignment.topCenter,
+                                end: Alignment.bottomCenter,
+                                colors: fusePalette(n.color)),
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,

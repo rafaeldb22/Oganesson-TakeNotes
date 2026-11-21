@@ -4,11 +4,11 @@ import 'package:flutter/material.dart';
 
 import 'theme.dart';
 
-/// "notas" en letra retro (Shrikhand), en minúsculas, con una ola lenta:
-/// cada letra sube y baja con un pequeño desfase y el color va pasando
-/// del acento a un tono más claro, como un brillo que recorre la palabra.
+/// "babunotes" en letra pixel (Pixelify Sans) con una ola lenta.
+/// El movimiento va "a saltos" de píxel en píxel, como en una consola
+/// antigua, y lleva una sombra dura desplazada estilo 8 bits.
 class WaveTitle extends StatefulWidget {
-  const WaveTitle({super.key, this.text = 'notas', this.fontSize = 34});
+  const WaveTitle({super.key, this.text = 'babunotes', this.fontSize = 28});
 
   final String text;
   final double fontSize;
@@ -19,10 +19,10 @@ class WaveTitle extends StatefulWidget {
 
 class _WaveTitleState extends State<WaveTitle>
     with SingleTickerProviderStateMixin {
-  // Ciclo de 3,2 s: lento y relajado.
+  // Ciclo de 3,6 s: lento y relajado.
   late final AnimationController _c = AnimationController(
     vsync: this,
-    duration: const Duration(milliseconds: 3200),
+    duration: const Duration(milliseconds: 3600),
   )..repeat();
 
   @override
@@ -34,13 +34,19 @@ class _WaveTitleState extends State<WaveTitle>
   @override
   Widget build(BuildContext context) {
     final accent = Palette.accent(context);
-    final glow = Color.lerp(accent, Colors.white, 0.45)!;
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final shadow = dark
+        ? Color.lerp(accent, Colors.black, 0.65)!
+        : Color.lerp(accent, Colors.black, 0.45)!.withValues(alpha: 0.55);
     final letters = widget.text.characters.toList();
+    // Tamaño del "píxel" de la fuente: los saltos se hacen en múltiplos.
+    final px = (widget.fontSize / 10).roundToDouble().clamp(2.0, 6.0);
     final style = TextStyle(
-      fontFamily: 'Shrikhand',
+      fontFamily: 'PixelifySans',
+      fontWeight: FontWeight.w700,
       fontSize: widget.fontSize,
-      height: 1.15,
-      letterSpacing: 0.5,
+      height: 1.1,
+      letterSpacing: 1,
     );
 
     // RepaintBoundary: la ola se repinta sola sin arrastrar al resto.
@@ -51,37 +57,37 @@ class _WaveTitleState extends State<WaveTitle>
           animation: _c,
           builder: (context, _) {
             final t = _c.value * 2 * math.pi;
-            return Row(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                for (var i = 0; i < letters.length; i++)
-                  Builder(builder: (_) {
-                    final phase = t - i * 0.7;
-                    final dy = math.sin(phase) * widget.fontSize * 0.09;
-                    final shine = (math.sin(phase) + 1) / 2; // 0..1
-                    final color = Color.lerp(accent, glow, shine * 0.6)!;
-                    return Transform.translate(
-                      offset: Offset(0, -dy),
-                      child: Transform.rotate(
-                        angle: math.cos(phase) * 0.04,
+            return Padding(
+              padding: EdgeInsets.only(top: px * 2, right: px),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  for (var i = 0; i < letters.length; i++)
+                    Builder(builder: (_) {
+                      final phase = t - i * 0.62;
+                      final wave = math.sin(phase);
+                      // Cuantizado: 0, 1 o 2 "píxeles" de altura.
+                      final dy = (wave.clamp(0.0, 1.0) * 2).round() * px;
+                      final lit = wave > 0.55; // la cresta brilla
+                      final color = lit
+                          ? Color.lerp(accent, Colors.white, dark ? 0.35 : 0.25)!
+                          : accent;
+                      return Transform.translate(
+                        offset: Offset(0, -dy),
                         child: Text(
                           letters[i],
                           style: style.copyWith(
                             color: color,
                             shadows: [
-                              // Sombra desplazada tipo cartel retro.
-                              Shadow(
-                                color: accent.withValues(alpha: 0.28),
-                                offset: const Offset(2.5, 2.5),
-                              ),
+                              Shadow(color: shadow, offset: Offset(px, px)),
                             ],
                           ),
                         ),
-                      ),
-                    );
-                  }),
-              ],
+                      );
+                    }),
+                ],
+              ),
             );
           },
         ),

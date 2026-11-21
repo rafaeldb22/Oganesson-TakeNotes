@@ -9,6 +9,8 @@ import '../data/notes_repository.dart';
 import '../models/note.dart';
 import 'anim.dart';
 import 'editor_toolbar.dart';
+import 'folders.dart';
+import 'note_color_sheet.dart';
 import 'format.dart';
 import 'schedule_sheet.dart';
 import 'theme.dart';
@@ -193,44 +195,27 @@ class _NoteEditorState extends State<NoteEditor> {
     final accent = Palette.accent(context);
     final pinned = n?.pinned ?? false;
     final folder = repo.folderById(n?.folderId);
+    // Barra compacta en móvil / ventanas estrechas.
+    final compact = MediaQuery.sizeOf(context).width < 640;
 
     return Scaffold(
       backgroundColor: Palette.card(context),
       appBar: AppBar(
         backgroundColor: Palette.card(context),
         automaticallyImplyLeading: false,
-        leadingWidth: widget.showBack ? 110 : 0,
+        leadingWidth: widget.showBack ? 52 : 0,
         leading: widget.showBack
             ? Bouncy(
-                child: TextButton.icon(
-                  style: TextButton.styleFrom(foregroundColor: accent),
+                pressedScale: 0.85,
+                child: IconButton(
+                  tooltip: 'Volver',
+                  color: accent,
                   onPressed: widget.onClose,
-                  icon: const Icon(Icons.arrow_back_ios_new, size: 18),
-                  label: const Text('notas',
-                      style: TextStyle(fontFamily: 'Shrikhand', fontSize: 17)),
+                  icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
                 ),
               )
             : null,
         actions: [
-          // Carpeta
-          PopupMenuButton<String>(
-            tooltip: 'Mover a carpeta',
-            icon: Icon(folder == null ? Icons.folder_outlined : Icons.folder,
-                color: folder?.color != null ? Color(folder!.color!) : accent),
-            onSelected: (v) =>
-                repo.moveToFolder(widget.noteId, v == '' ? null : v),
-            itemBuilder: (_) => [
-              CheckedPopupMenuItem(
-                  value: '',
-                  checked: n?.folderId == null,
-                  child: const Text('Sin carpeta')),
-              for (final f in repo.folders)
-                CheckedPopupMenuItem(
-                    value: f.id,
-                    checked: n?.folderId == f.id,
-                    child: Text(f.name)),
-            ],
-          ),
           // Fechas / recordatorio
           _iconAction(
             tooltip: 'Nota temporal y avisos',
@@ -241,35 +226,130 @@ class _NoteEditorState extends State<NoteEditor> {
             ),
             onPressed: () => showScheduleSheet(context, repo, widget.noteId),
           ),
-          if (n != null)
-            _iconAction(
-              tooltip: pinned ? 'Desfijar' : 'Fijar arriba',
-              onPressed: () => repo.togglePin(widget.noteId),
-              icon: AnimatedSwitcher(
-                duration: Anim.medium,
-                transitionBuilder: (c, a) => RotationTransition(
-                  turns: Tween(begin: -0.15, end: 0.0).animate(a),
-                  child: ScaleTransition(scale: a, child: c),
-                ),
-                child: Icon(
-                  pinned ? Icons.push_pin : Icons.push_pin_outlined,
-                  key: ValueKey(pinned),
+          // Color de la nota (y de su mecha)
+          _iconAction(
+            tooltip: 'Color de la nota',
+            icon: n?.color == null
+                ? const Icon(Icons.palette_outlined)
+                : Container(
+                    width: 20,
+                    height: 20,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: LinearGradient(colors: fusePalette(n!.color)),
+                    ),
+                  ),
+            onPressed: () => showNoteColorSheet(context, repo, widget.noteId),
+          ),
+          if (!compact) ...[
+            // Carpeta
+            PopupMenuButton<String>(
+              tooltip: 'Mover a carpeta',
+              icon: Icon(folder == null ? Icons.folder_outlined : Icons.folder,
+                  color:
+                      folder?.color != null ? Color(folder!.color!) : accent),
+              onSelected: (v) =>
+                  repo.moveToFolder(widget.noteId, v == '' ? null : v),
+              itemBuilder: (_) => [
+                CheckedPopupMenuItem(
+                    value: '',
+                    checked: n?.folderId == null,
+                    child: const Text('Sin carpeta')),
+                for (final f in repo.folders)
+                  CheckedPopupMenuItem(
+                      value: f.id,
+                      checked: n?.folderId == f.id,
+                      child: Text(f.name)),
+              ],
+            ),
+            if (n != null)
+              _iconAction(
+                tooltip: pinned ? 'Desfijar' : 'Fijar arriba',
+                onPressed: () => repo.togglePin(widget.noteId),
+                icon: AnimatedSwitcher(
+                  duration: Anim.medium,
+                  transitionBuilder: (c, a) => RotationTransition(
+                    turns: Tween(begin: -0.15, end: 0.0).animate(a),
+                    child: ScaleTransition(scale: a, child: c),
+                  ),
+                  child: Icon(
+                    pinned ? Icons.push_pin : Icons.push_pin_outlined,
+                    key: ValueKey(pinned),
+                  ),
                 ),
               ),
+            _iconAction(
+              tooltip: _toolbarOpen ? 'Ocultar formato' : 'Mostrar formato',
+              icon: Icon(_toolbarOpen ? Icons.text_format : Icons.text_fields),
+              onPressed: () => setState(() => _toolbarOpen = !_toolbarOpen),
             ),
-          _iconAction(
-            tooltip: _toolbarOpen ? 'Ocultar formato' : 'Mostrar formato',
-            icon: Icon(_toolbarOpen ? Icons.text_format : Icons.text_fields),
-            onPressed: () => setState(() => _toolbarOpen = !_toolbarOpen),
-          ),
-          _iconAction(
-            tooltip: 'Eliminar nota',
-            icon: const Icon(Icons.delete_outline),
-            onPressed: () {
-              _closing = true;
-              widget.onDelete(widget.noteId);
-            },
-          ),
+            _iconAction(
+              tooltip: 'Eliminar nota',
+              icon: const Icon(Icons.delete_outline),
+              onPressed: () {
+                _closing = true;
+                widget.onDelete(widget.noteId);
+              },
+            ),
+          ] else
+            // Móvil: el resto va en un menú para que nada se monte.
+            PopupMenuButton<String>(
+              tooltip: 'Más',
+              icon: const Icon(Icons.more_horiz_rounded),
+              onSelected: (v) async {
+                switch (v) {
+                  case 'carpeta':
+                    final r = await pickFolder(context, repo, n?.folderId);
+                    if (r != null) {
+                      repo.moveToFolder(widget.noteId, r.isEmpty ? null : r);
+                    }
+                  case 'fijar':
+                    repo.togglePin(widget.noteId);
+                  case 'formato':
+                    setState(() => _toolbarOpen = !_toolbarOpen);
+                  case 'borrar':
+                    _closing = true;
+                    widget.onDelete(widget.noteId);
+                }
+              },
+              itemBuilder: (_) => [
+                PopupMenuItem(
+                    value: 'carpeta',
+                    child: ListTile(
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        leading: Icon(folder == null
+                            ? Icons.folder_outlined
+                            : Icons.folder),
+                        title: Text(folder?.name ?? 'Mover a carpeta'))),
+                PopupMenuItem(
+                    value: 'fijar',
+                    child: ListTile(
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        leading: Icon(pinned
+                            ? Icons.push_pin
+                            : Icons.push_pin_outlined),
+                        title: Text(pinned ? 'Desfijar' : 'Fijar arriba'))),
+                PopupMenuItem(
+                    value: 'formato',
+                    child: ListTile(
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        leading: const Icon(Icons.text_format),
+                        title: Text(_toolbarOpen
+                            ? 'Ocultar formato'
+                            : 'Mostrar formato'))),
+                const PopupMenuItem(
+                    value: 'borrar',
+                    child: ListTile(
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        leading: Icon(Icons.delete_outline, color: Colors.red),
+                        title: Text('Eliminar',
+                            style: TextStyle(color: Colors.red)))),
+              ],
+            ),
           // Botón OK: aparece con un pequeño "pop", siempre centrado.
           AnimatedSize(
             duration: Anim.medium,

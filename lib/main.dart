@@ -25,7 +25,7 @@ Future<void> main() async {
     await windowManager.ensureInitialized();
     const options = WindowOptions(
       size: Size(1100, 720),
-      minimumSize: Size(380, 560),
+      minimumSize: Size(760, 540),
       center: true,
       title: 'BabuNotes',
     );
@@ -57,7 +57,7 @@ class _RepaintOnWindowChange with WindowListener {
 
   void _schedule() {
     _debounce?.cancel();
-    _debounce = Timer(const Duration(milliseconds: 120), forceFullRepaint);
+    _debounce = Timer(const Duration(milliseconds: 220), forceFullRepaint);
   }
 
   @override
@@ -82,14 +82,6 @@ void forceFullRepaint() {
     visit(view);
   }
   SchedulerBinding.instance.scheduleForcedFrame();
-  // Un segundo pase un instante después, por si el primero llegó antes
-  // de que la gráfica terminara de redimensionar su superficie.
-  Timer(const Duration(milliseconds: 250), () {
-    for (final view in RendererBinding.instance.renderViews) {
-      visit(view);
-    }
-    SchedulerBinding.instance.scheduleForcedFrame();
-  });
 }
 
 class NotasApp extends StatelessWidget {
