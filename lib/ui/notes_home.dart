@@ -39,6 +39,7 @@ import 'toast.dart';
 import 'smooth_scroll.dart';
 import 'text_menu.dart';
 import 'theme.dart';
+import 'title_bar.dart' show isDesktopWindows;
 import 'theme_picker.dart';
 import 'trash_sheet.dart';
 import 'update_dialog.dart';
@@ -446,6 +447,24 @@ class _NotesHomeState extends State<NotesHome> {
           const SingleActivator(LogicalKeyboardKey.keyN, control: true):
               _newNote,
           const SingleActivator(LogicalKeyboardKey.escape): _close,
+          // Ctrl+F: buscar. Ctrl+1/2/3: notas, calendario, red.
+          const SingleActivator(LogicalKeyboardKey.keyF, control: true): () =>
+              _searchFocus.requestFocus(),
+          const SingleActivator(LogicalKeyboardKey.digit1, control: true): () {
+            _close();
+            _setFilter('todas');
+          },
+          const SingleActivator(LogicalKeyboardKey.digit2, control: true): () {
+            _close();
+            _setFilter('calendario');
+          },
+          const SingleActivator(LogicalKeyboardKey.digit3, control: true): () {
+            _close();
+            _setFilter('red');
+          },
+          // Ctrl+,: tema y colores.
+          const SingleActivator(LogicalKeyboardKey.comma, control: true): () =>
+              showThemePicker(context),
         },
         child: Focus(
           autofocus: true,
@@ -766,7 +785,10 @@ class _NotesHomeState extends State<NotesHome> {
                 ),
               ]) ...[
                 _BarButton(
-                  tooltip: tip,
+                  // En escritorio el atajo de teclado va en la ayuda.
+                  tooltip: isDesktopWindows
+                      ? '$tip (Ctrl+${view == 'red' ? 3 : 2})'
+                      : tip,
                   // Solo se ve activo cuando la vista está a la vista: con
                   // una nota abierta encima no se queda "pulsado".
                   icon: _viewShown(view, wide, noteOpen) ? on : off,

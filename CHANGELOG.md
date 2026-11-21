@@ -2,6 +2,13 @@
 
 All notable changes to Oganesson TakeNotes (formerly *Notas* / *BabuNotes*).
 
+## [1.4.2] — 2026-11-21
+
+### Added
+- Windows keyboard shortcuts: **Ctrl+F** search, **Ctrl+1 / Ctrl+2 / Ctrl+3** notes, calendar and
+  network, **Ctrl+,** theme and colours (plus the existing Ctrl+N and Esc). The bottom-bar
+  tooltips show them.
+
 ## [1.4.1] — 2026-11-21
 
 ### Fixed

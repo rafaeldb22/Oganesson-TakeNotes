@@ -99,6 +99,9 @@ Sign in with the **same account** on every device and your notes sync automatica
 - Windows: clean custom title bar tinted with the theme colour, resizable panels that remember their width, minimum window size for a stable layout.
 - Android widgets: quick note, calendar (2×2 / 4×2 / 4×4), tasks, next task with countdown, pinned notes and quick actions.
 
+**Keyboard (Windows)**
+- Ctrl+N new note · Ctrl+F search · Ctrl+1 / 2 / 3 notes, calendar, network · Ctrl+, theme · Esc close the note.
+
 **Updates & support**
 - The app checks GitHub Releases and installs new versions in one click (Windows installer / Android APK).
 - Open source: if you like it, you can [buy me a coffee](https://buymeacoffee.com/rafaeldb) ☕
