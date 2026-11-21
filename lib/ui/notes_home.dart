@@ -105,6 +105,8 @@ class _NotesHomeState extends State<NotesHome> {
 
   void _setFilter(String f) {
     if (f == _filter) return;
+    // Al ir al calendario se cierra la nota abierta para que se vea.
+    if (f == 'calendario' && _openId != null) _close();
     setState(() => _filter = f);
   }
 
