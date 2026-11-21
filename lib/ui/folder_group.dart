@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../models/note.dart';
@@ -17,8 +19,12 @@ class FolderGroup extends StatefulWidget {
     required this.onToggle,
     required this.onNewNote,
     required this.onOptions,
+    required this.onDropNote,
     this.child,
   });
+
+  /// Se ha soltado una nota sobre la carpeta: meterla dentro.
+  final void Function(String noteId) onDropNote;
 
   final Folder folder;
   final int count;
@@ -38,6 +44,14 @@ class FolderGroup extends StatefulWidget {
 
 class _FolderGroupState extends State<FolderGroup> {
   bool _hover = false;
+  bool _dropOver = false;
+  Timer? _openTimer;
+
+  @override
+  void dispose() {
+    _openTimer?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -61,8 +75,15 @@ class _FolderGroupState extends State<FolderGroup> {
           height: 40,
           padding: const EdgeInsets.only(left: 4, right: 4),
           decoration: BoxDecoration(
-            color: _hover ? p.hover : Colors.transparent,
+            color: _dropOver
+                ? color.withValues(alpha: 0.16)
+                : (_hover ? p.hover : Colors.transparent),
             borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+                color: _dropOver
+                    ? color.withValues(alpha: 0.7)
+                    : Colors.transparent,
+                width: 1.2),
           ),
           child: Row(
             children: [
@@ -143,7 +164,32 @@ class _FolderGroupState extends State<FolderGroup> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,
         children: [
-          header,
+          // Soltar una nota en la cabecera la mete en la carpeta; si se
+          // mantiene encima un momento, la carpeta se despliega.
+          DragTarget<String>(
+            onWillAcceptWithDetails: (_) {
+              setState(() => _dropOver = true);
+              _openTimer?.cancel();
+              if (!open) {
+                _openTimer = Timer(const Duration(milliseconds: 600), () {
+                  if (mounted && _dropOver && !widget.expanded) {
+                    widget.onToggle();
+                  }
+                });
+              }
+              return true;
+            },
+            onLeave: (_) {
+              _openTimer?.cancel();
+              setState(() => _dropOver = false);
+            },
+            onAcceptWithDetails: (d) {
+              _openTimer?.cancel();
+              setState(() => _dropOver = false);
+              widget.onDropNote(d.data);
+            },
+            builder: (context, _, __) => header,
+          ),
           // Contenido con línea guía a la izquierda; se despliega animado.
           ClipRect(
             child: AnimatedSize(

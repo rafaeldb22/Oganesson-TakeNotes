@@ -95,24 +95,27 @@ String fechaMedia(DateTime utc) {
       '${d.hour}:${_two(d.minute)}';
 }
 
+/// Duración legible con minutos redondeados y sin partes a cero:
+/// "2 d", "2 d 3 h", "5 h 30 min", "45 min".
+String duracionTexto(Duration d) {
+  final mins = (d.inSeconds.abs() / 60).round();
+  final days = mins ~/ 1440;
+  final hours = (mins % 1440) ~/ 60;
+  final m = mins % 60;
+  if (days >= 1) return hours == 0 ? '$days d' : '$days d $hours h';
+  if (hours >= 1) return m == 0 ? '$hours h' : '$hours h $m min';
+  return '$m min';
+}
+
 /// "quedan 2 d 4 h", "quedan 35 min", "vencida hace 3 h".
 String tiempoRestante(DateTime dueUtc, {bool done = false}) {
   if (done) return _en ? 'completed' : 'completada';
-  final diff = dueUtc.difference(DateTime.now().toUtc());
-  final past = diff.isNegative;
-  final d = diff.abs();
-  String txt;
-  if (d.inDays >= 1) {
-    final h = d.inHours % 24;
-    txt = h == 0 ? '${d.inDays} d' : '${d.inDays} d $h h';
-  } else if (d.inHours >= 1) {
-    final m = d.inMinutes % 60;
-    txt = m == 0 ? '${d.inHours} h' : '${d.inHours} h $m min';
-  } else {
-    txt = '${d.inMinutes.clamp(1, 59)} min';
-  }
-  if (_en) return past ? 'overdue by $txt' : '$txt left';
-  return past ? 'vencida hace $txt' : 'quedan $txt';
+  final diff = dueUtc.toUtc().difference(DateTime.now().toUtc());
+  // Menos de medio minuto: vence ahora mismo.
+  if (diff.inSeconds.abs() < 30) return _en ? 'due now' : 'vence ahora';
+  final txt = duracionTexto(diff);
+  if (_en) return diff.isNegative ? 'overdue by $txt' : '$txt left';
+  return diff.isNegative ? 'vencida hace $txt' : 'quedan $txt';
 }
 
 /// Grupo temporal para ordenar las notas temporales por tiempo.

@@ -1,10 +1,12 @@
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
 import '../data/notes_repository.dart';
 import '../data/reminders.dart';
 import 'anim.dart';
 import 'format.dart';
+import 'smooth_scroll.dart';
 import 'theme.dart';
 import 'urgency.dart';
 import 'i18n.dart';
@@ -45,6 +47,14 @@ class _ScheduleSheet extends StatefulWidget {
 }
 
 class _ScheduleSheetState extends State<_ScheduleSheet> {
+  final _scroll = SmoothScrollController();
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
+
   late DateTime _start; // local
   late DateTime _end; // local
   _Edge _editing = _Edge.end;
@@ -102,6 +112,7 @@ class _ScheduleSheetState extends State<_ScheduleSheet> {
 
     return SafeArea(
       child: SingleChildScrollView(
+        controller: _scroll,
         padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -612,38 +623,161 @@ class _Presets extends StatelessWidget {
   }
 }
 
-/// Selector de hora tipo rueda (24 h, de 5 en 5 minutos).
-class _TimeWheel extends StatelessWidget {
+/// Selector de hora tipo rueda (24 h, de 5 en 5 minutos). Dos columnas
+/// que giran sin fin; con la rueda del ratón el giro se anima suavemente
+/// en vez de saltar.
+class _TimeWheel extends StatefulWidget {
   const _TimeWheel({super.key, required this.value, required this.onChanged});
   final DateTime value;
   final void Function(DateTime) onChanged;
 
   @override
-  Widget build(BuildContext context) {
-    final dark = Theme.of(context).brightness == Brightness.dark;
+  State<_TimeWheel> createState() => _TimeWheelState();
+}
+
+class _TimeWheelState extends State<_TimeWheel> {
+  static const _itemExtent = 40.0;
+  late final FixedExtentScrollController _hours;
+  late final FixedExtentScrollController _minutes;
+
+  @override
+  void initState() {
+    super.initState();
+    final v = _round5(widget.value);
+    // Índices lejos del 0 para poder girar hacia arriba sin tope.
+    _hours = FixedExtentScrollController(initialItem: 24 * 50 + v.hour);
+    _minutes =
+        FixedExtentScrollController(initialItem: 12 * 50 + v.minute ~/ 5);
+  }
+
+  @override
+  void dispose() {
+    _hours.dispose();
+    _minutes.dispose();
+    super.dispose();
+  }
+
+  void _emit() {
+    final h = _hours.selectedItem % 24;
+    final m = (_minutes.selectedItem % 12) * 5;
+    final v = widget.value;
+    widget.onChanged(DateTime(v.year, v.month, v.day, h, m));
+  }
+
+  Widget _column(FixedExtentScrollController c, int count, int step) {
     final fg = Theme.of(context).colorScheme.onSurface;
+    return _SmoothWheel(
+      controller: c,
+      child: ListWheelScrollView.useDelegate(
+        controller: c,
+        itemExtent: _itemExtent,
+        diameterRatio: 1.6,
+        perspective: 0.004,
+        squeeze: 1.05,
+        physics: const FixedExtentScrollPhysics(),
+        onSelectedItemChanged: (_) => _emit(),
+        childDelegate: ListWheelChildLoopingListDelegate(
+          children: [
+            for (var i = 0; i < count; i++)
+              Center(
+                child: Text((i * step).toString().padLeft(2, '0'),
+                    style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w600,
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                        color: fg)),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final p = Palette.of(context);
     return Container(
-      height: 128,
+      height: 136,
       decoration: BoxDecoration(
-        color: Palette.background(context),
+        color: p.background,
         borderRadius: BorderRadius.circular(18),
       ),
-      child: CupertinoTheme(
-        data: CupertinoThemeData(
-          brightness: dark ? Brightness.dark : Brightness.light,
-          textTheme: CupertinoTextThemeData(
-            dateTimePickerTextStyle:
-                TextStyle(fontSize: 22, fontWeight: FontWeight.w600, color: fg),
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          // Franja de la hora elegida.
+          Container(
+            height: _itemExtent,
+            margin: const EdgeInsets.symmetric(horizontal: 12),
+            decoration: BoxDecoration(
+              color: p.accent.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+          Row(
+            children: [
+              const Spacer(),
+              SizedBox(width: 70, child: _column(_hours, 24, 1)),
+              Text(':',
+                  style: TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w700,
+                      color: p.secondary)),
+              SizedBox(width: 70, child: _column(_minutes, 12, 5)),
+              const Spacer(),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Recoge la rueda del ratón sobre una columna y la gira con animación
+/// (los pasos seguidos se acumulan), en vez del salto por defecto.
+class _SmoothWheel extends StatefulWidget {
+  const _SmoothWheel({required this.controller, required this.child});
+  final FixedExtentScrollController controller;
+  final Widget child;
+
+  @override
+  State<_SmoothWheel> createState() => _SmoothWheelState();
+}
+
+class _SmoothWheelState extends State<_SmoothWheel> {
+  int? _target;
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        widget.child,
+        // Encima de la rueda para recibir el evento antes que ella (los
+        // arrastres siguen llegando a la rueda).
+        Positioned.fill(
+          child: Listener(
+            behavior: HitTestBehavior.translucent,
+            onPointerSignal: (e) {
+              if (e is! PointerScrollEvent) return;
+              GestureBinding.instance.pointerSignalResolver.register(e, (ev) {
+                final dy = (ev as PointerScrollEvent).scrollDelta.dy;
+                if (dy == 0) return;
+                final c = widget.controller;
+                final from = _target ?? c.selectedItem;
+                final target = from + (dy > 0 ? 1 : -1);
+                _target = target;
+                c
+                    .animateToItem(target,
+                        duration: const Duration(milliseconds: 320),
+                        curve: Curves.easeOutCubic)
+                    .whenComplete(() {
+                  if (_target == target) _target = null;
+                });
+              });
+            },
           ),
         ),
-        child: CupertinoDatePicker(
-          mode: CupertinoDatePickerMode.time,
-          use24hFormat: true,
-          minuteInterval: 5,
-          initialDateTime: _round5(value),
-          onDateTimeChanged: onChanged,
-        ),
-      ),
+      ],
     );
   }
 }
@@ -662,9 +796,7 @@ class _Preview extends StatelessWidget {
         ? 1.0
         : (now.difference(start).inSeconds / total).clamp(0.0, 1.0);
     final dur = end.difference(start);
-    final durTxt = dur.inDays >= 1
-        ? '${dur.inDays} d ${dur.inHours % 24} h'
-        : '${dur.inHours} h ${dur.inMinutes % 60} min';
+    final durTxt = duracionTexto(dur);
     return Container(
       padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
       decoration: BoxDecoration(
@@ -680,9 +812,10 @@ class _Preview extends StatelessWidget {
                   style: TextStyle(
                       color: fuseColor(p), fontWeight: FontWeight.w700)),
               const Spacer(),
-              Text(trf('dura {0}', [durTxt]),
-                  style: TextStyle(
-                      color: Palette.secondary(context), fontSize: 12.5)),
+              if (dur.inMinutes > 0)
+                Text(trf('dura {0}', [durTxt]),
+                    style: TextStyle(
+                        color: Palette.secondary(context), fontSize: 12.5)),
             ],
           ),
           const SizedBox(height: 6),

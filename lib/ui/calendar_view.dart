@@ -6,6 +6,7 @@ import '../models/note.dart';
 import 'anim.dart';
 import 'format.dart';
 import 'split.dart';
+import 'smooth_scroll.dart';
 import 'theme.dart';
 import 'urgency.dart';
 import 'i18n.dart';
@@ -44,6 +45,10 @@ class CalendarView extends StatefulWidget {
 }
 
 class _CalendarViewState extends State<CalendarView> {
+  /// Desplazamiento suave con la rueda del ratón.
+  final _calScroll = SmoothScrollController();
+  final _listScroll = SmoothScrollController();
+
   /// Alto mínimo de una celda del mes: margen + borde (7) + espacio (4) +
   /// número del día (28) + 3 barras (21) + "+N" (12) = 72, con holgura.
   /// Si no cabe, el calendario se desplaza en vez de desbordarse.
@@ -62,6 +67,8 @@ class _CalendarViewState extends State<CalendarView> {
   @override
   void dispose() {
     _pages.dispose();
+    _calScroll.dispose();
+    _listScroll.dispose();
     super.dispose();
   }
 
@@ -230,6 +237,7 @@ class _CalendarViewState extends State<CalendarView> {
             final calendar = LayoutBuilder(builder: (context, cc) {
               final cellH = ((cc.maxHeight - 96) / 6).clamp(_minCell, 130.0);
               return SingleChildScrollView(
+                controller: _calScroll,
                 child: Column(
                   children: [
                     _header(context),
@@ -262,6 +270,7 @@ class _CalendarViewState extends State<CalendarView> {
           return ColoredBox(
             color: Palette.card(context),
             child: ListView(
+              controller: _listScroll,
               padding: const EdgeInsets.only(bottom: 32),
               children: [
                 _header(context),

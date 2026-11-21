@@ -15,6 +15,7 @@ import 'note_color_sheet.dart';
 import 'format.dart';
 import 'link_picker.dart';
 import 'schedule_sheet.dart';
+import 'smooth_scroll.dart';
 import 'theme.dart';
 import 'urgency.dart';
 import 'i18n.dart';
@@ -56,7 +57,7 @@ class NoteEditor extends StatefulWidget {
 class _NoteEditorState extends State<NoteEditor> {
   late final QuillController _ctrl;
   final _focus = FocusNode();
-  final _scroll = ScrollController();
+  final _scroll = SmoothScrollController();
   DateTime _lastTyped = DateTime(2000);
   bool _closing = false;
   bool _applyingRemote = false;

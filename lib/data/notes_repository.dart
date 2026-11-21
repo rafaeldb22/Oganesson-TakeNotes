@@ -60,7 +60,42 @@ class NotesRepository extends ChangeNotifier {
 
   /// Notas de las listas normales: nunca las del Vault (tienen su propia
   /// pantalla, desde ⋯) ni las completadas hace más de 3 días.
-  bool _visible(Note n) => !n.vault && !isArchived(n);
+  bool _visible(Note n) => !n.vault && !n.archived && !isArchived(n);
+
+  /// false si Supabase aún no tiene las columnas de la migración 006
+  /// (`archived`, `position`): se suben las notas sin esos campos.
+  bool serverHasArchive = true;
+
+  /// Notas archivadas (deslizar a la izquierda), más recientes primero.
+  List<Note> get archivedNotes => _notes.values
+      .where((n) => n.archived && !n.deleted && !n.vault && !n.isEmpty)
+      .toList()
+    ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+
+  void setArchived(String id, bool archived) =>
+      _edit(id, (n) => n.archived = archived);
+
+  /// Coloca varias notas a la vez (orden personalizado al arrastrar).
+  void setPositions(Map<String, double> positions) {
+    if (_disposed || positions.isEmpty) return;
+    final now = DateTime.now().toUtc();
+    for (final e in positions.entries) {
+      final n = _notes[e.key];
+      if (n == null || n.position == e.value) continue;
+      n.position = e.value;
+      n.updatedAt = now;
+      _dirty.add(n.id);
+    }
+    _changed();
+  }
+
+  /// Mueve una nota a otra carpeta (o a ninguna) y, si se indica, a otra
+  /// posición del orden personalizado.
+  void moveNote(String id, {required String? folderId, double? position}) =>
+      _edit(id, (n) {
+        n.folderId = folderId;
+        if (position != null) n.position = position;
+      });
 
   /// Notas del Vault (solo con el Vault abierto), más recientes primero.
   List<Note> get vaultNotes {
@@ -436,6 +471,7 @@ class NotesRepository extends ChangeNotifier {
       if (rows.isNotEmpty) {
         final had = serverHasVault;
         serverHasVault = rows.first.containsKey('vault');
+        serverHasArchive = rows.first.containsKey('archived');
         if (had != serverHasVault) changed = true;
       }
       for (final r in rows) {
@@ -533,15 +569,28 @@ class NotesRepository extends ChangeNotifier {
       // Sin la columna `vault` en Supabase, las del Vault esperan en local.
       if (n.vault && !serverHasVault) continue;
       sent[id] = n.updatedAt;
-      rows.add(n.toRow(userId: userId, withVault: serverHasVault));
+      rows.add(n.toRow(
+          userId: userId,
+          withVault: serverHasVault,
+          withArchive: serverHasArchive));
     }
     if (rows.isEmpty) return;
     try {
       await _client.from('notes').upsert(rows);
     } on PostgrestException catch (e) {
       // Columna `vault` inexistente: se sube el resto sin ella.
-      if (serverHasVault && e.message.contains('vault')) {
+      if (serverHasVault &&
+          (e.message.contains('vault') ||
+              e.message.contains('links') ||
+              e.message.contains('done_at'))) {
         serverHasVault = false;
+        _notify();
+        return _pushDirty();
+      }
+      // Igual con las columnas de la migración 006.
+      if (serverHasArchive &&
+          (e.message.contains('archived') || e.message.contains('position'))) {
+        serverHasArchive = false;
         _notify();
         return _pushDirty();
       }

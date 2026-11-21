@@ -65,6 +65,13 @@ that it still arrives. On Windows, check toasts are enabled first:
   (`vaultNotes` does, when unlocked). Password change needs the current one
   (`lib/ui/vault_dialogs.dart`); email-code reset exists but is gated by
   `AppConfig.emailCodes`. Vault notes are not end-to-end encrypted (same RLS as other notes).
+- Archive & manual order: `Note.archived` / `Note.position` (migration 006; uploads skip them
+  while the columns are missing, `serverHasArchive`). Swipe left → archive, right → delete.
+  Drag & drop in the list: `Draggable` (vertical, desktop) / `LongPressDraggable` (Android),
+  drop targets on tiles, folder headers (`FolderGroup.onDropNote`) and `DropZone` headers.
+  Reordering switches the sort to `'manual'`. Archived list: `lib/ui/archived_sheet.dart`.
+- Smooth wheel scrolling: use `SmoothScrollController` (`lib/ui/smooth_scroll.dart`) for new
+  scroll views on desktop.
 - Completed tasks: `Note.doneAt` (column `notes.done_at`); done > 3 days → hidden from lists and
   shown in ⋯ → Completadas (`lib/ui/completed_sheet.dart`); > 30 days → trash.
 - `lib/data/updater.dart` — checks GitHub Releases (`AppConfig.githubRepo`) and installs the
@@ -108,6 +115,7 @@ that it still arrives. On Windows, check toasts are enabled first:
 - Not yet verified on a real phone: Android calendar widget (2x2/4x2/4x4 sizes and the
   solid background), in-app APK update, trash purge, 7/3/1-day reminders, notification
   permissions on Android 13+.
+- Migration `supabase/migrations/006_archive_order.sql` must also be run (archive + order).
 - Migration `supabase/migrations/005_vault.sql` must be run in Supabase (adds `notes.vault`,
   `notes.links`, `notes.done_at` and the `vaults` table). Until then those fields are not
   uploaded (`NotesRepository.serverHasVault`), vault notes stay on this device only and the

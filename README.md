@@ -6,7 +6,8 @@
 
 <p align="center">
   Notes that live on your phone <b>and</b> your PC — synced in real time.<br>
-  Folders, rich text, deadlines with reminders, a calendar and home-screen widgets.
+  Folders, rich text, deadlines with reminders, a calendar, a note network, a Vault and home-screen widgets.<br>
+  In Spanish and English.
 </p>
 
 <p align="center">
@@ -16,6 +17,16 @@
   &nbsp;
   <a href="https://github.com/rafaeldb22/Oganesson-TakeNotes/releases/latest/download/Oganesson.apk">
     <img src="https://img.shields.io/badge/Download-Android%20APK-2DD4A7?style=for-the-badge&logo=android&logoColor=white" alt="Download for Android">
+  </a>
+  &nbsp;
+  <a href="https://github.com/rafaeldb22/Oganesson-TakeNotes/releases/latest/download/Oganesson-Windows-portable.zip">
+    <img src="https://img.shields.io/badge/Download-Windows%20portable-555?style=for-the-badge&logo=windows&logoColor=white" alt="Windows portable zip">
+  </a>
+</p>
+
+<p align="center">
+  <a href="https://buymeacoffee.com/rafaeldb">
+    <img src="https://img.shields.io/badge/Buy%20me%20a%20coffee-FFDD00?style=for-the-badge&logo=buymeacoffee&logoColor=black" alt="Buy me a coffee">
   </a>
 </p>
 
@@ -52,7 +63,9 @@ Sign in with the **same account** on every device and your notes sync automatica
 ## Features
 
 **Notes**
-- iPhone-style list with pinned notes, search, swipe to delete and a two-panel layout on desktop.
+- iPhone-style list with pinned notes, search and a two-panel layout on desktop (the calendar shows when no note is open).
+- Swipe right to delete, swipe left to archive (both ask first); archived notes live in ⋯ → Archived.
+- Drag notes up and down to reorder them or move them between folders.
 - Rich text editor: titles, bold/italic/underline/strikethrough, bullet & numbered lists, checklists, quotes, code, text colour and highlight. New notes start with a big title line.
 - Collapsible folders inside the list (like Zen browser), with name and colour; custom colour per note.
 - Sort by last modified, creation date or name.

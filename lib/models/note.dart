@@ -21,8 +21,16 @@ class Note {
     this.deleted = false,
     this.vault = false,
     this.doneAt,
+    this.archived = false,
+    this.position,
     List<String>? links,
   }) : links = links ?? [];
+
+  /// Nota archivada: sale de las listas y se ve en ⋯ → Archivadas.
+  bool archived;
+
+  /// Posición en el orden personalizado (arrastrar). null = sin colocar.
+  double? position;
 
   /// Cuándo se marcó como completada (para moverla a "Completadas").
   DateTime? doneAt;
@@ -109,7 +117,10 @@ class Note {
 
   /// [withVault] = false cuando Supabase aún no tiene las columnas de la
   /// migración 005 (`vault`, `links`, `done_at`): el resto se sigue subiendo.
-  Map<String, dynamic> toRow({String? userId, bool withVault = true}) => {
+  /// [withArchive] = false si falta la migración 006 (`archived`, `position`).
+  Map<String, dynamic> toRow(
+          {String? userId, bool withVault = true, bool withArchive = true}) =>
+      {
         'id': id,
         if (userId != null) 'user_id': userId,
         'content': content,
@@ -118,6 +129,8 @@ class Note {
         if (withVault) 'vault': vault,
         if (withVault) 'links': links,
         if (withVault) 'done_at': doneAt?.toUtc().toIso8601String(),
+        if (withArchive) 'archived': archived,
+        if (withArchive) 'position': position,
         'remind_at': remindAt?.toUtc().toIso8601String(),
         'due_at': dueAt?.toUtc().toIso8601String(),
         'done': done,
@@ -143,6 +156,8 @@ class Note {
       deleted: r['deleted'] == true,
       vault: r['vault'] == true,
       doneAt: _parseDate(r['done_at']),
+      archived: r['archived'] == true,
+      position: (r['position'] as num?)?.toDouble(),
       links: r['links'] is List
           ? (r['links'] as List).whereType<String>().toList()
           : null,

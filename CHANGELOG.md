@@ -2,6 +2,29 @@
 
 All notable changes to Oganesson TakeNotes (formerly *Notas* / *BabuNotes*).
 
+## [1.3.0] — 2026-11-21
+
+### Added
+- **Archive**: swipe a note to the left to archive it (it asks first, like deleting, and can be
+  undone). Archived notes are in the new *⋯ → Archivadas* section (unarchive or delete).
+- **Drag & drop**: drag notes up or down (mouse drag on desktop, long press on Android) to move
+  them into a folder, out of it (*Sin carpeta*), to *Fijadas*, or to another position. Folders
+  light up and open when you hover a note over them. Reordering switches the list to the new
+  *Personalizado* (custom) sort, which is synced.
+- Supabase migration `006_archive_order.sql` (`notes.archived`, `notes.position`).
+
+### Changed
+- Swipe right deletes, swipe left archives.
+- The **calendar** is now the default view in the right panel when no note is open.
+- New **⋯ menu**: account header with the app version, sections (Notes, Appearance, Account),
+  counters, subtitles and a staggered animated entrance.
+- **Smooth mouse-wheel scrolling**: the notes list, the editor, the calendar and the date sheet
+  glide instead of jumping.
+- **Date picker**: new time wheel (hours and 5-minute steps) that turns smoothly with the mouse
+  wheel; the remaining time and duration are now rounded correctly ("quedan 6 h 25 min",
+  "dura 2 d", "vence ahora").
+- The "Notas" title above the list was removed (only the sort menu remains).
+
 ## [1.2.1] — 2026-11-21
 
 ### Added

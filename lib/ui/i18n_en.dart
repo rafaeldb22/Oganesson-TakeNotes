@@ -2,6 +2,23 @@
 /// código (con `{0}`, `{1}`… para los valores). Si falta una clave se
 /// muestra el texto en español.
 const enStrings = <String, String>{
+  // --- Archivadas y orden
+  'Archivar': 'Archive',
+  'Archivadas': 'Archived',
+  'Desarchivar': 'Unarchive',
+  '¿Archivar «{0}»?': 'Archive “{0}”?',
+  'La encontrarás en ⋯ → Archivadas.': 'You will find it in ⋯ → Archived.',
+  'Desliza una nota hacia la izquierda para archivarla.':
+      'Swipe a note to the left to archive it.',
+  'No hay notas archivadas': 'No archived notes',
+  'Nota archivada': 'Note archived',
+  'Nota desarchivada': 'Note unarchived',
+  'Orden personalizado': 'Custom order',
+  'Personalizado': 'Custom',
+  'Suelta aquí': 'Drop here',
+  'Abierto': 'Unlocked',
+  'Cuenta': 'Account',
+
   // --- General
   'Aceptar': 'OK',
   'Actualizar': 'Update',

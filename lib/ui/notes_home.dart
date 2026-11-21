@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:io' show Platform;
 import 'dart:math';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -14,12 +16,15 @@ import '../data/vault.dart';
 import '../data/widget_bridge.dart';
 import '../models/note.dart';
 import 'anim.dart';
+import '../data/updater.dart';
 import 'account_dialogs.dart';
+import 'archived_sheet.dart';
 import 'calendar_view.dart';
 import 'completed_sheet.dart';
 import 'context_menu.dart';
 import 'folders.dart';
 import 'folder_group.dart';
+import 'drop_zone.dart';
 import 'format.dart';
 import 'graph_view.dart';
 import 'i18n.dart';
@@ -31,6 +36,7 @@ import 'schedule_sheet.dart';
 import 'sort_menu.dart';
 import 'split.dart';
 import 'toast.dart';
+import 'smooth_scroll.dart';
 import 'theme.dart';
 import 'theme_picker.dart';
 import 'trash_sheet.dart';
@@ -73,6 +79,12 @@ class _NotesHomeState extends State<NotesHome> {
   Object? _listKey;
   Widget? _editorCache;
   Object? _editorKey;
+
+  /// Desplazamiento suave de la lista con la rueda del ratón.
+  final _listScroll = SmoothScrollController();
+
+  /// Nota que se está arrastrando (muestra las zonas donde soltarla).
+  String? _draggingNote;
 
   /// Carpetas desplegadas en la lista (como las carpetas de Zen).
   final Set<String> _openFolders = {};
@@ -121,6 +133,7 @@ class _NotesHomeState extends State<NotesHome> {
     vault.removeListener(_onVault);
     repo.onLocalEdit = null;
     _search.dispose();
+    _listScroll.dispose();
     super.dispose();
   }
 
@@ -364,6 +377,7 @@ class _NotesHomeState extends State<NotesHome> {
       _filter,
       _sort,
       Object.hashAllUnordered(_openFolders),
+      _draggingNote,
       _openId,
       wide,
       _removing.length,
@@ -431,17 +445,15 @@ class _NotesHomeState extends State<NotesHome> {
                             transitionBuilder: fadeThrough,
                             child: hasOpen
                                 ? _editor(showBack: false)
-                                : switch (_filter) {
-                                    'calendario' => RepaintBoundary(
+                                // Sin nota abierta se ve el calendario (o la
+                                // red, si está elegida).
+                                : _filter == 'red'
+                                    ? RepaintBoundary(
+                                        key: const ValueKey('red-panel'),
+                                        child: _graph())
+                                    : RepaintBoundary(
                                         key: const ValueKey('cal'),
                                         child: _calendar()),
-                                    'red' => RepaintBoundary(
-                                        key: const ValueKey('red-panel'),
-                                        child: _graph()),
-                                    _ => _EmptyPane(
-                                        key: const ValueKey('vacio'),
-                                        onNew: _newNote),
-                                  },
                           ),
                         )),
                         // Contador abajo a la derecha de la ventana.
@@ -511,6 +523,8 @@ class _NotesHomeState extends State<NotesHome> {
       case 'nombre':
         all.sort(
             (a, b) => a.title.toLowerCase().compareTo(b.title.toLowerCase()));
+      case 'manual':
+        all.sort(_byPosition);
       default: // ya viene ordenada por última modificación
     }
     final pinned = all.where((n) => n.pinned).toList();
@@ -538,26 +552,24 @@ class _NotesHomeState extends State<NotesHome> {
         onRefresh: repo.sync,
         child: ListView(
           key: const PageStorageKey('lista-notas'),
+          controller: _listScroll,
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.fromLTRB(12, 0, 12, 24),
           children: [
-            // Cabecera: título de la lista y orden.
+            // Cabecera: solo el selector de orden.
             Padding(
               key: const ValueKey('cabecera-lista'),
               padding: const EdgeInsets.fromLTRB(6, 6, 0, 2),
               child: Row(
                 children: [
-                  Expanded(
-                    child: Text(tr('Notas'),
-                        style: const TextStyle(
-                            fontSize: 17, fontWeight: FontWeight.w700)),
-                  ),
+                  const Spacer(),
                   _sortMenu(context),
                 ],
               ),
             ),
-            if (pinned.isNotEmpty)
-              ..._section(context, tr('Fijadas'), pinned, wide, () => index++),
+            if (pinned.isNotEmpty || _draggingNote != null)
+              ..._section(context, tr('Fijadas'), pinned, wide, () => index++,
+                  onDrop: (id) => _dropInto(id, folderId: null, pin: true)),
             for (final f in folders)
               if (q.isEmpty || others.any((n) => n.folderId == f.id))
                 Builder(
@@ -577,19 +589,22 @@ class _NotesHomeState extends State<NotesHome> {
                         _newNote(folderId: f.id);
                       },
                       onOptions: (at) => _folderOptions(f, at),
+                      onDropNote: (id) => _dropInto(id, folderId: f.id),
                       child: inFolder.isEmpty
                           ? null
                           : _tilesCard(context, inFolder, wide, () => index++),
                     );
                   },
                 ),
-            if (loose.isNotEmpty)
+            if (loose.isNotEmpty ||
+                (_draggingNote != null && folders.isNotEmpty))
               ..._section(
                   context,
                   folders.isEmpty && pinned.isEmpty ? null : tr('Sin carpeta'),
                   loose,
                   wide,
-                  () => index++),
+                  () => index++,
+                  onDrop: (id) => _dropInto(id, folderId: null)),
           ],
         ),
       );
@@ -607,93 +622,12 @@ class _NotesHomeState extends State<NotesHome> {
         ).animate().fadeIn(duration: Anim.slow),
         actions: [
           _SyncIndicator(repo: repo),
-          PopupMenuButton<String>(
-            icon: const Icon(Icons.more_horiz),
-            tooltip: tr('Más opciones'),
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-            onSelected: (v) {
-              switch (v) {
-                case 'tema':
-                  showThemePicker(context);
-                case 'idioma':
-                  showLanguagePicker(context);
-                case 'vault':
-                  _openVault();
-                case 'vault-lock':
-                  vault.lock();
-                case 'vault-pass':
-                  changeVaultPassword(context, vault);
-                case 'completadas':
-                  showCompleted(context, repo);
-                case 'papelera':
-                  showTrash(context, repo);
-                case 'sync':
-                  repo.sync();
-                case 'update':
-                  checkForUpdatesManually(context);
-                case 'cuenta-pass':
-                  changeAccountPassword(context);
-                case 'coffee':
-                  openLink(context, AppConfig.coffeeUrl);
-                case 'github':
-                  openLink(context, AppConfig.githubUrl);
-                case 'logout':
-                  _signOut();
-              }
-            },
-            itemBuilder: (_) {
-              PopupMenuItem<String> item(
-                      String value, IconData icon, String title,
-                      {String? subtitle, String? trailing}) =>
-                  PopupMenuItem(
-                    value: value,
-                    child: ListTile(
-                      dense: true,
-                      contentPadding: EdgeInsets.zero,
-                      leading: Icon(icon),
-                      title: Text(title),
-                      subtitle: subtitle == null ? null : Text(subtitle),
-                      trailing: trailing == null
-                          ? null
-                          : Text(trailing,
-                              style:
-                                  TextStyle(color: Palette.secondary(context))),
-                    ),
-                  );
-              final done = repo.completed.length;
-              return [
-                item('tema', Icons.palette_outlined, tr('Tema y colores')),
-                item('idioma', Icons.translate_rounded, tr('Idioma'),
-                    trailing: AppLanguage.supported[appLanguage.code]),
-                const PopupMenuDivider(),
-                item('vault', Icons.shield_outlined, 'Vault',
-                    subtitle: tr('Notas protegidas con contraseña')),
-                if (vault.unlocked)
-                  item('vault-lock', Icons.lock_outline_rounded,
-                      tr('Bloquear Vault')),
-                if (vault.state == VaultState.locked || vault.unlocked)
-                  item('vault-pass', Icons.password_rounded,
-                      tr('Cambiar contraseña del Vault')),
-                item('completadas', Icons.task_alt_rounded, tr('Completadas'),
-                    trailing: done == 0 ? null : '$done'),
-                item('papelera', Icons.delete_outline, tr('Papelera'),
-                    trailing:
-                        repo.trash.isEmpty ? null : '${repo.trash.length}'),
-                const PopupMenuDivider(),
-                item('sync', Icons.sync, tr('Sincronizar ahora')),
-                item('update', Icons.system_update_alt_rounded,
-                    tr('Buscar actualizaciones')),
-                item('cuenta-pass', Icons.manage_accounts_outlined,
-                    tr('Cambiar contraseña de la cuenta')),
-                const PopupMenuDivider(),
-                item('coffee', Icons.coffee_outlined, tr('Invítame a un café'),
-                    subtitle: tr('Apoya el proyecto (open source)')),
-                item('github', Icons.code_rounded, tr('Código en GitHub')),
-                const PopupMenuDivider(),
-                item('logout', Icons.logout, tr('Cerrar sesión')),
-              ];
-            },
+          Builder(
+            builder: (btnContext) => IconButton(
+              icon: const Icon(Icons.more_horiz),
+              tooltip: tr('Más opciones'),
+              onPressed: () => _openMainMenu(btnContext),
+            ),
           ),
           const SizedBox(width: 4),
         ],
@@ -789,11 +723,20 @@ class _NotesHomeState extends State<NotesHome> {
                   tooltip: tip,
                   // Solo se ve activo cuando la vista está a la vista: con
                   // una nota abierta encima no se queda "pulsado".
-                  icon: _filter == view && !noteOpen ? on : off,
-                  active: _filter == view && !noteOpen,
+                  icon: _viewShown(view, wide, noteOpen) ? on : off,
+                  active: _viewShown(view, wide, noteOpen),
                   onTap: () {
-                    if (_filter == view && noteOpen) {
+                    if (noteOpen &&
+                        (_filter == view ||
+                            (wide &&
+                                view == 'calendario' &&
+                                _filter != 'red'))) {
                       _close(); // volver a la red / al calendario
+                    } else if (wide) {
+                      // En pantalla ancha el calendario es la vista por
+                      // defecto: la red se activa y desactiva.
+                      _setFilter(
+                          view == 'red' && _filter == 'red' ? 'todas' : view);
                     } else {
                       _setFilter(_filter == view ? 'todas' : view);
                     }
@@ -824,6 +767,100 @@ class _NotesHomeState extends State<NotesHome> {
 
   Widget _sortMenu(BuildContext context) =>
       SortMenu(value: _sort, onChanged: _setSort);
+
+  /// Menú ⋯: panel animado con la cuenta arriba y las opciones por
+  /// secciones (sale del botón, alineado a su derecha).
+  Future<void> _openMainMenu(BuildContext btnContext) async {
+    final box = btnContext.findRenderObject() as RenderBox;
+    final at = box.localToGlobal(box.size.bottomRight(Offset.zero));
+    final done = repo.completed.length;
+    final archived = repo.archivedNotes.length;
+    final trash = repo.trash.length;
+    final email = Supabase.instance.client.auth.currentUser?.email;
+    final v = await Updater.instance.currentVersion().catchError((_) => '');
+    if (!mounted) return;
+    final choice = await showContextMenu(
+      context,
+      position: at + const Offset(0, 4),
+      alignRight: true,
+      width: 290,
+      header: _MenuHeader(email: email, version: v),
+      entries: [
+        MenuEntry.section(tr('Notas')),
+        MenuEntry('archivadas', Icons.archive_outlined, tr('Archivadas'),
+            badge: archived == 0 ? null : '$archived'),
+        MenuEntry('completadas', Icons.task_alt_rounded, tr('Completadas'),
+            badge: done == 0 ? null : '$done'),
+        MenuEntry('papelera', Icons.delete_outline, tr('Papelera'),
+            badge: trash == 0 ? null : '$trash'),
+        MenuEntry('vault', Icons.shield_outlined, 'Vault',
+            subtitle: vault.unlocked
+                ? tr('Abierto')
+                : tr('Notas protegidas con contraseña')),
+        if (vault.unlocked)
+          MenuEntry(
+              'vault-lock', Icons.lock_outline_rounded, tr('Bloquear Vault')),
+        MenuEntry.section(tr('Apariencia')),
+        MenuEntry('tema', Icons.palette_outlined, tr('Tema y colores')),
+        MenuEntry('idioma', Icons.translate_rounded, tr('Idioma'),
+            hint: AppLanguage.supported[appLanguage.code]),
+        MenuEntry.section(tr('Cuenta')),
+        MenuEntry('sync', Icons.sync, tr('Sincronizar ahora')),
+        MenuEntry('update', Icons.system_update_alt_rounded,
+            tr('Buscar actualizaciones')),
+        MenuEntry('cuenta-pass', Icons.manage_accounts_outlined,
+            tr('Cambiar contraseña de la cuenta')),
+        if (vault.state == VaultState.locked || vault.unlocked)
+          MenuEntry('vault-pass', Icons.password_rounded,
+              tr('Cambiar contraseña del Vault')),
+        null,
+        MenuEntry('coffee', Icons.coffee_outlined, tr('Invítame a un café'),
+            subtitle: tr('Apoya el proyecto (open source)')),
+        MenuEntry('github', Icons.code_rounded, tr('Código en GitHub')),
+        null,
+        MenuEntry('logout', Icons.logout, tr('Cerrar sesión'), danger: true),
+      ],
+    );
+    if (!mounted || choice == null) return;
+    switch (choice) {
+      case 'tema':
+        showThemePicker(context);
+      case 'idioma':
+        showLanguagePicker(context);
+      case 'vault':
+        _openVault();
+      case 'vault-lock':
+        vault.lock();
+      case 'vault-pass':
+        changeVaultPassword(context, vault);
+      case 'archivadas':
+        showArchived(context, repo);
+      case 'completadas':
+        showCompleted(context, repo);
+      case 'papelera':
+        showTrash(context, repo);
+      case 'sync':
+        repo.sync();
+      case 'update':
+        checkForUpdatesManually(context);
+      case 'cuenta-pass':
+        changeAccountPassword(context);
+      case 'coffee':
+        openLink(context, AppConfig.coffeeUrl);
+      case 'github':
+        openLink(context, AppConfig.githubUrl);
+      case 'logout':
+        _signOut();
+    }
+  }
+
+  /// ¿Se está viendo [view] (red o calendario)? En pantalla ancha el
+  /// calendario se ve siempre que no haya nota abierta ni red elegida.
+  bool _viewShown(String view, bool wide, bool noteOpen) {
+    if (noteOpen) return false;
+    if (wide && view == 'calendario') return _filter != 'red';
+    return _filter == view;
+  }
 
   /// Nº de notas, enlaces o tareas pendientes según la vista.
   Widget _statusText(BuildContext context) {
@@ -908,7 +945,12 @@ class _NotesHomeState extends State<NotesHome> {
               selected: wide && n.id == _openId,
               onTap: () => _open(n.id),
               onOptions: (at) => _options(n, at),
-              onDismissed: () => _deleteNote(n.id),
+              onDismissed: (d) => d == DismissDirection.startToEnd
+                  ? _deleteNote(n.id)
+                  : _archiveNote(n.id),
+              onDropBefore: (dragged) => _dropBefore(dragged, n, notes),
+              onDragState: (dragging) =>
+                  setState(() => _draggingNote = dragging ? n.id : null),
             ),
           ],
         )
@@ -932,26 +974,120 @@ class _NotesHomeState extends State<NotesHome> {
   }
 
   List<Widget> _section(BuildContext context, String? title, List<Note> notes,
-      bool wide, int Function() nextIndex) {
+      bool wide, int Function() nextIndex,
+      {void Function(String id)? onDrop}) {
+    final header = title == null
+        ? const SizedBox(height: 8)
+        : Padding(
+            padding: const EdgeInsets.fromLTRB(6, 14, 4, 8),
+            child: Text(title,
+                style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.3,
+                    color: Palette.secondary(context))),
+          );
     return [
-      if (title != null)
-        Padding(
-          key: ValueKey('titulo-$title'),
-          padding: const EdgeInsets.fromLTRB(6, 14, 4, 8),
-          child: Text(title,
-              style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0.3,
-                  color: Palette.secondary(context))),
-        )
-      else
-        const SizedBox(key: ValueKey('sin-titulo'), height: 8),
       KeyedSubtree(
-        key: ValueKey('seccion-$title'),
-        child: _tilesCard(context, notes, wide, nextIndex),
+        key: ValueKey('titulo-$title'),
+        child: onDrop == null
+            ? header
+            : DropZone(
+                active: _draggingNote != null,
+                onDrop: onDrop,
+                hint: notes.isEmpty ? tr('Suelta aquí') : null,
+                child: header,
+              ),
       ),
+      if (notes.isNotEmpty)
+        KeyedSubtree(
+          key: ValueKey('seccion-$title'),
+          child: _tilesCard(context, notes, wide, nextIndex),
+        ),
     ];
+  }
+
+  // ------------------------------------------------------ arrastrar y soltar
+
+  int _byPosition(Note a, Note b) {
+    final pa = a.position, pb = b.position;
+    if (pa != null && pb != null) return pa.compareTo(pb);
+    if (pa != null) return -1;
+    if (pb != null) return 1;
+    return b.updatedAt.compareTo(a.updatedAt);
+  }
+
+  /// Pasa al orden personalizado conservando el orden que se ve ahora.
+  void _ensureManualOrder() {
+    if (_sort == 'manual') return;
+    final list = repo.notes.toList();
+    switch (_sort) {
+      case 'creada':
+        list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      case 'nombre':
+        list.sort(
+            (a, b) => a.title.toLowerCase().compareTo(b.title.toLowerCase()));
+      default:
+        list.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+    }
+    repo.setPositions({
+      for (var i = 0; i < list.length; i++) list[i].id: i * 1000.0,
+    });
+    _setSort('manual');
+    showToast(context, tr('Orden personalizado'),
+        icon: Icons.drag_indicator_rounded);
+  }
+
+  /// Soltar una nota encima de otra: se coloca justo antes, en su grupo
+  /// (fijadas, su carpeta o sin carpeta).
+  void _dropBefore(String draggedId, Note target, List<Note> group) {
+    final dragged = repo.byId(draggedId);
+    if (dragged == null || draggedId == target.id) return;
+    _ensureManualOrder();
+    final g = group.where((n) => n.id != draggedId).toList()..sort(_byPosition);
+    final i = g.indexWhere((n) => n.id == target.id);
+    final cur = target.position ?? 0;
+    final prev = i > 0 ? g[i - 1].position : null;
+    final pos = prev == null ? cur - 1000 : (prev + cur) / 2;
+    repo.moveNote(draggedId,
+        folderId: target.pinned ? dragged.folderId : target.folderId,
+        position: pos);
+    if (dragged.pinned != target.pinned) repo.togglePin(draggedId);
+  }
+
+  /// Soltar una nota en una carpeta, en "Sin carpeta" o en "Fijadas".
+  void _dropInto(String id, {required String? folderId, bool pin = false}) {
+    final n = repo.byId(id);
+    if (n == null) return;
+    if (pin) {
+      if (!n.pinned) repo.togglePin(id);
+      return;
+    }
+    // Al final del grupo si hay orden personalizado.
+    double? pos;
+    if (_sort == 'manual') {
+      final ps = repo.notes
+          .where((x) => x.folderId == folderId && x.position != null)
+          .map((x) => x.position!);
+      pos = ps.isEmpty ? 0 : ps.reduce(max) + 1000;
+    }
+    repo.moveNote(id, folderId: folderId, position: pos);
+    if (n.pinned) repo.togglePin(id);
+    if (folderId != null && !_openFolders.contains(folderId)) {
+      _toggleFolder(folderId);
+    }
+  }
+
+  void _archiveNote(String id) {
+    if (_openId == id) setState(() => _openId = null);
+    repo.setArchived(id, true);
+    showToast(
+      context,
+      tr('Nota archivada'),
+      icon: Icons.archive_outlined,
+      actionLabel: tr('Deshacer'),
+      onAction: () => repo.setArchived(id, false),
+    );
   }
 }
 
@@ -963,6 +1099,8 @@ class _NoteTile extends StatefulWidget {
     required this.onTap,
     required this.onOptions,
     required this.onDismissed,
+    required this.onDropBefore,
+    required this.onDragState,
   });
 
   final bool removing;
@@ -972,7 +1110,15 @@ class _NoteTile extends StatefulWidget {
 
   /// Opciones de la nota: con posición = clic derecho (menú contextual).
   final void Function(Offset? at) onOptions;
-  final VoidCallback onDismissed;
+
+  /// Deslizar: hacia la derecha elimina, hacia la izquierda archiva.
+  final void Function(DismissDirection direction) onDismissed;
+
+  /// Se ha soltado otra nota encima: colocarla antes de esta.
+  final void Function(String draggedId) onDropBefore;
+
+  /// Empieza (true) o termina (false) el arrastre de esta nota.
+  final void Function(bool dragging) onDragState;
 
   @override
   State<_NoteTile> createState() => _NoteTileState();
@@ -980,6 +1126,8 @@ class _NoteTile extends StatefulWidget {
 
 class _NoteTileState extends State<_NoteTile> {
   bool _hover = false;
+  bool _dropHover = false; // otra nota arrastrada encima
+  double _dragDistance = 0;
 
   @override
   Widget build(BuildContext context) {
@@ -988,18 +1136,45 @@ class _NoteTileState extends State<_NoteTile> {
         ? Palette.selected(context)
         : (_hover ? Palette.hover(context) : Palette.card(context));
 
+    final scheme = Theme.of(context).colorScheme;
+    Widget swipeBg(Color color, IconData icon, String label, bool left) =>
+        Container(
+          color: color,
+          alignment: left ? Alignment.centerLeft : Alignment.centerRight,
+          padding: const EdgeInsets.symmetric(horizontal: 22),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (!left) ...[
+                Text(label,
+                    style: const TextStyle(
+                        color: Colors.white, fontWeight: FontWeight.w700)),
+                const SizedBox(width: 8),
+              ],
+              Icon(icon, color: Colors.white),
+              if (left) ...[
+                const SizedBox(width: 8),
+                Text(label,
+                    style: const TextStyle(
+                        color: Colors.white, fontWeight: FontWeight.w700)),
+              ],
+            ],
+          ),
+        );
+
     final tile = Dismissible(
       key: ValueKey('desliza-${n.id}'),
-      direction: DismissDirection.endToStart,
-      background: Container(
-        color: Colors.red,
-        alignment: Alignment.centerRight,
-        padding: const EdgeInsets.only(right: 20),
-        child: const Icon(Icons.delete, color: Colors.white),
-      ),
-      // Doble comprobación: pregunta antes de eliminar al deslizar.
-      confirmDismiss: (_) => confirmDelete(context, n.title),
-      onDismissed: (_) => widget.onDismissed(),
+      direction: DismissDirection.horizontal,
+      // Hacia la derecha: eliminar. Hacia la izquierda: archivar.
+      background: swipeBg(
+          scheme.error, Icons.delete_outline_rounded, tr('Eliminar'), true),
+      secondaryBackground: swipeBg(Palette.accent(context),
+          Icons.archive_outlined, tr('Archivar'), false),
+      // Doble comprobación en los dos casos.
+      confirmDismiss: (d) => d == DismissDirection.startToEnd
+          ? confirmDelete(context, n.title)
+          : confirmArchive(context, n.title),
+      onDismissed: widget.onDismissed,
       child: MouseRegion(
         onEnter: (_) => setState(() => _hover = true),
         onExit: (_) => setState(() => _hover = false),
@@ -1013,7 +1188,9 @@ class _NoteTileState extends State<_NoteTile> {
               // El fondo ya cambia con _hover: sin capa gris del InkWell.
               hoverColor: Colors.transparent,
               onTap: widget.onTap,
-              onLongPress: () => widget.onOptions(null),
+              // En Android la pulsación larga arrastra la nota (si se suelta
+              // sin moverla, abre las opciones).
+              onLongPress: _touchDrag ? null : () => widget.onOptions(null),
               onSecondaryTapUp: (d) => widget.onOptions(d.globalPosition),
               child: Padding(
                 padding:
@@ -1109,7 +1286,7 @@ class _NoteTileState extends State<_NoteTile> {
     );
 
     // Al borrar: la fila se desliza, se desvanece y se pliega.
-    return ClipRect(
+    final animated = ClipRect(
       child: AnimatedAlign(
         duration: Anim.medium,
         curve: Curves.easeInOutCubic,
@@ -1127,7 +1304,112 @@ class _NoteTileState extends State<_NoteTile> {
         ),
       ),
     );
+
+    // Soltar otra nota encima: línea de inserción arriba.
+    final target = DragTarget<String>(
+      onWillAcceptWithDetails: (d) {
+        final ok = d.data != n.id;
+        if (ok != _dropHover) setState(() => _dropHover = ok);
+        return ok;
+      },
+      onLeave: (_) => setState(() => _dropHover = false),
+      onAcceptWithDetails: (d) {
+        setState(() => _dropHover = false);
+        widget.onDropBefore(d.data);
+      },
+      builder: (context, _, __) => Stack(
+        children: [
+          animated,
+          Positioned(
+            left: 12,
+            right: 12,
+            top: 0,
+            child: AnimatedContainer(
+              duration: Anim.fast,
+              height: _dropHover ? 3 : 0,
+              decoration: BoxDecoration(
+                color: Palette.accent(context),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    // Arrastrar la nota: con el ratón en vertical (lo horizontal es deslizar)
+    // y en el móvil con pulsación larga.
+    return LayoutBuilder(builder: (context, c) {
+      final feedback = Material(
+        color: Colors.transparent,
+        child: Container(
+          width: c.maxWidth,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          decoration: BoxDecoration(
+            color: Palette.card(context),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Palette.accent(context), width: 1.5),
+            boxShadow: [
+              BoxShadow(
+                color: Theme.of(context).shadowColor.withValues(alpha: 0.3),
+                blurRadius: 18,
+                offset: const Offset(0, 8),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.drag_indicator_rounded,
+                  size: 18, color: Palette.secondary(context)),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(n.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                        fontSize: 15, fontWeight: FontWeight.w600)),
+              ),
+            ],
+          ),
+        ),
+      );
+      final dimmed = Opacity(opacity: 0.35, child: animated);
+      void started() {
+        _dragDistance = 0;
+        widget.onDragState(true);
+      }
+
+      void ended() => widget.onDragState(false);
+      if (_touchDrag) {
+        return LongPressDraggable<String>(
+          data: n.id,
+          feedback: feedback,
+          childWhenDragging: dimmed,
+          hapticFeedbackOnStart: true,
+          onDragStarted: started,
+          onDragUpdate: (d) => _dragDistance += d.delta.distance,
+          onDragEnd: (d) {
+            ended();
+            // Soltada casi sin moverla: era una pulsación larga normal.
+            if (!d.wasAccepted && _dragDistance < 14) widget.onOptions(null);
+          },
+          child: target,
+        );
+      }
+      return Draggable<String>(
+        data: n.id,
+        affinity: Axis.vertical,
+        feedback: feedback,
+        childWhenDragging: dimmed,
+        onDragStarted: started,
+        onDragEnd: (_) => ended(),
+        child: target,
+      );
+    });
   }
+
+  /// En pantallas táctiles (Android) se arrastra con pulsación larga.
+  bool get _touchDrag => !kIsWeb && Platform.isAndroid;
 }
 
 class _SyncIndicator extends StatelessWidget {
@@ -1224,45 +1506,6 @@ class _EmptyList extends StatelessWidget {
   }
 }
 
-class _EmptyPane extends StatelessWidget {
-  const _EmptyPane({super.key, required this.onNew});
-  final VoidCallback onNew;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      color: Palette.card(context),
-      alignment: Alignment.center,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.sticky_note_2_outlined,
-                  size: 72, color: Palette.secondary(context))
-              .animate(onPlay: (c) => c.repeat(reverse: true))
-              .moveY(
-                  begin: 0,
-                  end: -8,
-                  duration: 1800.ms,
-                  curve: Curves.easeInOut),
-          const SizedBox(height: 14),
-          Text(tr('Elige una nota o crea una nueva'),
-              style: TextStyle(color: Palette.secondary(context))),
-          const SizedBox(height: 14),
-          Bouncy(
-            hoverScale: 1.05,
-            child: FilledButton.icon(
-              onPressed: onNew,
-              icon: const Icon(Icons.add),
-              label: Text(tr('Nueva nota  (Ctrl+N)')),
-            ),
-          ),
-        ],
-      ).animate().fadeIn(duration: Anim.slow).slideY(begin: 0.05),
-    );
-  }
-}
-
-/// Botón de la barra inferior, con estado activo (tinte del acento).
 class _BarButton extends StatelessWidget {
   const _BarButton({
     required this.tooltip,
@@ -1307,6 +1550,26 @@ class _BarButton extends StatelessWidget {
   }
 }
 
+/// Pregunta en el centro de la pantalla antes de archivar una nota.
+Future<bool> confirmArchive(BuildContext context, String title) async =>
+    await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        icon: Icon(Icons.archive_outlined, color: Palette.accent(ctx)),
+        title: Text(trf('¿Archivar «{0}»?', [title])),
+        content: Text(tr('La encontrarás en ⋯ → Archivadas.')),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: Text(tr('Cancelar'))),
+          FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: Text(tr('Archivar'))),
+        ],
+      ),
+    ) ==
+    true;
+
 /// Pregunta en el centro de la pantalla antes de eliminar una nota.
 Future<bool> confirmDelete(BuildContext context, String title) async =>
     await showDialog<bool>(
@@ -1330,3 +1593,59 @@ Future<bool> confirmDelete(BuildContext context, String title) async =>
       ),
     ) ==
     true;
+
+/// Cabecera del menú ⋯: icono de la cuenta, correo y versión de la app.
+class _MenuHeader extends StatelessWidget {
+  const _MenuHeader({required this.email, required this.version});
+  final String? email;
+  final String version;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = Palette.of(context);
+    final initial =
+        (email == null || email!.isEmpty) ? 'O' : email![0].toUpperCase();
+    return Container(
+      margin: const EdgeInsets.fromLTRB(2, 2, 2, 6),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            p.accent.withValues(alpha: 0.22),
+            p.accent.withValues(alpha: 0.06),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          CircleAvatar(
+            radius: 18,
+            backgroundColor: p.accent,
+            child: Text(initial,
+                style:
+                    TextStyle(color: p.onAccent, fontWeight: FontWeight.w800)),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(email ?? 'Oganesson',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                        fontSize: 13.5, fontWeight: FontWeight.w700)),
+                if (version.isNotEmpty)
+                  Text('Oganesson $version',
+                      style: TextStyle(fontSize: 11.5, color: p.secondary)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}

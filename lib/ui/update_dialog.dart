@@ -29,8 +29,7 @@ Future<void> checkForUpdatesOnStart(BuildContext context) async {
 
 /// Comprobación desde el menú: informa también si ya está al día o si falla.
 Future<void> checkForUpdatesManually(BuildContext context) async {
-  showToast(context, tr('Buscando actualizaciones…'),
-      icon: Icons.sync_rounded);
+  showToast(context, tr('Buscando actualizaciones…'), icon: Icons.sync_rounded);
   try {
     final release = await Updater.instance.check(manual: true);
     if (release != null) {

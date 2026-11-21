@@ -10,6 +10,7 @@ const sortOptions = <String, (String, IconData)>{
   'modificada': ('Modificación', Icons.update_rounded),
   'creada': ('Creación', Icons.event_note_outlined),
   'nombre': ('Nombre (A–Z)', Icons.sort_by_alpha_rounded),
+  'manual': ('Personalizado', Icons.drag_indicator_rounded),
 };
 
 /// Selector de orden: una pastilla discreta que abre un panel flotante

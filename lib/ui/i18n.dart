@@ -1,3 +1,5 @@
+import 'dart:ui' as ui;
+
 import 'package:flutter/widgets.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -15,7 +17,7 @@ class AppLanguage extends ChangeNotifier {
   String code = _systemDefault();
 
   static String _systemDefault() {
-    final sys = WidgetsBinding.instance.platformDispatcher.locale.languageCode;
+    final sys = ui.PlatformDispatcher.instance.locale.languageCode;
     return sys == 'en' ? 'en' : 'es';
   }
 
