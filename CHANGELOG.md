@@ -2,6 +2,13 @@
 
 All notable changes to Oganesson TakeNotes (formerly *Notas* / *BabuNotes*).
 
+## [1.2.1] — 2026-11-21
+
+### Added
+- **More note colours**: 21 instead of 9 (Red, Peach, Sand, Olive, Forest, Turquoise, Blue,
+  Lavender, Purple, Fuchsia, Coffee and Slate added), each with its own time fuse. Existing
+  colours keep their values.
+
 ## [1.2.0] — 2026-11-21
 
 ### Changed

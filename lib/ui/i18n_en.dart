@@ -172,6 +172,12 @@ const enStrings = <String, String>{
   'Lila': 'Lilac',
   'Rosa': 'Pink',
   'Coral': 'Coral',
+  'Melocotón': 'Peach',
+  'Arena': 'Sand',
+  'Oliva': 'Olive',
+  'Lavanda': 'Lavender',
+  'Fucsia': 'Fuchsia',
+  'Pizarra': 'Slate',
   'Color de la nota': 'Note colour',
   'También cambia su mecha de tiempo.': 'It also changes its time fuse.',
 

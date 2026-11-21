@@ -26,16 +26,30 @@ const fuseStops = <Color>[
 ];
 
 /// Colores que se pueden elegir para una nota (y su mecha).
+/// Ordenados por tono. Los valores ya usados no se cambian (las notas
+/// guardan el ARGB), solo se añaden nuevos.
 const noteColors = <(String, int)>[
+  ('Rojo', 0xFFE5484D),
   ('Coral', 0xFFFF6B6B),
+  ('Melocotón', 0xFFFFA48A),
   ('Naranja', 0xFFFF9F43),
   ('Ámbar', 0xFFF7C948),
+  ('Arena', 0xFFD9B98C),
   ('Lima', 0xFF8BD450),
+  ('Oliva', 0xFF8A9A3B),
+  ('Bosque', 0xFF2F9E5B),
   ('Menta', 0xFF2DD4A7),
+  ('Turquesa', 0xFF22B8CF),
   ('Cielo', 0xFF4DABF7),
+  ('Azul', 0xFF3B6FE0),
   ('Índigo', 0xFF6C7CFF),
+  ('Lavanda', 0xFF9F8CFF),
   ('Uva', 0xFFB197FC),
+  ('Morado', 0xFF8E4EC6),
+  ('Fucsia', 0xFFE64980),
   ('Rosa', 0xFFF783AC),
+  ('Café', 0xFF9C6B4E),
+  ('Pizarra', 0xFF6B7A90),
 ];
 
 /// Degradado de la mecha para un color: de un tono claro y suave al color

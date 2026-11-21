@@ -47,7 +47,7 @@ Future<void> showNoteColorSheet(
                         selected: options[i].$2 == current,
                         onTap: () => repo.setColor(noteId, options[i].$2),
                       )
-                          .animate(delay: (30 * i).ms)
+                          .animate(delay: (15 * i).ms)
                           .fadeIn(duration: Anim.medium)
                           .scale(
                               begin: const Offset(0.7, 0.7),
