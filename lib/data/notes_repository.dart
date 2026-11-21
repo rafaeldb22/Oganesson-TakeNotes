@@ -117,6 +117,15 @@ class NotesRepository extends ChangeNotifier {
     _touch(id);
   }
 
+  /// Deshace un borrado (botón "Deshacer").
+  void restore(String id) {
+    final n = _notes[id];
+    if (_disposed || n == null || !n.deleted) return;
+    n.deleted = false;
+    n.updatedAt = DateTime.now().toUtc();
+    _touch(id);
+  }
+
   /// Al salir del editor: una nota que se ha quedado vacía se elimina.
   void finishEditing(String id) {
     final n = _notes[id];

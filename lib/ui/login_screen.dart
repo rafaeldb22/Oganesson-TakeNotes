@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'anim.dart';
 import 'theme.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -111,9 +113,16 @@ class _LoginScreenState extends State<LoginScreen> {
               child: AutofillGroup(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Icon(Icons.sticky_note_2_rounded, size: 72, color: accent),
+                  children: <Widget>[
+                    Icon(Icons.sticky_note_2_rounded, size: 72, color: accent)
+                        .animate()
+                        .scale(
+                            begin: const Offset(0.3, 0.3),
+                            duration: 700.ms,
+                            curve: Curves.elasticOut)
+                        .rotate(begin: -0.08, duration: 700.ms, curve: Curves.elasticOut),
                     const SizedBox(height: 12),
+                    ...<Widget>[
                     const Text(
                       'Notas',
                       textAlign: TextAlign.center,
@@ -145,20 +154,29 @@ class _LoginScreenState extends State<LoginScreen> {
                       decoration:
                           _deco(context, 'Contraseña', Icons.lock_outline),
                     ),
-                    if (_msg != null) ...[
-                      const SizedBox(height: 14),
-                      Text(
+                    AnimatedSize(
+                      duration: Anim.medium,
+                      curve: Anim.curve,
+                      child: _msg == null
+                          ? const SizedBox(width: double.infinity)
+                          : Padding(
+                      padding: const EdgeInsets.only(top: 14),
+                      child: Text(
                         _msg!,
+                        key: ValueKey(_msg),
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           color: _msgIsError
                               ? Theme.of(context).colorScheme.error
                               : Palette.secondary(context),
                         ),
-                      ),
-                    ],
+                      ).animate(key: ValueKey(_msg)).fadeIn().shakeX(
+                          hz: 5, amount: _msgIsError ? 4 : 0, duration: 400.ms),
+                    ),
+                    ),
                     const SizedBox(height: 20),
-                    SizedBox(
+                    Bouncy(
+                      child: SizedBox(
                       height: 50,
                       child: FilledButton(
                         onPressed: _busy ? null : _submit,
@@ -177,6 +195,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                 style: const TextStyle(fontSize: 16)),
                       ),
                     ),
+                    ),
                     const SizedBox(height: 8),
                     TextButton(
                       onPressed: _busy
@@ -189,6 +208,9 @@ class _LoginScreenState extends State<LoginScreen> {
                           ? 'Ya tengo cuenta, quiero entrar'
                           : '¿Primera vez? Crear cuenta'),
                     ),
+                    ].animate(interval: 60.ms, delay: 150.ms)
+                        .fadeIn(duration: Anim.slow)
+                        .slideY(begin: 0.3, curve: Anim.curve),
                   ],
                 ),
               ),
