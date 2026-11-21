@@ -5,6 +5,12 @@ with **Flutter** and synced in real time with **Supabase**. The owner (Rafa) spe
 Spanish: reply to him in Spanish and keep the app's UI text in Spanish. Repository
 documentation, workflows and commit messages are in English.
 
+## First-time setup on a new PC
+
+`scripts/setup_dev_windows.ps1` installs Git, Visual Studio 2022 (C++ desktop workload),
+Flutter stable and Claude Code with winget / official installers, clones the repo into
+`%USERPROFILE%\develop\Oganesson-TakeNotes` and runs `prepare_windows.ps1`.
+
 ## Run locally (Windows)
 
 Requirements: Flutter stable (3.50+), Git and Visual Studio **2022** with the
@@ -65,3 +71,16 @@ Demo mode without an account (sample notes): `--dart-define=DEMO=true`.
 - Password reset with an email code needs custom SMTP in Supabase (default templates
   only contain a link); not implemented.
 - Before calling something done: `flutter analyze` and, if possible, run it.
+
+## Open items / known gaps
+
+- Not yet verified on a real phone: Android calendar widget (4x2), trash purge,
+  7/3/1-day reminders, notification permissions on Android 13+.
+- Windows: some GPUs showed black/unpainted areas after resizing; a forced full repaint
+  runs after resize/maximise (`forceFullRepaint` in `lib/main.dart`). Needs confirmation
+  on the owner's PC.
+- Windows notifications: unknown whether scheduled toasts fire while the app is closed
+  (unpackaged app).
+- Password reset by email code: needs custom SMTP in Supabase (see above).
+- Code comments are still in Spanish (UI text must stay Spanish).
+- The repository is private: the README download links only work when signed in.

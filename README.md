@@ -74,6 +74,12 @@ Sign in with the **same account** on every device and your notes sync automatica
 
 ## Build from source
 
+**New PC?** One script installs everything (Git, Visual Studio 2022 C++ workload, Flutter, Claude Code), clones the repo and prepares the Windows project — run it in PowerShell (not as admin):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/setup_dev_windows.ps1
+```
+
 Requirements: Flutter (stable, 3.50+), Git. For Windows builds: **Visual Studio 2022** with *Desktop development with C++* (MSVC 14.52 / VS 2026 cannot build the Windows notifications plugin yet).
 
 ```powershell
