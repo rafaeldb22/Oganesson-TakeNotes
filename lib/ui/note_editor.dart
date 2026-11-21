@@ -455,10 +455,11 @@ class _NoteEditorState extends State<NoteEditor> {
                               padding: const EdgeInsets.only(bottom: 40),
                               customStyles: _styles(context),
                               // Menú de cortar/copiar/pegar con el estilo de la app.
-                              contextMenuBuilder: (context, state) => buildTextMenu(
-                                  context,
-                                  state.contextMenuButtonItems,
-                                  state.contextMenuAnchors),
+                              contextMenuBuilder: (context, state) =>
+                                  buildTextMenu(
+                                      context,
+                                      state.contextMenuButtonItems,
+                                      state.contextMenuAnchors),
                             ),
                           ),
                         ),

@@ -2,4 +2,8 @@
 <resources>
     <string name="widget_desc">Última nota y botón para escribir una nueva</string>
     <string name="widget_calendario_desc">Calendario del mes y tareas por fecha límite</string>
+    <string name="widget_tareas_desc">Tareas de hoy y próximas, con su mecha de tiempo</string>
+    <string name="widget_proxima_desc">La próxima tarea con cuenta atrás</string>
+    <string name="widget_fijadas_desc">Tus notas fijadas (o las más recientes)</string>
+    <string name="widget_acciones_desc">Nueva nota, calendario, red y buscar</string>
 </resources>

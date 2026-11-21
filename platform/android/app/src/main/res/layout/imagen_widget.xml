@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Generic image widget (Tareas, Proxima tarea, Notas fijadas): solid rounded
+     theme-coloured background + the image Flutter drew for the current size. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/imagen_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <ImageView
+        android:id="@+id/imagen_bg"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:importantForAccessibility="no"
+        android:scaleType="fitXY"
+        android:src="@drawable/widget_shape"
+        android:tint="@color/widget_bg" />
+
+    <ImageView
+        android:id="@+id/imagen_contenido"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:contentDescription="Oganesson"
+        android:scaleType="fitCenter" />
+
+    <TextView
+        android:id="@+id/imagen_vacio"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:gravity="center"
+        android:padding="12dp"
+        android:text="Abre Oganesson para cargar el widget"
+        android:textColor="@color/widget_text"
+        android:textSize="13sp"
+        android:visibility="gone" />
+</FrameLayout>

@@ -521,7 +521,7 @@ class _MonthGrid extends StatelessWidget {
     final dayStart = day;
     final dayEnd = day.add(const Duration(days: 1));
     final t0 = tAt(dayStart), t1 = tAt(dayEnd);
-    final stops = fusePalette(n.color);
+    final stops = fuseForTheme(context, fusePalette(n.color));
     Color colorAt(double f) => paletteAt(stops, t0 + (t1 - t0) * f);
 
     // Lo que ya pasó, un poco más oscuro; hoy se parte en la hora actual.

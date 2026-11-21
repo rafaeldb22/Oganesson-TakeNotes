@@ -5,4 +5,5 @@
     <color name="widget_text">#FF98989F</color>
     <color name="widget_accent">#FFFFD60A</color>
     <color name="widget_btn_text">#FF000000</color>
+    <color name="widget_accion">#1FFFFFFF</color>
 </resources>

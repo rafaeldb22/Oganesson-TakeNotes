@@ -2,6 +2,30 @@
 
 All notable changes to Oganesson TakeNotes (formerly *Notas* / *BabuNotes*).
 
+## [1.4.0] — 2026-11-21
+
+### Added
+- **Four new Android widgets** (six in total):
+  - **Tareas** (2×2 / 4×2 / 4×4): today's tasks first, then upcoming ones, with their fuse. Tap
+    to open the calendar.
+  - **Próxima tarea** (2×1 / 2×2): the most urgent task with a big countdown and its fuse. Tap to
+    open that note.
+  - **Notas fijadas** (4×2 / 4×4): your pinned notes (or the most recent ones). Tap to open the
+    app.
+  - **Accesos rápidos** (4×1): New note, Calendar, Network and Search buttons in the theme colour.
+  Only the widgets you have on the home screen are drawn, and they refresh when you reopen the
+  app.
+- **Four new themes**: Sepia (warm paper, easy to read), Nórdico (cool blue-grey), Neón (magenta
+  and cyan on black) and Matcha (soft green tea).
+- **New logo**: a continuous gold line with two loops on a navy gradient, without the outer
+  border (Windows, Android adaptive icon and README).
+- Automated tests are now part of the repository and run before every release build.
+
+### Changed
+- **Light mode is easier on the eyes**: no pure-white surfaces (background and cards are toned
+  down for every theme) and secondary text and separators have more contrast.
+- Time fuses and calendar task lines are deeper in light mode so they stand out.
+
 ## [1.3.4] — 2026-11-21
 
 ### Fixed

@@ -5,6 +5,7 @@ import '../config.dart';
 import '../data/notes_repository.dart';
 import '../data/reminders.dart';
 import '../data/vault.dart';
+import '../data/widget_bridge.dart';
 import 'login_screen.dart';
 import 'notes_home.dart';
 
@@ -64,7 +65,11 @@ class _NotesShellState extends State<NotesShell> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) repo.sync();
+    if (state == AppLifecycleState.resumed) {
+      repo.sync();
+      // Redibuja los widgets (p. ej. la cuenta atrás de "Próxima tarea").
+      WidgetBridge.refresh();
+    }
   }
 
   @override

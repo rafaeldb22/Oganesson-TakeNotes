@@ -27,6 +27,31 @@ class NotasColors extends ThemeExtension<NotasColors> {
   final Color searchFill;
   final Color hover;
 
+  /// Versión más suave de una paleta clara: baja el brillo del fondo y de
+  /// las tarjetas (que dejan de ser blanco puro) y oscurece un poco los
+  /// textos secundarios y separadores para que se lean mejor.
+  NotasColors softened() {
+    Color shift(Color c, double dl, {double maxL = 1, double ds = 0}) {
+      final h = HSLColor.fromColor(c);
+      return h
+          .withLightness((h.lightness + dl).clamp(0.0, maxL))
+          .withSaturation((h.saturation + ds).clamp(0.0, 1.0))
+          .toColor();
+    }
+
+    return NotasColors(
+      accent: shift(accent, -0.04, ds: 0.04),
+      onAccent: onAccent,
+      background: shift(background, -0.055, ds: 0.03),
+      card: shift(card, -0.045, maxL: 0.955),
+      secondary: shift(secondary, -0.08),
+      separator: shift(separator, -0.07),
+      selected: shift(selected, -0.05, ds: 0.05),
+      searchFill: shift(searchFill, -0.06),
+      hover: shift(hover, -0.07, maxL: 0.93),
+    );
+  }
+
   @override
   NotasColors copyWith({
     Color? accent,
@@ -84,6 +109,12 @@ class AppTheme {
   final String description;
   final NotasColors light;
   final NotasColors dark;
+
+  static final _soft = <String, NotasColors>{};
+
+  /// Modo claro suavizado (el que usa la app): sin blancos puros que
+  /// deslumbren, con más contraste en textos secundarios y separadores.
+  NotasColors get lightSoft => _soft.putIfAbsent(id, () => light.softened());
 }
 
 const appThemes = <AppTheme>[
@@ -357,6 +388,114 @@ const appThemes = <AppTheme>[
       hover: Color(0xFF172C26),
     ),
   ),
+  AppTheme(
+    id: 'sepia',
+    name: 'Sepia',
+    description: 'Papel cálido, cómodo para leer',
+    light: NotasColors(
+      accent: Color(0xFF9A5B2E),
+      onAccent: Colors.white,
+      background: Color(0xFFF1E7D6),
+      card: Color(0xFFFAF3E6),
+      secondary: Color(0xFF7A6A58),
+      separator: Color(0xFFDCCDB5),
+      selected: Color(0xFFEBD9B8),
+      searchFill: Color(0xFFE8DCC6),
+      hover: Color(0xFFF4EAD8),
+    ),
+    dark: NotasColors(
+      accent: Color(0xFFE0A86E),
+      onAccent: Color(0xFF241A10),
+      background: Color(0xFF1B1611),
+      card: Color(0xFF26201A),
+      secondary: Color(0xFFA8998A),
+      separator: Color(0xFF3B3229),
+      selected: Color(0xFF4A3826),
+      searchFill: Color(0xFF26201A),
+      hover: Color(0xFF30281F),
+    ),
+  ),
+  AppTheme(
+    id: 'nordico',
+    name: 'Nórdico',
+    description: 'Gris azulado frío y sereno',
+    light: NotasColors(
+      accent: Color(0xFF4C6A92),
+      onAccent: Colors.white,
+      background: Color(0xFFE8ECF1),
+      card: Color(0xFFF6F8FA),
+      secondary: Color(0xFF5F6B7A),
+      separator: Color(0xFFCCD4DE),
+      selected: Color(0xFFD5E0EE),
+      searchFill: Color(0xFFDDE3EA),
+      hover: Color(0xFFEEF2F6),
+    ),
+    dark: NotasColors(
+      accent: Color(0xFF88C0D0),
+      onAccent: Color(0xFF14202A),
+      background: Color(0xFF2E3440),
+      card: Color(0xFF3B4252),
+      secondary: Color(0xFFA3ABBA),
+      separator: Color(0xFF4C566A),
+      selected: Color(0xFF3E5A6B),
+      searchFill: Color(0xFF3B4252),
+      hover: Color(0xFF434C5E),
+    ),
+  ),
+  AppTheme(
+    id: 'neon',
+    name: 'Neón',
+    description: 'Magenta y cian sobre negro',
+    light: NotasColors(
+      accent: Color(0xFFC2185B),
+      onAccent: Colors.white,
+      background: Color(0xFFEFE9F2),
+      card: Color(0xFFFAF6FC),
+      secondary: Color(0xFF6A5F73),
+      separator: Color(0xFFDACFE0),
+      selected: Color(0xFFF5CFE1),
+      searchFill: Color(0xFFE6DDEB),
+      hover: Color(0xFFF5EEF8),
+    ),
+    dark: NotasColors(
+      accent: Color(0xFFFF4FA3),
+      onAccent: Color(0xFF1A0010),
+      background: Color(0xFF0B0712),
+      card: Color(0xFF16101F),
+      secondary: Color(0xFF9D8FB0),
+      separator: Color(0xFF2C2240),
+      selected: Color(0xFF3D1636),
+      searchFill: Color(0xFF16101F),
+      hover: Color(0xFF211830),
+    ),
+  ),
+  AppTheme(
+    id: 'matcha',
+    name: 'Matcha',
+    description: 'Verde té suave y crema',
+    light: NotasColors(
+      accent: Color(0xFF5E8C3A),
+      onAccent: Colors.white,
+      background: Color(0xFFEAEEDD),
+      card: Color(0xFFF7F8EF),
+      secondary: Color(0xFF65705A),
+      separator: Color(0xFFD3DAC2),
+      selected: Color(0xFFDDE8C6),
+      searchFill: Color(0xFFE1E6D2),
+      hover: Color(0xFFF0F3E6),
+    ),
+    dark: NotasColors(
+      accent: Color(0xFFA5D46E),
+      onAccent: Color(0xFF13200A),
+      background: Color(0xFF12170E),
+      card: Color(0xFF1D2417),
+      secondary: Color(0xFF9AA690),
+      separator: Color(0xFF313B28),
+      selected: Color(0xFF34482A),
+      searchFill: Color(0xFF1D2417),
+      hover: Color(0xFF262F1F),
+    ),
+  ),
 ];
 
 AppTheme themeById(String id) =>
@@ -436,7 +575,7 @@ class Palette {
 
 ThemeData buildTheme(AppTheme t, Brightness b) {
   final dark = b == Brightness.dark;
-  final c = dark ? t.dark : t.light;
+  final c = dark ? t.dark : t.lightSoft;
   final fg = dark ? Colors.white : const Color(0xFF111111);
 
   final scheme =

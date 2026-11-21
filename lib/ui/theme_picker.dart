@@ -115,7 +115,7 @@ class _ThemeCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = dark ? theme.dark : theme.light;
+    final c = dark ? theme.dark : theme.lightSoft;
     final fg = dark ? Colors.white : const Color(0xFF111111);
 
     return Bouncy(

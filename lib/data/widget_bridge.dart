@@ -8,6 +8,7 @@ import 'package:home_widget/home_widget.dart';
 
 import '../models/note.dart';
 import '../ui/calendar_widget_image.dart';
+import '../ui/widget_images.dart';
 import '../ui/theme.dart';
 
 /// Puente con los widgets de Android (nota rápida y calendario). En Windows no hace nada.
@@ -59,56 +60,131 @@ class WidgetBridge {
     } catch (e) {
       debugPrint('Widget: $e');
     }
-    await _pushCalendar(real);
+    await _pushImages(real);
   }
 
-  /// Widget "Calendario" (2x2, 4x2 o 4x4): la app lo dibuja como imagen y Android
-  /// la muestra. Solo cambia la imagen si cambian las tareas o el tema.
-  static String _lastCalendarSig = '';
+  /// Widgets dibujados como imagen (Calendario, Tareas, Próxima tarea,
+  /// Notas fijadas): la app los pinta y Android los muestra. Solo se dibujan
+  /// los widgets que hay puestos en la pantalla de inicio, y solo cuando
+  /// cambian las notas, el tema o la hora.
+  static String _lastImagesSig = '';
 
-  static Future<void> _pushCalendar(List<Note> notes) async {
-    final temporales = notes.where((n) => n.isTemporal && !n.done).toList();
+  static Future<Set<String>> _installed() async {
+    try {
+      final list = await HomeWidget.getInstalledWidgets();
+      return {
+        for (final w in list)
+          if (w.androidClassName != null) w.androidClassName!.split('.').last,
+      };
+    } catch (e) {
+      debugPrint('Widgets instalados: $e');
+      // Si no se puede saber, se dibujan todos.
+      return {
+        'CalendarioWidget',
+        'TareasWidget',
+        'ProximaWidget',
+        'FijadasWidget'
+      };
+    }
+  }
+
+  static Future<void> _pushImages(List<Note> notes) async {
+    final temporales = notes.where((n) => n.isTemporal && !n.done).toList()
+      ..sort((a, b) => a.dueAt!.compareTo(b.dueAt!));
+    final pinned = notes.where((n) => n.pinned).toList();
+    final listNotes = pinned.isNotEmpty ? pinned : notes.take(12).toList();
+    final next = temporales.isEmpty ? null : temporales.first;
     final mode = themeSettings.mode;
     final dark = mode == ThemeMode.dark ||
         (mode == ThemeMode.system &&
             WidgetsBinding.instance.platformDispatcher.platformBrightness ==
                 Brightness.dark);
+    final installed = await _installed();
     final now = DateTime.now();
+    // La cuenta atrás de "Próxima tarea" cambia cada minuto.
     final sig = [
       themeSettings.themeId,
       dark,
-      '${now.year}-${now.month}-${now.day}-${now.hour}',
+      appLanguage.code,
+      installed.join(','),
+      '${now.year}-${now.month}-${now.day}-${now.hour}-${now.minute}',
       for (final n in temporales)
         '${n.id}${n.title}${n.dueAt}${n.remindAt}${n.color}',
+      for (final n in listNotes) '${n.id}${n.title}${n.updatedAt}${n.color}',
     ].join('|');
-    if (sig == _lastCalendarSig) return;
-    _lastCalendarSig = sig;
+    if (sig == _lastImagesSig) return;
+    _lastImagesSig = sig;
     final t = themeSettings.theme;
-    final colors = dark ? t.dark : t.light;
-    try {
-      // Fondo nativo del widget: mismo color que la tarjeta dibujada.
-      await HomeWidget.saveWidgetData<int>(
-          'calendario_bg', colors.card.toARGB32());
-      // Una imagen por tamaño; Android muestra la que encaja (S / M / L).
-      for (final size in CalendarWidgetSize.values) {
-        await HomeWidget.renderFlutterWidget(
-          MediaQuery(
-            data: const MediaQueryData(),
-            child: CalendarWidgetImage(
-              notes: temporales,
-              colors: colors,
-              dark: dark,
-              size: size,
-            ),
-          ),
-          key: size.key,
-          logicalSize: size.logicalSize,
+    final colors = dark ? t.dark : t.lightSoft;
+
+    Future<void> render(Widget w, String key, Size size) =>
+        HomeWidget.renderFlutterWidget(
+          MediaQuery(data: const MediaQueryData(), child: w),
+          key: key,
+          logicalSize: size,
           pixelRatio: 3,
         );
+
+    try {
+      // Fondo nativo de los widgets: mismo color que la tarjeta dibujada.
+      await HomeWidget.saveWidgetData<int>(
+          'calendario_bg', colors.card.toARGB32());
+
+      if (installed.contains('CalendarioWidget')) {
+        for (final size in CalendarWidgetSize.values) {
+          await render(
+              CalendarWidgetImage(
+                  notes: temporales, colors: colors, dark: dark, size: size),
+              size.key,
+              size.logicalSize);
+        }
+        await HomeWidget.updateWidget(androidName: 'CalendarioWidget');
       }
-      await HomeWidget.updateWidget(androidName: 'CalendarioWidget');
+      if (installed.contains('TareasWidget')) {
+        for (final spec in [
+          WidgetSpecs.tareasS,
+          WidgetSpecs.tareasM,
+          WidgetSpecs.tareasL
+        ]) {
+          await render(
+              TasksWidgetImage(notes: temporales, colors: colors, dark: dark),
+              spec.key,
+              spec.size);
+        }
+        await HomeWidget.updateWidget(androidName: 'TareasWidget');
+      }
+      if (installed.contains('ProximaWidget')) {
+        await HomeWidget.saveWidgetData<String>('proxima_id', next?.id ?? '');
+        for (final spec in [WidgetSpecs.proximaW, WidgetSpecs.proximaS]) {
+          await render(
+              NextTaskWidgetImage(
+                  note: next,
+                  colors: colors,
+                  dark: dark,
+                  wide: spec == WidgetSpecs.proximaW),
+              spec.key,
+              spec.size);
+        }
+        await HomeWidget.updateWidget(androidName: 'ProximaWidget');
+      }
+      if (installed.contains('FijadasWidget')) {
+        for (final spec in [WidgetSpecs.fijadasM, WidgetSpecs.fijadasL]) {
+          await render(
+              PinnedWidgetImage(
+                  notes: listNotes,
+                  pinned: pinned.isNotEmpty,
+                  colors: colors,
+                  dark: dark),
+              spec.key,
+              spec.size);
+        }
+        await HomeWidget.updateWidget(androidName: 'FijadasWidget');
+      }
+      if (installed.contains('AccionesWidget')) {
+        await HomeWidget.updateWidget(androidName: 'AccionesWidget');
+      }
     } catch (e) {
-      debugPrint('Widget calendario: $e');
+      debugPrint('Widgets con imagen: $e');
     }
   }
 

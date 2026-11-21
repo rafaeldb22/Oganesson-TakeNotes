@@ -94,10 +94,10 @@ Sign in with the **same account** on every device and your notes sync automatica
 - Real-time sync between Android and Windows through Supabase; works offline and uploads changes when back online. Last edit wins.
 
 **Look & feel**
-- 10 colour themes, each with light and dark mode, animated theme switching.
+- 14 colour themes, each with a soft light mode and a dark mode, animated theme switching.
 - Animated retro title, smooth transitions and micro-interactions throughout.
 - Windows: clean custom title bar tinted with the theme colour, resizable panels that remember their width, minimum window size for a stable layout.
-- Android: 2×2 quick-note widget and a resizable calendar widget (2×2, 4×2 or 4×4) with upcoming tasks.
+- Android widgets: quick note, calendar (2×2 / 4×2 / 4×4), tasks, next task with countdown, pinned notes and quick actions.
 
 **Updates & support**
 - The app checks GitHub Releases and installs new versions in one click (Windows installer / Android APK).

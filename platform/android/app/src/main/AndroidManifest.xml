@@ -61,6 +61,55 @@
                 android:resource="@xml/calendario_widget_info" />
         </receiver>
 
+        <!-- More widgets: tasks, next task, pinned notes, quick actions -->
+        <receiver
+            android:name=".TareasWidget"
+            android:exported="false"
+            android:label="Oganesson · Tareas">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/tareas_widget_info" />
+        </receiver>
+
+        <receiver
+            android:name=".ProximaWidget"
+            android:exported="false"
+            android:label="Oganesson · Próxima tarea">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/proxima_widget_info" />
+        </receiver>
+
+        <receiver
+            android:name=".FijadasWidget"
+            android:exported="false"
+            android:label="Oganesson · Notas fijadas">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/fijadas_widget_info" />
+        </receiver>
+
+        <receiver
+            android:name=".AccionesWidget"
+            android:exported="false"
+            android:label="Oganesson · Accesos rápidos">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/acciones_widget_info" />
+        </receiver>
+
         <!-- Avisos programados (flutter_local_notifications) -->
         <receiver
             android:exported="false"

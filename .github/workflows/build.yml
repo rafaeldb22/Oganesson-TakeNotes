@@ -33,6 +33,9 @@ jobs:
       - name: Prepare Android project
         run: bash scripts/prepare_android.sh
 
+      - name: Tests
+        run: flutter test
+
       - name: Fixed signing key (so updates install over the previous version)
         run: |
           mkdir -p ~/.android

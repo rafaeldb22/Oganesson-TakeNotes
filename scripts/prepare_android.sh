@@ -7,7 +7,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 flutter create --org com.rafa --project-name notas --platforms=android .
-rm -rf test
+rm -f test/widget_test.dart  # only the sample test flutter create generates
 
 cp -r platform/android/app/. android/app/
 # First Python that actually runs (on Windows `python3` may be the Store alias).

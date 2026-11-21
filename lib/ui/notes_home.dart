@@ -62,6 +62,7 @@ class NotesHome extends StatefulWidget {
 
 class _NotesHomeState extends State<NotesHome> {
   final _search = TextEditingController();
+  final _searchFocus = FocusNode();
   String _query = '';
   String? _openId;
   final Set<String> _removing = {}; // filas que se están plegando
@@ -131,6 +132,7 @@ class _NotesHomeState extends State<NotesHome> {
     vault.removeListener(_onVault);
     repo.onLocalEdit = null;
     _search.dispose();
+    _searchFocus.dispose();
     _listScroll.dispose();
     super.dispose();
   }
@@ -149,10 +151,44 @@ class _NotesHomeState extends State<NotesHome> {
     }
   }
 
+  /// Ejecuta [f] cuando las notas estén cargadas (al abrir la app desde
+  /// un widget aún pueden estar cargándose).
+  void _whenLoaded(VoidCallback f) {
+    if (repo.loaded) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => f());
+      return;
+    }
+    late VoidCallback listener;
+    listener = () {
+      if (!repo.loaded) return;
+      repo.removeListener(listener);
+      WidgetsBinding.instance.addPostFrameCallback((_) => f());
+    };
+    repo.addListener(listener);
+  }
+
   void _onWidgetUri(Uri? uri) {
     if (uri == null || !mounted) return;
     if (uri.host == 'calendario') {
       _setFilter('calendario');
+      return;
+    }
+    if (uri.host == 'red') {
+      _setFilter('red');
+      return;
+    }
+    if (uri.host == 'buscar') {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _searchFocus.requestFocus();
+      });
+      return;
+    }
+    // notas://nota/<id>: abrir esa nota (widget "Próxima tarea").
+    if (uri.host == 'nota' && uri.pathSegments.isNotEmpty) {
+      final id = uri.pathSegments.first;
+      _whenLoaded(() {
+        if (mounted && repo.byId(id) != null) _open(id);
+      });
       return;
     }
     if (uri.host == 'nueva') {
@@ -647,6 +683,7 @@ class _NotesHomeState extends State<NotesHome> {
             child: TextField(
               contextMenuBuilder: textFieldMenu,
               controller: _search,
+              focusNode: _searchFocus,
               onChanged: (v) => setState(() => _query = v),
               decoration: InputDecoration(
                 hintText: tr('Buscar'),

@@ -25,6 +25,21 @@ const fuseStops = <Color>[
   Color(0xFFEF4444),
 ];
 
+/// En modo claro la mecha se oscurece un poco para que destaque sobre el
+/// fondo claro (en oscuro se deja igual).
+List<Color> fuseForTheme(BuildContext context, List<Color> colors) {
+  if (Theme.of(context).brightness == Brightness.dark) return colors;
+  return [
+    for (final c in colors)
+      HSLColor.fromColor(c)
+          .withLightness(
+              (HSLColor.fromColor(c).lightness - 0.1).clamp(0.0, 1.0))
+          .withSaturation(
+              (HSLColor.fromColor(c).saturation + 0.08).clamp(0.0, 1.0))
+          .toColor(),
+  ];
+}
+
 /// Colores que se pueden elegir para una nota (y su mecha).
 /// Ordenados por tono. Los valores ya usados no se cambian (las notas
 /// guardan el ARGB), solo se añaden nuevos.
@@ -198,7 +213,10 @@ class _FuseBarState extends State<FuseBar> with TickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) {
-    final track = Palette.secondary(context).withValues(alpha: 0.16);
+    final light = Theme.of(context).brightness == Brightness.light;
+    final track =
+        Palette.secondary(context).withValues(alpha: light ? 0.26 : 0.16);
+    final colors = fuseForTheme(context, widget.colors);
     // Espacio extra arriba y abajo para que la chispa no se corte.
     final pad = widget.spark ? widget.height * 0.9 : 0.0;
     return RepaintBoundary(
@@ -218,7 +236,7 @@ class _FuseBarState extends State<FuseBar> with TickerProviderStateMixin {
                     grow: CurvedAnimation(parent: _grow, curve: Anim.curve),
                     spark: widget.spark,
                     dimmed: widget.dimmed,
-                    colors: widget.colors,
+                    colors: colors,
                   ),
                 )),
       ),

@@ -32,8 +32,8 @@ bash scripts/prepare_android.sh    # generates android/, copies widgets/manifest
 flutter run -d <device-id>
 ```
 
-`android/`, `windows/` and `test/` are **not** in git: the scripts generate them with
-`flutter create`. Custom Android files live in `platform/android/` and are copied on top
+`android/` and `windows/` are **not** in git: the scripts generate them with `flutter create`.
+`test/` is in git (`flutter test`, also run by CI before building). Custom Android files live in `platform/android/` and are copied on top
 (Kotlin widgets, layouts, manifest with notification permissions).
 
 Demo mode without an account (sample notes): `--dart-define=DEMO=true`.
@@ -53,8 +53,12 @@ that it still arrives. On Windows, check toasts are enabled first:
 - `lib/data/notes_repository.dart` — local cache (SharedPreferences), change queue,
   upsert to Supabase, realtime for `notes` and `folders`, last edit wins, 3-day trash.
 - `lib/data/reminders.dart` — notifications at 7/3/1 days before the deadline.
-- `lib/data/widget_bridge.dart` — data for the Android widgets (home_widget); renders the
-  calendar widget image in three sizes (S/M/L), `CalendarioWidget.kt` picks one by widget size.
+- `lib/data/widget_bridge.dart` — data for the Android widgets (home_widget). Renders the
+  image widgets (calendar, tasks, next task, pinned notes: `lib/ui/calendar_widget_image.dart`,
+  `lib/ui/widget_images.dart`) only for widgets that are installed. Kotlin side:
+  `platform/android/.../ImagenWidget.kt` (base + TareasWidget/ProximaWidget/FijadasWidget,
+  image picked by widget size), `CalendarioWidget.kt`, `NotasWidget.kt`, `AccionesWidget.kt`
+  (native quick actions). Widget deep links: `notas://nueva|calendario|red|buscar|nota/<id>`.
 - `lib/data/note_links.dart` — `NoteGraph` (links, backlinks). Links are `Note.links` (ids,
   set from right-click → *Enlazar* / *Crear subnota*, column `notes.links`); legacy
   `[[Title]]` text links are still read.
@@ -93,6 +97,8 @@ that it still arrives. On Windows, check toasts are enabled first:
 - `supabase/migrations/` — schema, RLS, realtime, colour column, delete policy, `vaults`
   table (005). Migrations are run by hand in the Supabase SQL Editor.
 - `installer/oganesson.iss` — Inno Setup script for `Oganesson-Setup.exe`.
+- `tool/generate_icon_test.dart` — draws the logo with Flutter and writes `assets/icon/*.png`
+  and `docs/icon.png` (`flutter test tool/generate_icon_test.dart`).
 - `.github/workflows/build.yml` — builds APK + Windows installer/zip and publishes a
   release (tag `v<pubspec version>`, notes taken from `CHANGELOG.md`).
 - `.github/workflows/window-test.yml` — opens the app on Windows (demo mode), resizes
@@ -105,7 +111,8 @@ that it still arrives. On Windows, check toasts are enabled first:
 - Package versions are pinned in `pubspec.yaml` (window_manager <0.6 because 0.6 changed
   its API; flutter_local_notifications 19.x).
 - Animations use `flutter_animate` and the helpers in `lib/ui/anim.dart`.
-- Colours always through `Palette.*` (ThemeExtension `NotasColors`), never hard-coded.
+- Colours always through `Palette.*` (ThemeExtension `NotasColors`), never hard-coded. Light
+  mode uses `AppTheme.lightSoft` (toned-down `light`), not `light` directly.
 - Account password reset with an email code needs custom SMTP in Supabase (default templates
   only contain a link); not implemented. The Vault reset uses the same mechanism.
 - Before calling something done: `flutter analyze` and, if possible, run it.

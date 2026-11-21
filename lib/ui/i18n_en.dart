@@ -180,6 +180,15 @@ const enStrings = <String, String>{
   'Verde boreal y cian': 'Boreal green and cyan',
   'Galaxia': 'Galaxy',
 
+  'Sepia': 'Sepia',
+  'Papel cálido, cómodo para leer': 'Warm paper, easy on the eyes',
+  'Nórdico': 'Nordic',
+  'Gris azulado frío y sereno': 'Cool, calm blue-grey',
+  'Neón': 'Neon',
+  'Magenta y cian sobre negro': 'Magenta and cyan on black',
+  'Matcha': 'Matcha',
+  'Verde té suave y crema': 'Soft green tea and cream',
+
   // --- Colores
   'Automático': 'Automatic',
   'Por defecto': 'Default',

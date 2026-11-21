@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Quick actions (4x1): new note, calendar, note network, search. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_bg"
+    android:gravity="center"
+    android:orientation="horizontal"
+    android:padding="6dp">
+
+    <LinearLayout
+        android:id="@+id/accion_nueva"
+        style="@style/AccionBoton">
+
+        <ImageView
+            android:id="@+id/accion_nueva_icono"
+            style="@style/AccionIcono"
+            android:contentDescription="Nueva nota"
+            android:src="@drawable/ic_widget_nueva" />
+
+        <TextView
+            style="@style/AccionTexto"
+            android:text="Nueva" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/accion_calendario"
+        style="@style/AccionBoton">
+
+        <ImageView
+            android:id="@+id/accion_calendario_icono"
+            style="@style/AccionIcono"
+            android:contentDescription="Calendario"
+            android:src="@drawable/ic_widget_calendario" />
+
+        <TextView
+            style="@style/AccionTexto"
+            android:text="Calendario" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/accion_red"
+        style="@style/AccionBoton">
+
+        <ImageView
+            android:id="@+id/accion_red_icono"
+            style="@style/AccionIcono"
+            android:contentDescription="Red de notas"
+            android:src="@drawable/ic_widget_red" />
+
+        <TextView
+            style="@style/AccionTexto"
+            android:text="Red" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/accion_buscar"
+        style="@style/AccionBoton">
+
+        <ImageView
+            android:id="@+id/accion_buscar_icono"
+            style="@style/AccionIcono"
+            android:contentDescription="Buscar"
+            android:src="@drawable/ic_widget_buscar" />
+
+        <TextView
+            style="@style/AccionTexto"
+            android:text="Buscar" />
+    </LinearLayout>
+</LinearLayout>

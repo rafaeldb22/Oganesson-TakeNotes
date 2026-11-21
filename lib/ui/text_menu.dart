@@ -49,8 +49,7 @@ class _TextMenu extends StatelessWidget {
                 opacity: t,
                 child: Transform.scale(
                   scale: 0.92 + 0.08 * t,
-                  alignment:
-                      openUp ? Alignment.bottomLeft : Alignment.topLeft,
+                  alignment: openUp ? Alignment.bottomLeft : Alignment.topLeft,
                   child: child,
                 ),
               ),
@@ -149,7 +148,8 @@ class _TextMenuItemState extends State<_TextMenuItem> {
           curve: Anim.curve,
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
           decoration: BoxDecoration(
-            color: _hover ? p.accent.withValues(alpha: 0.12) : Colors.transparent,
+            color:
+                _hover ? p.accent.withValues(alpha: 0.12) : Colors.transparent,
             borderRadius: BorderRadius.circular(9),
           ),
           child: Row(
@@ -159,10 +159,13 @@ class _TextMenuItemState extends State<_TextMenuItem> {
               Expanded(
                 child: Text(label,
                     style: TextStyle(
-                        fontSize: 13.5, fontWeight: FontWeight.w500, color: fg)),
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w500,
+                        color: fg)),
               ),
               if (hint != null)
-                Text(hint, style: TextStyle(fontSize: 11.5, color: p.secondary)),
+                Text(hint,
+                    style: TextStyle(fontSize: 11.5, color: p.secondary)),
             ],
           ),
         ),

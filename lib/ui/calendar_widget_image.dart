@@ -189,7 +189,7 @@ class CalendarWidgetImage extends StatelessWidget {
         if (room < rowHeight) break;
         rows.add(Padding(
           padding: const EdgeInsets.only(bottom: 6),
-          child: _TaskRow(note: n, fg: fg, colors: colors),
+          child: WidgetTaskRow(note: n, fg: fg, colors: colors),
         ));
         room -= rowHeight;
       }
@@ -200,7 +200,7 @@ class CalendarWidgetImage extends StatelessWidget {
           if (room < rowHeight) break;
           rows.add(Padding(
             padding: const EdgeInsets.only(bottom: 6),
-            child: _TaskRow(note: n, fg: fg, colors: colors),
+            child: WidgetTaskRow(note: n, fg: fg, colors: colors),
           ));
           room -= rowHeight;
         }
@@ -289,8 +289,9 @@ class CalendarWidgetImage extends StatelessWidget {
   }
 }
 
-class _TaskRow extends StatelessWidget {
-  const _TaskRow({required this.note, required this.fg, required this.colors});
+class WidgetTaskRow extends StatelessWidget {
+  const WidgetTaskRow(
+      {required this.note, required this.fg, required this.colors});
   final Note note;
   final Color fg;
   final NotasColors colors;
