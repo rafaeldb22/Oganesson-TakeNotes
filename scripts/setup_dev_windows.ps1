@@ -1,4 +1,4 @@
-# One-time setup of a Windows PC to work on Oganesson TakeNotes locally
+﻿# One-time setup of a Windows PC to work on Oganesson TakeNotes locally
 # (with or without Claude Code).
 #
 # Installs, if missing: Git for Windows, Visual Studio 2022 Community with the
@@ -97,7 +97,7 @@ Write-Host "`nIf 'flutter' or 'claude' are not recognised, close this window and
 # Optionally open Claude Code in the project, in a new window, with a first task.
 if ($StartClaude) {
   Step 'Opening Claude Code in the project'
-  $prompt = 'Lee CLAUDE.md y su lista de "Open items". Ejecuta la app en Windows con flutter run -d windows, comprueba que funciona y sigue con los pendientes. Respóndeme en español.'
+  $prompt = 'Lee CLAUDE.md y su lista de Open items. Ejecuta la app en Windows con flutter run -d windows, comprueba que funciona y sigue con los pendientes. Respóndeme en español.'
   $cmd = "Set-Location '$projectDir'; claude '$prompt'"
   Start-Process powershell -ArgumentList '-NoExit', '-ExecutionPolicy', 'Bypass', '-Command', $cmd
 }
