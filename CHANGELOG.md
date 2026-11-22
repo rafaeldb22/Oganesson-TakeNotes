@@ -2,6 +2,14 @@
 
 All notable changes to Oganesson TakeNotes (formerly *Notas* / *BabuNotes*).
 
+## [1.7.3] — 2026-11-22
+
+### Changed
+- **Smooth note network entrance**: the layout is computed before the network is shown, so it no
+  longer "explodes" and reshuffles when you open it. Notes now appear in place from the centre
+  outwards (growing and fading in), followed by their links and names, and the camera eases
+  into position instead of jumping.
+
 ## [1.7.2] — 2026-11-22
 
 ### Changed

@@ -83,6 +83,32 @@ class _GraphViewState extends State<GraphView> with TickerProviderStateMixin {
     }
   }
 
+  /// Entrada de la red: los nodos aparecen del centro hacia fuera,
+  /// creciendo y con un fundido; luego los enlaces y las etiquetas.
+  late final AnimationController _intro = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1100),
+  )..addListener(() => setState(() {}));
+
+  /// Retraso de cada nodo en la entrada (0 = el del centro, 1 = el último).
+  final Map<String, double> _introDelay = {};
+
+  void _startIntro() {
+    if (_nodes.isEmpty) return;
+    var c = Offset.zero;
+    for (final n in _nodes.values) {
+      c += n.pos;
+    }
+    c /= _nodes.length.toDouble();
+    final byDist = _nodes.values.toList()
+      ..sort((a, b) => (a.pos - c).distance.compareTo((b.pos - c).distance));
+    for (var i = 0; i < byDist.length; i++) {
+      _introDelay[byDist[i].id] =
+          byDist.length == 1 ? 0 : i / (byDist.length - 1);
+    }
+    _intro.forward(from: 0);
+  }
+
   String? _dragging;
   Offset? _lastFocal;
   double _startScale = 1;
@@ -98,12 +124,17 @@ class _GraphViewState extends State<GraphView> with TickerProviderStateMixin {
     _ticker = createTicker(_tick);
     widget.repo.addListener(_onRepo);
     _sync();
+    // La red se coloca ANTES de verse (sin dibujar): así no "explota" al
+    // entrar; solo queda la animación de entrada, suave.
+    _presettle();
+    _alpha = 0.02;
   }
 
   @override
   void dispose() {
     widget.repo.removeListener(_onRepo);
     _ticker.dispose();
+    _intro.dispose();
     _hoverCtrl.dispose();
     super.dispose();
   }
@@ -151,9 +182,35 @@ class _GraphViewState extends State<GraphView> with TickerProviderStateMixin {
     if (!_ticker.isActive) _ticker.start();
   }
 
+  /// Calcula la colocación sin dibujar (hasta que se queda quieta).
+  void _presettle() {
+    final n = _nodes.length;
+    if (n == 0) return;
+    final maxIter = (2e6 / (n * n)).clamp(80, 500).round();
+    _alpha = 1;
+    for (var i = 0; i < maxIter; i++) {
+      final e = _step(decay: 0.975);
+      if (i > 40 && e < 0.001) break;
+    }
+  }
+
   void _tick(Duration _) {
+    final energy = _step();
+    final count = _nodes.length;
+    if ((_autoFit || !_centered) && _size != Size.zero) {
+      _fit(smooth: _centered);
+    }
+    setState(() {});
+    if (_dragging == null && (count == 0 || energy / count < 0.002)) {
+      _ticker.stop();
+      _autoFit = false;
+    }
+  }
+
+  /// Un paso de la simulación (fuerzas y movimiento). Devuelve la energía.
+  double _step({double decay = 0.99}) {
     final g = _graph;
-    if (g == null) return;
+    if (g == null) return 0;
     final list = _nodes.values.toList();
     const repulsion = 5200.0;
     const springLength = 90.0;
@@ -194,17 +251,13 @@ class _GraphViewState extends State<GraphView> with TickerProviderStateMixin {
       n.pos += v;
       energy += v.distanceSquared;
     }
-    _alpha = math.max(0.02, _alpha * 0.99);
-    if ((_autoFit || !_centered) && _size != Size.zero) _fit();
-    setState(() {});
-    if (_dragging == null && (list.isEmpty || energy / list.length < 0.002)) {
-      _ticker.stop();
-      _autoFit = false;
-    }
+    _alpha = math.max(0.02, _alpha * decay);
+    return energy;
   }
 
-  /// Encaja todo el grafo en la vista.
-  void _fit() {
+  /// Encaja todo el grafo en la vista. Con [smooth], la cámara se acerca
+  /// poco a poco al encuadre (sin saltos de zoom mientras la red se mueve).
+  void _fit({bool smooth = false}) {
     if (_nodes.isEmpty || _size == Size.zero) return;
     var minX = double.infinity, minY = double.infinity;
     var maxX = -double.infinity, maxY = -double.infinity;
@@ -216,9 +269,19 @@ class _GraphViewState extends State<GraphView> with TickerProviderStateMixin {
     }
     final w = math.max(maxX - minX, 1.0) + 160;
     final h = math.max(maxY - minY, 1.0) + 160;
-    _scale = math.min(_size.width / w, _size.height / h).clamp(0.3, 1.6);
+    final targetScale =
+        math.min(_size.width / w, _size.height / h).clamp(0.3, 1.6);
     final center = Offset((minX + maxX) / 2, (minY + maxY) / 2);
-    _offset = Offset(_size.width / 2, _size.height / 2) - center * _scale;
+    final targetOffset =
+        Offset(_size.width / 2, _size.height / 2) - center * targetScale;
+    if (smooth) {
+      const k = 0.1;
+      _scale += (targetScale - _scale) * k;
+      _offset += (targetOffset - _offset) * k;
+    } else {
+      _scale = targetScale;
+      _offset = targetOffset;
+    }
     _centered = true;
   }
 
@@ -309,7 +372,11 @@ class _GraphViewState extends State<GraphView> with TickerProviderStateMixin {
                         _size = size;
                         if (!_centered) {
                           WidgetsBinding.instance.addPostFrameCallback((_) {
-                            if (mounted) setState(_fit);
+                            if (!mounted) return;
+                            setState(_fit);
+                            if (!_intro.isAnimating && _intro.value == 0) {
+                              _startIntro();
+                            }
                           });
                         }
                       }
@@ -394,6 +461,8 @@ class _GraphViewState extends State<GraphView> with TickerProviderStateMixin {
                                 scale: _scale,
                                 offset: _offset,
                                 hover: _dragging ?? _shownHover,
+                                intro: _intro.value,
+                                introDelay: _introDelay,
                                 hoverT:
                                     _dragging != null ? 1 : _hoverCtrl.value,
                                 radius: _radius,
@@ -508,6 +577,8 @@ class _GraphPainter extends CustomPainter {
     required this.scale,
     required this.offset,
     required this.hover,
+    required this.intro,
+    required this.introDelay,
     required this.hoverT,
     required this.radius,
     required this.colors,
@@ -522,6 +593,19 @@ class _GraphPainter extends CustomPainter {
   final double scale;
   final Offset offset;
   final String? hover;
+
+  /// Progreso de la entrada (0..1) y retraso de cada nodo (0..1).
+  final double intro;
+  final Map<String, double> introDelay;
+
+  /// Aparición de un nodo en la entrada (0 = oculto, 1 = visible).
+  double appear(String id) {
+    if (intro >= 1) return 1;
+    final d = introDelay[id] ?? 0;
+    // Cada nodo tarda el 45 % de la animación; el último empieza al 55 %.
+    final p = ((intro - d * 0.55) / 0.45).clamp(0.0, 1.0);
+    return Curves.easeOutCubic.transform(p);
+  }
 
   /// Progreso de la animación de resaltado (0..1).
   final double hoverT;
@@ -551,12 +635,16 @@ class _GraphPainter extends CustomPainter {
         final b = nodes[to];
         if (b == null) continue;
         final lit = focus != null && (from == hover || to == hover);
+        // En la entrada, el enlace aparece cuando ya se ven sus dos notas.
+        final show = math.min(appear(from), appear(to));
+        if (show <= 0.01) continue;
+        final color = lit
+            ? Color.lerp(colors.secondary.withValues(alpha: 0.35),
+                colors.accent.withValues(alpha: 0.95), t)!
+            : colors.secondary
+                .withValues(alpha: focus == null ? 0.35 : lerp(0.35, 0.1));
         edge
-          ..color = lit
-              ? Color.lerp(colors.secondary.withValues(alpha: 0.35),
-                  colors.accent.withValues(alpha: 0.95), t)!
-              : colors.secondary
-                  .withValues(alpha: focus == null ? 0.35 : lerp(0.35, 0.1))
+          ..color = color.withValues(alpha: color.a * show)
           ..strokeWidth = lit ? lerp(1.2, 2.4) : 1.2;
         canvas.drawLine(_s(a.pos), _s(b.pos), edge);
       }
@@ -569,11 +657,14 @@ class _GraphPainter extends CustomPainter {
       final c = _s(n.pos);
       final isHover = n.id == hover;
       final inFocus = focus?.contains(n.id) ?? false;
-      final grow = isHover ? lerp(1, 1.4) : (inFocus ? lerp(1, 1.12) : 1.0);
+      final a0 = appear(n.id);
+      if (a0 <= 0.01) continue;
+      final grow = (isHover ? lerp(1, 1.4) : (inFocus ? lerp(1, 1.12) : 1.0)) *
+          (0.35 + 0.65 * a0);
       final r = radius(n.id) * scale.clamp(0.6, 1.6) * grow;
       final base = note.color != null ? Color(note.color!) : colors.accent;
       final orphan = graph.degree(n.id) == 0;
-      final alpha = orphan ? 0.55 : 1.0;
+      final alpha = (orphan ? 0.55 : 1.0) * a0;
       final fill = Paint()
         ..color = (orphan ? colors.secondary : base).withValues(
             alpha: focus != null && !inFocus ? lerp(alpha, 0.16) : alpha);
@@ -609,7 +700,10 @@ class _GraphPainter extends CustomPainter {
       } else {
         visible = always ? 1 - t : 0;
       }
-      if (visible <= 0.01) continue;
+      // En la entrada, la etiqueta aparece justo después de su nota.
+      final labelIn = Curves.easeOut
+          .transform(((appear(n.id) - 0.4) / 0.6).clamp(0.0, 1.0));
+      if (visible * labelIn <= 0.01) continue;
       final title = note.title.length > 28
           ? '${note.title.substring(0, 27)}…'
           : note.title;
@@ -620,7 +714,7 @@ class _GraphPainter extends CustomPainter {
             fontFamily: labelFont,
             fontSize: isHover ? lerp(11.5, 13.5) : 11.5,
             fontWeight: isHover && t > 0.5 ? FontWeight.w700 : FontWeight.w500,
-            color: labelColor.withValues(alpha: 0.92 * visible),
+            color: labelColor.withValues(alpha: 0.92 * visible * labelIn),
           ),
         ),
         textDirection: textDirection,
