@@ -10,6 +10,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../config.dart';
+import '../data/note_images.dart';
 import '../data/note_links.dart';
 import '../data/notes_repository.dart';
 import '../data/vault.dart';
@@ -32,6 +33,7 @@ import 'language_picker.dart';
 import 'link_picker.dart';
 import 'note_color_sheet.dart';
 import 'note_editor.dart';
+import 'note_image.dart' show NoteThumb;
 import 'schedule_sheet.dart';
 import 'sort_menu.dart';
 import 'split.dart';
@@ -87,6 +89,16 @@ class _NotesHomeState extends State<NotesHome> {
     }
     return _entering!;
   }
+
+  /// Qué filas hacen su animación de entrada (se decide una vez por nota):
+  /// todas al mostrar la lista y, después, solo las que aparecen nuevas
+  /// (una nota recién creada, una que vuelve con Deshacer…). Las que ya
+  /// estaban no se vuelven a animar nunca.
+  final Map<String, bool> _rowIntro = {};
+
+  /// Notas que había en la lista en la última construcción.
+  final Set<String> _knownIds = {};
+  Set<String> _prevKnownIds = {};
 
   /// El título hace su fundido solo al abrir la app.
   bool _titleIntro = true;
@@ -262,7 +274,10 @@ class _NotesHomeState extends State<NotesHome> {
         shared.contains(_filter);
     setState(() {
       _filter = f;
-      if (!sameList) _entering = null;
+      if (!sameList) {
+        _entering = null;
+        _rowIntro.clear();
+      }
     });
   }
 
@@ -596,29 +611,56 @@ class _NotesHomeState extends State<NotesHome> {
                   onPopInvokedWithResult: (didPop, _) {
                     if (!didPop) _close();
                   },
-                  child: AnimatedSwitcher(
-                    duration: Anim.slow,
-                    transitionBuilder: (child, anim) {
-                      final isPage = child.key != const ValueKey('lista');
-                      // Nota eliminada: la nota se va y la lista, que es la
-                      // misma de antes, no hace la animación de "volver".
-                      if (_discarding) {
-                        return isPage
-                            ? discardTransition(child, anim)
-                            : stillTransition(child, anim);
-                      }
-                      return pushTransition(child, anim, isPage: isPage);
-                    },
-                    layoutBuilder: (current, previous) => Stack(
-                      fit: StackFit.expand,
-                      children: [...previous, if (current != null) current],
-                    ),
-                    child: hasOpen
-                        ? _editor(showBack: true)
-                        : KeyedSubtree(
-                            key: const ValueKey('lista'),
-                            child: _list(context, false),
+                  // La lista está SIEMPRE montada debajo: al abrir, cerrar,
+                  // crear o borrar una nota solo se mueve la nota; la lista
+                  // (carpetas, buscador, barra…) no se vuelve a construir.
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      // Al abrir una nota la lista se aparta un poco y se
+                      // atenúa (como en iPhone). Si la nota se elimina, la
+                      // lista vuelve a su sitio sin animación.
+                      AnimatedSlide(
+                        offset: hasOpen ? const Offset(-0.25, 0) : Offset.zero,
+                        duration: _discarding ? Duration.zero : Anim.slow,
+                        curve: Curves.easeOutCubic,
+                        child: AnimatedOpacity(
+                          opacity: hasOpen ? 0.5 : 1,
+                          duration: _discarding ? Duration.zero : Anim.slow,
+                          child: IgnorePointer(
+                            ignoring: hasOpen,
+                            child: ExcludeFocus(
+                              excluding: hasOpen,
+                              child: KeyedSubtree(
+                                key: const ValueKey('lista'),
+                                child: _list(context, false),
+                              ),
+                            ),
                           ),
+                        ),
+                      ),
+                      AnimatedSwitcher(
+                        duration: Anim.slow,
+                        // Sin nota, la capa vacía no lleva transición (si
+                        // no, su fondo taparía los toques a la lista).
+                        transitionBuilder: (child, anim) =>
+                            child.key == const ValueKey('sin-nota')
+                                ? child
+                                : _discarding
+                                    ? discardTransition(child, anim)
+                                    : pushTransition(child, anim, isPage: true),
+                        layoutBuilder: (current, previous) => Stack(
+                          fit: StackFit.expand,
+                          children: [
+                            ...previous,
+                            if (current != null) current,
+                          ],
+                        ),
+                        child: hasOpen
+                            ? _editor(showBack: true)
+                            : const SizedBox.shrink(key: ValueKey('sin-nota')),
+                      ),
+                    ],
                   ),
                 );
               });
@@ -645,6 +687,13 @@ class _NotesHomeState extends State<NotesHome> {
         all.sort(_byPosition);
       default: // ya viene ordenada por última modificación
     }
+    // Notas nuevas desde la última vez (las únicas que se animan al entrar).
+    final known = Set.of(_knownIds);
+    _knownIds
+      ..clear()
+      ..addAll(all.map((n) => n.id));
+    _rowIntro.removeWhere((id, _) => !_knownIds.contains(id));
+    _prevKnownIds = known;
     final pinned = all.where((n) => n.pinned).toList();
     final others = all.where((n) => !n.pinned).toList();
     final noteOpen = _openId != null && repo.byId(_openId!) != null;
@@ -1118,7 +1167,10 @@ class _NotesHomeState extends State<NotesHome> {
         )
             .animate(
                 delay: entering ? (min(order, 10) * 40).ms : Duration.zero,
-                value: entering ? null : 1)
+                value: _rowIntro.putIfAbsent(
+                        n.id, () => entering || !_prevKnownIds.contains(n.id))
+                    ? null
+                    : 1)
             .fadeIn(duration: Anim.medium)
             .slideY(begin: 0.25, curve: Anim.curve, duration: Anim.slow),
       ));
@@ -1493,6 +1545,9 @@ class _NoteTileState extends State<_NoteTile> {
                         ],
                       ),
                     ),
+                    // Miniatura de la primera imagen (como en Notas de iPhone).
+                    if (NoteImages.firstPathIn(n.rich) case final path?)
+                      NoteThumb(path: path),
                     AnimatedSwitcher(
                       duration: Anim.medium,
                       transitionBuilder: (c, a) =>

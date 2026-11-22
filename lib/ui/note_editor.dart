@@ -12,6 +12,7 @@ import 'anim.dart';
 import 'editor_toolbar.dart';
 import 'folders.dart';
 import 'note_color_sheet.dart';
+import 'image_tools.dart';
 import 'note_image.dart';
 import 'format.dart';
 import 'link_picker.dart';
@@ -59,6 +60,7 @@ class NoteEditor extends StatefulWidget {
 class _NoteEditorState extends State<NoteEditor> {
   late final QuillController _ctrl;
   final _focus = FocusNode();
+  final _editorKey = GlobalKey<EditorState>();
   final _scroll = SmoothScrollController();
   DateTime _lastTyped = DateTime(2000);
   bool _closing = false;
@@ -477,41 +479,48 @@ class _NoteEditorState extends State<NoteEditor> {
                           child: ImageDropZone(
                             onImages: (images) =>
                                 insertImages(context, _ctrl, images),
-                            child: QuillEditor(
+                            child: ImageMoveTarget(
                               controller: _ctrl,
-                              focusNode: _focus,
-                              scrollController: _scroll,
-                              config: QuillEditorConfig(
-                                placeholder: tr('Escribe algo…'),
-                                autoFocus: widget.autofocus,
-                                expands: true,
-                                padding: const EdgeInsets.only(bottom: 40),
-                                customStyles: _styles(context),
-                                // Imágenes: se dibujan con su propio estilo,
-                                // Ctrl+V pega capturas y el teclado de Android
-                                // puede insertar imágenes directamente.
-                                embedBuilders: const [NoteImageEmbedBuilder()],
-                                contentInsertionConfiguration:
-                                    ContentInsertionConfiguration(
-                                  allowedMimeTypes: const [
-                                    'image/png',
-                                    'image/jpeg',
-                                    'image/gif',
-                                    'image/webp',
+                              editorKey: _editorKey,
+                              child: QuillEditor(
+                                controller: _ctrl,
+                                focusNode: _focus,
+                                scrollController: _scroll,
+                                config: QuillEditorConfig(
+                                  editorKey: _editorKey,
+                                  placeholder: tr('Escribe algo…'),
+                                  autoFocus: widget.autofocus,
+                                  expands: true,
+                                  padding: const EdgeInsets.only(bottom: 40),
+                                  customStyles: _styles(context),
+                                  // Imágenes: se dibujan con su propio estilo,
+                                  // Ctrl+V pega capturas y el teclado de Android
+                                  // puede insertar imágenes directamente.
+                                  embedBuilders: const [
+                                    NoteImageEmbedBuilder()
                                   ],
-                                  onContentInserted: (c) {
-                                    final data = c.data;
-                                    if (data != null && data.isNotEmpty) {
-                                      insertImages(context, _ctrl, [data]);
-                                    }
-                                  },
+                                  contentInsertionConfiguration:
+                                      ContentInsertionConfiguration(
+                                    allowedMimeTypes: const [
+                                      'image/png',
+                                      'image/jpeg',
+                                      'image/gif',
+                                      'image/webp',
+                                    ],
+                                    onContentInserted: (c) {
+                                      final data = c.data;
+                                      if (data != null && data.isNotEmpty) {
+                                        insertImages(context, _ctrl, [data]);
+                                      }
+                                    },
+                                  ),
+                                  // Menú de cortar/copiar/pegar con el estilo de la app.
+                                  contextMenuBuilder: (context, state) =>
+                                      buildTextMenu(
+                                          context,
+                                          state.contextMenuButtonItems,
+                                          state.contextMenuAnchors),
                                 ),
-                                // Menú de cortar/copiar/pegar con el estilo de la app.
-                                contextMenuBuilder: (context, state) =>
-                                    buildTextMenu(
-                                        context,
-                                        state.contextMenuButtonItems,
-                                        state.contextMenuAnchors),
                               ),
                             ),
                           ),

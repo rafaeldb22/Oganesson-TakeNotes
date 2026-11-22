@@ -84,12 +84,20 @@ that it still arrives. On Windows, check toasts are enabled first:
   `pasteImagesFromClipboard` — wired as `QuillClipboardConfig.onClipboardPaste` on the
   controller —, `pickAndInsertImages` (image_picker), `ImageDropZone` (desktop_drop), copy with
   pasteboard, save with quill_native_bridge). Images are U+FFFC in `Note.content`; `Note.title`
-  and `preview` ignore it.
+  and `preview` ignore it. `lib/ui/image_tools.dart`: `insertImageBlock` (always use it to insert
+  an image: Quill only wraps *videos* in their own line), `moveImageTo/Up/Down`,
+  `ImageMoveTarget` (drop target around the editor; uses `QuillEditorConfig.editorKey` to map the
+  pointer to a document position) and `openImageCropper` (crop_your_image). List rows show
+  `NoteThumb` for notes with images.
 - Screen transitions (`lib/ui/anim.dart`) all share one widget structure (`_layered`) so the
   transition can change mid-way without rebuilding the outgoing screen. Deleting/archiving the
-  open note sets `_discarding` in `notes_home.dart` (editor uses `discardTransition`, the list
-  `stillTransition`); list rows only play their entrance animation during `_entranceOpen`
-  (first 900 ms after the list is shown / the view changes).
+  open note sets `_discarding` in `notes_home.dart` (editor uses `discardTransition`).
+  **Narrow layout: the list is always mounted** under the editor (Stack: list with a parallax
+  `AnimatedSlide` + the editor in an `AnimatedSwitcher`); never swap the list out of the tree or
+  the whole screen replays its entrance. Rows decide once (`_rowIntro`) whether they animate in:
+  all of them during `_entranceOpen` (first 900 ms after the list is shown / the view changes),
+  afterwards only ids that were not in the previous build (`_knownIds`). Regression tests:
+  `test/discard_animation_test.dart` (checks that no `State` of the list is recreated).
 - Smooth wheel scrolling: use `SmoothScrollController` (`lib/ui/smooth_scroll.dart`) for new
   scroll views on desktop.
 - Completed tasks: `Note.doneAt` (column `notes.done_at`); done > 3 days → hidden from lists and

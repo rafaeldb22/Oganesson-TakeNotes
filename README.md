@@ -4,7 +4,7 @@
 
 <p align="center">
   Notes that live on your phone <b>and</b> your PC — synced in real time.<br>
-  Folders, rich text, deadlines with reminders, a calendar, a note network, a Vault and home-screen widgets.<br>
+  Folders, rich text, <b>photos and screenshots</b>, deadlines with reminders, a calendar, a note network, a Vault and home-screen widgets.<br>
   In Spanish and English.
 </p>
 
@@ -44,12 +44,29 @@
 
 <table>
   <tr>
-    <td align="center" width="34%"><img src="docs/mobile.gif" alt="Phone: notes, calendar and note network"><br><sub><b>On the phone</b> — notes, calendar, note network and swipe to archive</sub></td>
-    <td align="center"><img src="docs/startup.gif" alt="Startup animation"><br><sub><b>Startup</b> — the logo draws itself</sub><br><br><img src="docs/themes.gif" alt="Themes"><br><sub><b>14 themes</b>, each with a soft light mode and a dark mode</sub></td>
+    <td align="center" width="62%"><img src="docs/images.gif" alt="Images: hover actions, full-screen viewer with zoom, move below the text"><br><sub><b>Images</b> — paste screenshots with Ctrl+V, view them full screen with zoom, crop them and move them around the text</sub></td>
+    <td align="center"><img src="docs/notes.gif" alt="Phone: a new note slides in, delete and archive with a swipe"><br><sub><b>Smooth notes</b> — only the note that comes or goes moves; swipe to delete or archive</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/themes.gif" alt="Themes"><br><sub><b>14 themes</b>, each with a soft light mode and a dark mode</sub><br><br><img src="docs/startup.gif" width="70%" alt="Startup animation"><br><sub><b>Startup</b> — the logo draws itself</sub></td>
+    <td align="center"><img src="docs/mobile.gif" alt="Phone: notes, calendar and note network"><br><sub><b>On the phone</b> — notes, calendar and the note network</sub></td>
   </tr>
 </table>
 
-<sub>The animations are recorded from the real app by `flutter test tool/record_gifs_test.dart` (demo notes).</sub>
+<sub>Everything above is recorded from the real app by `flutter test tool/record_gifs_test.dart` (demo notes, no mock-ups).</sub>
+
+### How it works
+
+| | |
+|---|---|
+| 📝 **Write** | Rich text with titles, lists, checklists, quotes, code, colours and highlight. New notes start with a big title line. |
+| 🖼️ **Add images** | **Ctrl+V** pastes a screenshot (Win+Shift+S) or a copied image; drop files onto a note on Windows; gallery or camera on Android. Crop (free, 1:1, 4:3, 16:9, 3:4, rotate), move up/down or drag it between lines, copy, save. |
+| ⏰ **Deadlines** | Turn a note into a task with a start and a deadline. A fuse bar burns down as time runs out, and you get reminders 7, 3 and 1 days before. |
+| 📅 **Calendar** | Month view with every task as a bar; tap a day to add one. |
+| 🕸️ **Note network** | Link notes or create linked sub-notes, then explore them as a live graph. |
+| 🔒 **Vault** | Notes behind a master password that locks itself after 5 minutes; reset it with your account password. |
+| 🔄 **Sync** | Same account on every device, real-time sync through Supabase, works offline (images too) and uploads when back online. |
+| 📱 **Widgets** | Android home-screen widgets: calendar, tasks, next task with countdown, pinned notes and quick actions. |
 
 ---
 
@@ -76,7 +93,7 @@ Sign in with the **same account** on every device and your notes sync automatica
 - Swipe right to delete, swipe left to archive (both ask first); archived notes live in ⋯ → Archived.
 - Drag notes up and down to reorder them or move them between folders.
 - Rich text editor: titles, bold/italic/underline/strikethrough, bullet & numbered lists, checklists, quotes, code, text colour and highlight. New notes start with a big title line.
-- Images: paste screenshots with **Ctrl+V**, drop image files onto a note (Windows) or add them from the gallery / camera (Android). Tap one to view it full screen with zoom; copy, save or remove it from its menu. Photos are compressed and synced through your account (they upload later if you are offline).
+- Images: paste screenshots with **Ctrl+V**, drop image files onto a note (Windows) or add them from the gallery / camera (Android). Tap one to view it full screen with zoom (the controls are always visible); crop it, move it up or down, or drag it between lines like notes; copy, save or remove it. Notes with images show a thumbnail in the list. Photos are compressed and synced through your account (they upload later if you are offline).
 - Collapsible folders inside the list (like Zen browser), with name and colour; custom colour per note.
 - Sort by last modified, creation date or name.
 - Trash: deleted notes stay **3 days** before being removed for good (restore, delete forever, empty trash). Every delete can be undone for 3 seconds.

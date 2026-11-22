@@ -86,6 +86,15 @@ class NoteImages extends ChangeNotifier {
     };
   }
 
+  /// Ruta de la primera imagen de una nota (para su miniatura en la lista).
+  static String? firstPathIn(String? rich) {
+    if (rich == null) return null;
+    final i = rich.indexOf(scheme);
+    if (i == -1) return null;
+    final m = RegExp(r'sb://([^"?\\]+)').matchAsPrefix(rich, i);
+    return m?.group(1);
+  }
+
   // -------------------------------------------------------------- estado
 
   bool isUploading(String path) => _uploading.contains(path);

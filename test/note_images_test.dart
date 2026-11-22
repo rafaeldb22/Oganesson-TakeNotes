@@ -35,6 +35,8 @@ void main() {
         '{"insert":{"image":"sb://u1/b?w=2&h=2"}},{"insert":"\\n"}]';
     expect(NoteImages.pathsIn(rich), {'u1/a', 'u1/b'});
     expect(NoteImages.pathsIn(null), isEmpty);
+    expect(NoteImages.firstPathIn(rich), 'u1/a');
+    expect(NoteImages.firstPathIn('[]'), isNull);
     expect(NoteImages.pathsIn('[{"insert":"texto\\n"}]'), isEmpty);
   });
 

@@ -2,6 +2,29 @@
 
 All notable changes to Oganesson TakeNotes (formerly *Notas* / *BabuNotes*).
 
+## [1.7.0] — 2026-11-22
+
+### Added
+- **Crop images**: full-screen crop editor (free, 1:1, 4:3, 16:9, 3:4), rotate 90°, undo/redo.
+  From the image's hover toolbar, its menu (right click / long press) or the full-screen viewer.
+- **Move images around the text**: drag an image by its handle (Windows) or long-press and drag
+  it (Android); an accent line shows where it will land. *Move up* / *Move down* in its menu.
+- **Thumbnails in the list**: notes with images show the first one next to their title.
+- New GitHub page: banner with the real app on a PC window and a phone, new animations
+  (images, notes) and a "How it works" table.
+
+### Changed
+- The full-screen image viewer always shows its buttons (close, crop, copy, save, remove).
+
+### Fixed
+- **Notes list animation, for real this time**: on the phone the list was rebuilt every time a
+  note was closed, created or deleted, so the whole screen (title, search, folders, rows) played
+  its entrance again. The list now stays mounted under the note, and only the note that comes
+  in (new, restored with Undo) or goes out animates.
+- A pasted image in the middle of a sentence was mixed into that line of text: images now always
+  get their own line.
+- Crop editor: changing the aspect ratio while the image was still loading crashed.
+
 ## [1.6.0] — 2026-11-22
 
 ### Added

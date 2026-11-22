@@ -14,6 +14,7 @@ import 'package:quill_native_bridge/quill_native_bridge.dart';
 
 import '../data/note_images.dart';
 import 'anim.dart';
+import 'image_tools.dart';
 import 'context_menu.dart';
 import 'i18n.dart';
 import 'theme.dart';
@@ -52,8 +53,10 @@ Future<int> insertImages(BuildContext context, QuillController controller,
         ? min(sel.baseOffset, sel.extentOffset)
         : controller.document.length - 1;
     final length = sel.isValid ? (sel.extentOffset - sel.baseOffset).abs() : 0;
-    controller.replaceText(index, length, BlockEmbed.image(src), null);
-    controller.moveCursorToPosition(index + 1);
+    if (length > 0) controller.replaceText(index, length, '', null);
+    final at = insertImageBlock(controller, index, src);
+    // El cursor queda en la línea de debajo, listo para seguir escribiendo.
+    controller.moveCursorToPosition(at + 2);
     added++;
   }
   if (added < images.length && context.mounted) {
@@ -250,17 +253,34 @@ class NoteImageEmbedBuilder extends EmbedBuilder {
   Widget build(BuildContext context, EmbedContext embedContext) {
     final node = embedContext.node;
     final controller = embedContext.controller;
+    final src = '${node.value.data}';
+    final editable = !embedContext.readOnly;
     return NoteImageView(
-      src: '${node.value.data}',
+      src: src,
       controller: controller,
       offsetOf: () => node.documentOffset,
-      onDelete: embedContext.readOnly
+      onDelete: !editable
           ? null
           : () {
               final o = node.documentOffset;
               controller.replaceText(
                   o, 1, '', TextSelection.collapsed(offset: o));
             },
+      // Recortada: se guarda como imagen nueva y ocupa el mismo sitio.
+      onCropped: !editable
+          ? null
+          : (bytes) async {
+              final newSrc = await NoteImages.instance.add(bytes);
+              if (newSrc == null) return;
+              final o = node.documentOffset;
+              controller.replaceText(o, 1, BlockEmbed.image(newSrc), null);
+            },
+      onMoveUp: !editable
+          ? null
+          : () => moveImageUp(controller, node.documentOffset, src),
+      onMoveDown: !editable
+          ? null
+          : () => moveImageDown(controller, node.documentOffset, src),
     );
   }
 }
@@ -275,12 +295,18 @@ class NoteImageView extends StatefulWidget {
     this.controller,
     this.offsetOf,
     this.onDelete,
+    this.onCropped,
+    this.onMoveUp,
+    this.onMoveDown,
   });
 
   final String src;
   final QuillController? controller;
   final int Function()? offsetOf;
   final VoidCallback? onDelete;
+  final Future<void> Function(Uint8List cropped)? onCropped;
+  final bool Function()? onMoveUp;
+  final bool Function()? onMoveDown;
 
   @override
   State<NoteImageView> createState() => _NoteImageViewState();
@@ -401,12 +427,62 @@ class _NoteImageViewState extends State<NoteImageView> {
       heroTag: _heroTag,
       bytes: _currentBytes,
       onDelete: widget.onDelete,
+      onCropped: widget.onCropped,
     );
   }
+
+  Future<void> _crop() async {
+    final b = await _currentBytes();
+    if (b == null || !mounted || widget.onCropped == null) return;
+    final cropped = await openImageCropper(context, b);
+    if (cropped != null) await widget.onCropped!(cropped);
+  }
+
+  /// Miniatura que sigue al dedo / al ratón al mover la imagen.
+  Widget _dragFeedback() {
+    final p = _provider;
+    final natural = NoteImages.sizeOf(widget.src) ?? const Size(4, 3);
+    const w = 150.0;
+    return Transform.translate(
+      offset: const Offset(-24, -24),
+      child: Transform.rotate(
+        angle: -0.04,
+        child: Material(
+          color: Colors.transparent,
+          elevation: 12,
+          shadowColor: Colors.black54,
+          borderRadius: BorderRadius.circular(12),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: SizedBox(
+              width: w,
+              height: w * natural.height / natural.width,
+              child: p == null
+                  ? ColoredBox(color: Palette.hover(context))
+                  : Image(image: p, fit: BoxFit.cover),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  ImageMovePayload get _payload =>
+      ImageMovePayload(widget.src, widget.offsetOf ?? () => -1);
+
+  // Pulsación larga en Android: si se suelta sin moverla, abre el menú.
+  Offset? _downAt;
+  Offset? _upAt;
 
   Future<void> _menu(Offset? at) async {
     final entries = [
       MenuEntry('ver', Icons.open_in_full_rounded, tr('Ver imagen')),
+      if (widget.onCropped != null)
+        MenuEntry('recortar', Icons.crop_rounded, tr('Recortar')),
+      if (widget.onMoveUp != null)
+        MenuEntry('subir', Icons.arrow_upward_rounded, tr('Subir')),
+      if (widget.onMoveDown != null)
+        MenuEntry('bajar', Icons.arrow_downward_rounded, tr('Bajar')),
       MenuEntry('copiar', Icons.content_copy_rounded, tr('Copiar imagen')),
       MenuEntry(
           'guardar',
@@ -451,6 +527,12 @@ class _NoteImageViewState extends State<NoteImageView> {
     switch (a) {
       case 'ver':
         _open();
+      case 'recortar':
+        await _crop();
+      case 'subir':
+        widget.onMoveUp?.call();
+      case 'bajar':
+        widget.onMoveDown?.call();
       case 'copiar':
         final b = await _currentBytes();
         if (b != null && mounted) await copyImageBytes(context, b);
@@ -565,8 +647,30 @@ class _NoteImageViewState extends State<NoteImageView> {
                     curve: Anim.curve,
                     child: _Frosted(
                       child: Row(mainAxisSize: MainAxisSize.min, children: [
+                        // Asa para mover la imagen entre el texto.
+                        if (widget.onMoveUp != null)
+                          Draggable<ImageMovePayload>(
+                            data: _payload,
+                            dragAnchorStrategy: pointerDragAnchorStrategy,
+                            feedback: _dragFeedback(),
+                            onDragStarted: HapticFeedback.selectionClick,
+                            child: Tooltip(
+                              message: tr('Arrastra para moverla'),
+                              child: const MouseRegion(
+                                cursor: SystemMouseCursors.grab,
+                                child: Padding(
+                                  padding: EdgeInsets.all(8),
+                                  child: Icon(Icons.drag_indicator_rounded,
+                                      size: 18, color: Colors.white),
+                                ),
+                              ),
+                            ),
+                          ),
                         _HoverBtn(Icons.open_in_full_rounded, tr('Ver imagen'),
                             () => _action('ver')),
+                        if (widget.onCropped != null)
+                          _HoverBtn(Icons.crop_rounded, tr('Recortar'),
+                              () => _action('recortar')),
                         _HoverBtn(Icons.content_copy_rounded,
                             tr('Copiar imagen'), () => _action('copiar')),
                         _HoverBtn(Icons.download_rounded, tr('Guardar como…'),
@@ -618,11 +722,36 @@ class _NoteImageViewState extends State<NoteImageView> {
       onExit: (_) => setState(() => _hover = false),
       child: GestureDetector(
         onTap: _open,
-        onLongPress: isDesktopWindows ? null : () => _menu(null),
         onSecondaryTapUp: (d) => _menu(d.globalPosition),
         child: content,
       ),
     );
+
+    // Android: mantener pulsada y arrastrar mueve la imagen entre el texto;
+    // mantener pulsada y soltar sin moverla abre el menú.
+    if (!isDesktopWindows) {
+      content = Listener(
+        onPointerDown: (e) => _downAt = e.position,
+        onPointerUp: (e) => _upAt = e.position,
+        child: LongPressDraggable<ImageMovePayload>(
+          data: _payload,
+          maxSimultaneousDrags: widget.onMoveUp == null ? 0 : 1,
+          dragAnchorStrategy: pointerDragAnchorStrategy,
+          feedback: _dragFeedback(),
+          childWhenDragging: Opacity(opacity: 0.35, child: content),
+          onDragStarted: HapticFeedback.mediumImpact,
+          onDraggableCanceled: (_, __) {
+            final a = _downAt, b = _upAt;
+            if (a != null && b != null && (a - b).distance < 14) _menu(null);
+          },
+          child: content,
+        ),
+      );
+      if (widget.onMoveUp == null) {
+        content =
+            GestureDetector(onLongPress: () => _menu(null), child: content);
+      }
+    }
 
     if (_animateIn) {
       content = content.animate().fadeIn(duration: Anim.medium).scale(
@@ -633,6 +762,71 @@ class _NoteImageViewState extends State<NoteImageView> {
     }
     return content;
   }
+}
+
+/// Miniatura cuadrada de una imagen (filas de la lista de notas).
+class NoteThumb extends StatefulWidget {
+  const NoteThumb({super.key, required this.path, this.size = 42});
+  final String path;
+  final double size;
+
+  @override
+  State<NoteThumb> createState() => _NoteThumbState();
+}
+
+class _NoteThumbState extends State<NoteThumb> {
+  Uint8List? _bytes;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  void didUpdateWidget(NoteThumb old) {
+    super.didUpdateWidget(old);
+    if (old.path != widget.path) _load();
+  }
+
+  void _load() {
+    _bytes = NoteImages.instance.cached(widget.path);
+    if (_bytes != null) return;
+    NoteImages.instance.load(widget.path).then((b) {
+      if (mounted && b != null) setState(() => _bytes = b);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.only(left: 10),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: SizedBox.square(
+            dimension: widget.size,
+            child: AnimatedSwitcher(
+              duration: Anim.medium,
+              child: _bytes == null
+                  ? ColoredBox(
+                      key: const ValueKey('vacia'),
+                      color: Palette.hover(context),
+                      child: Icon(Icons.image_outlined,
+                          size: 18, color: Palette.secondary(context)),
+                    )
+                  : Image.memory(
+                      _bytes!,
+                      key: ValueKey(widget.path),
+                      fit: BoxFit.cover,
+                      cacheWidth: (widget.size *
+                              MediaQuery.devicePixelRatioOf(context) *
+                              2)
+                          .round(),
+                      gaplessPlayback: true,
+                    ),
+            ),
+          ),
+        ),
+      );
 }
 
 class _Unavailable extends StatelessWidget {
@@ -737,6 +931,7 @@ Future<void> openImageViewer(
   required Object heroTag,
   required Future<Uint8List?> Function() bytes,
   VoidCallback? onDelete,
+  Future<void> Function(Uint8List cropped)? onCropped,
 }) =>
     Navigator.of(context, rootNavigator: true).push(PageRouteBuilder<void>(
       opaque: false,
@@ -747,6 +942,7 @@ Future<void> openImageViewer(
         heroTag: heroTag,
         bytes: bytes,
         onDelete: onDelete,
+        onCropped: onCropped,
         animation: animation,
       ),
     ));
@@ -758,6 +954,7 @@ class _ImageViewer extends StatefulWidget {
     required this.bytes,
     required this.animation,
     this.onDelete,
+    this.onCropped,
   });
 
   final ImageProvider image;
@@ -765,6 +962,7 @@ class _ImageViewer extends StatefulWidget {
   final Future<Uint8List?> Function() bytes;
   final Animation<double> animation;
   final VoidCallback? onDelete;
+  final Future<void> Function(Uint8List cropped)? onCropped;
 
   @override
   State<_ImageViewer> createState() => _ImageViewerState();
@@ -785,7 +983,6 @@ class _ImageViewerState extends State<_ImageViewer>
   double _drag = 0; // arrastre vertical para cerrar
   bool _dragging = false;
   bool _zoomed = false;
-  bool _chrome = true; // barra de arriba visible
 
   @override
   void dispose() {
@@ -816,6 +1013,14 @@ class _ImageViewerState extends State<_ImageViewer>
 
   Future<void> _act(String a) async {
     switch (a) {
+      case 'recortar':
+        final b = await widget.bytes();
+        if (b == null || !mounted) return;
+        final cropped = await openImageCropper(context, b);
+        if (cropped == null || !mounted) return;
+        final save = widget.onCropped;
+        _close();
+        await save?.call(cropped);
       case 'copiar':
         final b = await widget.bytes();
         if (b != null && mounted) await copyImageBytes(context, b);
@@ -855,7 +1060,6 @@ class _ImageViewerState extends State<_ImageViewer>
             children: [
               Positioned.fill(
                 child: GestureDetector(
-                  onTap: () => setState(() => _chrome = !_chrome),
                   onDoubleTapDown: (d) => _doubleTapAt = d.localPosition,
                   onDoubleTap: _onDoubleTap,
                   onVerticalDragStart:
@@ -919,41 +1123,38 @@ class _ImageViewerState extends State<_ImageViewer>
                 left: 12,
                 right: 12,
                 top: top + 10,
-                child: IgnorePointer(
-                  ignoring: !_chrome,
-                  child: AnimatedOpacity(
-                    duration: Anim.fast,
-                    opacity: _chrome && !_dragging ? 1 : 0,
-                    child: FadeTransition(
-                      opacity: widget.animation,
-                      child: Row(
-                        children: [
-                          _Frosted(
-                            radius: 22,
-                            child: _HoverBtn(
-                                Icons.close_rounded, tr('Cerrar'), _close),
-                          ),
-                          const Spacer(),
-                          _Frosted(
-                            radius: 22,
-                            child:
-                                Row(mainAxisSize: MainAxisSize.min, children: [
-                              _HoverBtn(Icons.content_copy_rounded,
-                                  tr('Copiar imagen'), () => _act('copiar')),
-                              _HoverBtn(
-                                  Icons.download_rounded,
-                                  Platform.isAndroid
-                                      ? tr('Guardar en la galería')
-                                      : tr('Guardar como…'),
-                                  () => _act('guardar')),
-                              if (widget.onDelete != null)
-                                _HoverBtn(Icons.delete_outline_rounded,
-                                    tr('Quitar imagen'), () => _act('quitar')),
-                            ]),
-                          ),
-                        ],
+                // Los botones se ven siempre (también al ampliar o
+                // arrastrar la imagen).
+                child: FadeTransition(
+                  opacity: widget.animation,
+                  child: Row(
+                    children: [
+                      _Frosted(
+                        radius: 22,
+                        child: _HoverBtn(
+                            Icons.close_rounded, tr('Cerrar'), _close),
                       ),
-                    ),
+                      const Spacer(),
+                      _Frosted(
+                        radius: 22,
+                        child: Row(mainAxisSize: MainAxisSize.min, children: [
+                          if (widget.onCropped != null)
+                            _HoverBtn(Icons.crop_rounded, tr('Recortar'),
+                                () => _act('recortar')),
+                          _HoverBtn(Icons.content_copy_rounded,
+                              tr('Copiar imagen'), () => _act('copiar')),
+                          _HoverBtn(
+                              Icons.download_rounded,
+                              Platform.isAndroid
+                                  ? tr('Guardar en la galería')
+                                  : tr('Guardar como…'),
+                              () => _act('guardar')),
+                          if (widget.onDelete != null)
+                            _HoverBtn(Icons.delete_outline_rounded,
+                                tr('Quitar imagen'), () => _act('quitar')),
+                        ]),
+                      ),
+                    ],
                   ),
                 ),
               ),

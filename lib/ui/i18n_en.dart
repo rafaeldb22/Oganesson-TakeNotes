@@ -448,4 +448,13 @@ const enStrings = <String, String>{
   'Contraseña actual del Vault': 'Current Vault password',
   'Usar la contraseña del Vault': 'Use the Vault password',
   'Usar la contraseña de la cuenta': 'Use the account password',
+
+  // --- Recortar y mover imágenes
+  'Recortar': 'Crop',
+  'Hecho': 'Done',
+  'Libre': 'Free',
+  'Girar 90°': 'Rotate 90°',
+  'Subir': 'Move up',
+  'Bajar': 'Move down',
+  'Arrastra para moverla': 'Drag to move it',
 };
