@@ -59,49 +59,69 @@ class _BouncyState extends State<Bouncy> {
   }
 }
 
-/// Transición tipo iPhone: la nota entra desde la derecha y la lista
-/// se desplaza un poco a la izquierda y se atenúa.
-Widget pushTransition(Widget child, Animation<double> animation,
-    {required bool isPage}) {
+/// Base común de las transiciones de pantalla: siempre la misma estructura
+/// (opacidad > escala > desplazamiento > sombra). Así se puede cambiar de
+/// una transición a otra a mitad de camino (p. ej. al eliminar la nota
+/// abierta) sin que Flutter recree la pantalla que está saliendo.
+Widget _layered(
+  Widget child,
+  Animation<double> animation, {
+  double fadeFrom = 1,
+  double scaleFrom = 1,
+  Offset slideFrom = Offset.zero,
+  bool shadow = false,
+  Curve curve = Curves.easeOutCubic,
+  Curve reverseCurve = Curves.easeInCubic,
+}) {
   final curved = CurvedAnimation(
-    parent: animation,
-    curve: Curves.easeOutCubic,
-    reverseCurve: Curves.easeInCubic,
-  );
-  if (isPage) {
-    return SlideTransition(
-      position:
-          Tween(begin: const Offset(1, 0), end: Offset.zero).animate(curved),
-      child: DecoratedBox(
-        decoration: const BoxDecoration(boxShadow: [
-          BoxShadow(blurRadius: 24, color: Color(0x33000000)),
-        ]),
-        child: child,
+      parent: animation, curve: curve, reverseCurve: reverseCurve);
+  return FadeTransition(
+    opacity: Tween(begin: fadeFrom, end: 1.0).animate(curved),
+    child: ScaleTransition(
+      scale: Tween(begin: scaleFrom, end: 1.0).animate(curved),
+      child: SlideTransition(
+        position: Tween(begin: slideFrom, end: Offset.zero).animate(curved),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            boxShadow: shadow
+                ? const [BoxShadow(blurRadius: 24, color: Color(0x33000000))]
+                : const [],
+          ),
+          child: child,
+        ),
       ),
-    );
-  }
-  return SlideTransition(
-    position:
-        Tween(begin: const Offset(-0.3, 0), end: Offset.zero).animate(curved),
-    child: FadeTransition(
-      opacity: Tween(begin: 0.4, end: 1.0).animate(curved),
-      child: child,
     ),
   );
 }
 
+/// Transición tipo iPhone: la nota entra desde la derecha y la lista
+/// se desplaza un poco a la izquierda y se atenúa.
+Widget pushTransition(Widget child, Animation<double> animation,
+        {required bool isPage}) =>
+    isPage
+        ? _layered(child, animation,
+            slideFrom: const Offset(1, 0), shadow: true)
+        : _layered(child, animation,
+            fadeFrom: 0.4, slideFrom: const Offset(-0.3, 0));
+
 /// Transición suave al cambiar de nota en el panel derecho (PC).
-Widget fadeThrough(Widget child, Animation<double> animation) {
-  final curved = CurvedAnimation(parent: animation, curve: Anim.curve);
-  return FadeTransition(
-    opacity: curved,
-    child: ScaleTransition(
-      scale: Tween(begin: 0.985, end: 1.0).animate(curved),
-      child: SlideTransition(
-        position: Tween(begin: const Offset(0, 0.015), end: Offset.zero)
-            .animate(curved),
-        child: child,
-      ),
-    ),
-  );
-}
+Widget fadeThrough(Widget child, Animation<double> animation) => _layered(
+      child,
+      animation,
+      fadeFrom: 0,
+      scaleFrom: 0.985,
+      slideFrom: const Offset(0, 0.015),
+      curve: Anim.curve,
+      reverseCurve: Anim.curve,
+    );
+
+/// Salida de una nota eliminada: se encoge, baja un poco y se desvanece
+/// (como una tarjeta que se descarta).
+Widget discardTransition(Widget child, Animation<double> animation) =>
+    _layered(child, animation,
+        fadeFrom: 0, scaleFrom: 0.88, slideFrom: const Offset(0, 0.08));
+
+/// Lo que queda debajo de una nota eliminada: aparece sin moverse.
+Widget stillTransition(Widget child, Animation<double> animation,
+        {bool fade = false}) =>
+    _layered(child, animation, fadeFrom: fade ? 0 : 1);

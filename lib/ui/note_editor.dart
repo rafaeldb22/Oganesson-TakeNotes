@@ -12,6 +12,7 @@ import 'anim.dart';
 import 'editor_toolbar.dart';
 import 'folders.dart';
 import 'note_color_sheet.dart';
+import 'note_image.dart';
 import 'format.dart';
 import 'link_picker.dart';
 import 'schedule_sheet.dart';
@@ -98,6 +99,17 @@ class _NoteEditorState extends State<NoteEditor> {
     _ctrl = QuillController(
       document: _docFor(n),
       selection: const TextSelection.collapsed(offset: 0),
+      // Ctrl+V con una imagen en el portapapeles (p. ej. una captura): se
+      // pega como imagen; si hay texto, se pega el texto como siempre.
+      // ignore: experimental_member_use
+      config: QuillControllerConfig(
+        // ignore: experimental_member_use
+        clipboardConfig: QuillClipboardConfig(
+          // ignore: experimental_member_use
+          onClipboardPaste: () async =>
+              mounted && await pasteImagesFromClipboard(context, _ctrl),
+        ),
+      ),
     );
     // Nota nueva: lo primero que escribas sale en grande, como un título.
     // Al pulsar Intro la siguiente línea ya es texto normal.
@@ -341,6 +353,8 @@ class _NoteEditorState extends State<NoteEditor> {
                     repo.togglePin(widget.noteId);
                   case 'formato':
                     setState(() => _toolbarOpen = !_toolbarOpen);
+                  case 'imagen':
+                    await pickAndInsertImages(context, _ctrl);
                   case 'borrar':
                     _closing = true;
                     widget.onDelete(widget.noteId);
@@ -374,6 +388,13 @@ class _NoteEditorState extends State<NoteEditor> {
                         title: Text(_toolbarOpen
                             ? tr('Ocultar formato')
                             : tr('Mostrar formato')))),
+                PopupMenuItem(
+                    value: 'imagen',
+                    child: ListTile(
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        leading: const Icon(Icons.add_photo_alternate_outlined),
+                        title: Text(tr('Añadir imagen')))),
                 PopupMenuItem(
                     value: 'borrar',
                     child: ListTile(
@@ -419,6 +440,7 @@ class _NoteEditorState extends State<NoteEditor> {
               child: _toolbarOpen
                   ? EditorToolbar(
                       controller: _ctrl,
+                      onImage: () => pickAndInsertImages(context, _ctrl),
                       onLink: () =>
                           showLinkNotesPicker(context, repo, widget.noteId),
                     )
@@ -452,22 +474,45 @@ class _NoteEditorState extends State<NoteEditor> {
                             ),
                           ),
                         Expanded(
-                          child: QuillEditor(
-                            controller: _ctrl,
-                            focusNode: _focus,
-                            scrollController: _scroll,
-                            config: QuillEditorConfig(
-                              placeholder: tr('Escribe algo…'),
-                              autoFocus: widget.autofocus,
-                              expands: true,
-                              padding: const EdgeInsets.only(bottom: 40),
-                              customStyles: _styles(context),
-                              // Menú de cortar/copiar/pegar con el estilo de la app.
-                              contextMenuBuilder: (context, state) =>
-                                  buildTextMenu(
-                                      context,
-                                      state.contextMenuButtonItems,
-                                      state.contextMenuAnchors),
+                          child: ImageDropZone(
+                            onImages: (images) =>
+                                insertImages(context, _ctrl, images),
+                            child: QuillEditor(
+                              controller: _ctrl,
+                              focusNode: _focus,
+                              scrollController: _scroll,
+                              config: QuillEditorConfig(
+                                placeholder: tr('Escribe algo…'),
+                                autoFocus: widget.autofocus,
+                                expands: true,
+                                padding: const EdgeInsets.only(bottom: 40),
+                                customStyles: _styles(context),
+                                // Imágenes: se dibujan con su propio estilo,
+                                // Ctrl+V pega capturas y el teclado de Android
+                                // puede insertar imágenes directamente.
+                                embedBuilders: const [NoteImageEmbedBuilder()],
+                                contentInsertionConfiguration:
+                                    ContentInsertionConfiguration(
+                                  allowedMimeTypes: const [
+                                    'image/png',
+                                    'image/jpeg',
+                                    'image/gif',
+                                    'image/webp',
+                                  ],
+                                  onContentInserted: (c) {
+                                    final data = c.data;
+                                    if (data != null && data.isNotEmpty) {
+                                      insertImages(context, _ctrl, [data]);
+                                    }
+                                  },
+                                ),
+                                // Menú de cortar/copiar/pegar con el estilo de la app.
+                                contextMenuBuilder: (context, state) =>
+                                    buildTextMenu(
+                                        context,
+                                        state.contextMenuButtonItems,
+                                        state.contextMenuAnchors),
+                              ),
                             ),
                           ),
                         ),

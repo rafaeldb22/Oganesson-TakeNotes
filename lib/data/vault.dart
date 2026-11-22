@@ -234,6 +234,45 @@ class VaultLock extends ChangeNotifier {
     notifyListeners();
   }
 
+  // ------------------------------- con la contraseña de la cuenta
+
+  /// Se puede usar la contraseña de la cuenta (sesión con correo).
+  bool get canUseAccountPassword => _client != null && email != null;
+
+  /// Comprueba la contraseña de la cuenta de Oganesson para poder cambiar
+  /// la del Vault sin saber la actual. true = correcta, false = incorrecta,
+  /// null = no se pudo comprobar (sin conexión). Los fallos cuentan para el
+  /// bloqueo por intentos, igual que con la contraseña maestra.
+  Future<bool?> verifyAccountPassword(String password) async {
+    final client = _client;
+    final mail = email;
+    if (client == null || mail == null || blockedSeconds > 0) return false;
+    try {
+      final res =
+          await client.auth.signInWithPassword(email: mail, password: password);
+      if (res.user?.id == userId) {
+        _failures = 0;
+        _blockedUntil = null;
+        return true;
+      }
+    } on AuthRetryableFetchException catch (e) {
+      debugPrint('Vault: sin conexión al comprobar la cuenta (${e.message})');
+      return null;
+    } on AuthException catch (e) {
+      debugPrint('Vault: contraseña de la cuenta incorrecta (${e.message})');
+    } catch (e) {
+      debugPrint('Vault: no se pudo comprobar la cuenta ($e)');
+      return null;
+    }
+    _failures++;
+    if (_failures >= 5) {
+      _blockedUntil =
+          DateTime.now().add(Duration(seconds: 30 * (_failures - 4)));
+    }
+    notifyListeners();
+    return false;
+  }
+
   // ------------------------------------------- olvidé la contraseña
 
   /// Envía un código de 6 dígitos al correo de la cuenta.

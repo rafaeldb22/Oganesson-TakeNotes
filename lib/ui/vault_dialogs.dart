@@ -36,7 +36,9 @@ Future<void> changeVaultPassword(BuildContext context, VaultLock vault) async {
   }
 }
 
-enum _Mode { create, change, reset }
+/// create: primera vez · change: con la actual (o la de la cuenta) ·
+/// reset: tras el código del correo · account: olvidada, con la de la cuenta.
+enum _Mode { create, change, reset, account }
 
 Widget _header(BuildContext context, IconData icon, String title, String text) {
   final p = Palette.of(context);
@@ -81,14 +83,17 @@ Widget _errorText(BuildContext context, String? error) => AnimatedSize(
 
 class _PasswordField extends StatefulWidget {
   const _PasswordField({
+    super.key,
     required this.controller,
     required this.hint,
+    this.icon = Icons.key_rounded,
     this.autofocus = false,
     this.onSubmitted,
     this.enabled = true,
   });
   final TextEditingController controller;
   final String hint;
+  final IconData icon;
   final bool autofocus;
   final bool enabled;
   final VoidCallback? onSubmitted;
@@ -110,7 +115,7 @@ class _PasswordFieldState extends State<_PasswordField> {
         onSubmitted: (_) => widget.onSubmitted?.call(),
         decoration: InputDecoration(
           hintText: widget.hint,
-          prefixIcon: const Icon(Icons.key_rounded),
+          prefixIcon: Icon(widget.icon),
           suffixIcon: IconButton(
             tooltip: _show ? tr('Ocultar') : tr('Mostrar'),
             icon: Icon(_show
@@ -173,9 +178,13 @@ class _UnlockDialogState extends State<_UnlockDialog> {
   }
 
   Future<void> _forgot() async {
+    // Con la contraseña de la cuenta si hay sesión con correo; si no, con
+    // un código por correo (solo con SMTP propio, AppConfig.emailCodes).
     final ok = await showDialog<bool>(
       context: context,
-      builder: (_) => _ResetDialog(vault: widget.vault),
+      builder: (_) => widget.vault.canUseAccountPassword
+          ? _NewPasswordDialog(vault: widget.vault, mode: _Mode.account)
+          : _ResetDialog(vault: widget.vault),
     );
     if (ok == true && mounted) Navigator.pop(context, true);
   }
@@ -199,9 +208,9 @@ class _UnlockDialogState extends State<_UnlockDialog> {
             ),
             _errorText(context, _error),
             const SizedBox(height: 4),
-            // Restablecer por correo: solo con SMTP propio configurado en
-            // Supabase (AppConfig.emailCodes).
-            if (AppConfig.emailCodes)
+            // Restablecer con la contraseña de la cuenta (o por correo, solo
+            // con SMTP propio configurado en Supabase: AppConfig.emailCodes).
+            if (widget.vault.canUseAccountPassword || AppConfig.emailCodes)
               Align(
                 alignment: Alignment.centerRight,
                 child: TextButton(
@@ -242,6 +251,9 @@ class _NewPasswordDialogState extends State<_NewPasswordDialog> {
   bool _busy = false;
   String? _error;
 
+  /// Cambiar con la contraseña de la cuenta en vez de la del Vault.
+  late bool _useAccount = widget.mode == _Mode.account;
+
   @override
   void dispose() {
     _old.dispose();
@@ -252,22 +264,33 @@ class _NewPasswordDialogState extends State<_NewPasswordDialog> {
 
   Future<void> _submit() async {
     if (_busy) return;
-    // Cambiar la contraseña exige escribir la actual.
-    if (widget.mode == _Mode.change) {
+    // Cambiar la contraseña exige escribir la actual o la de la cuenta.
+    if (widget.mode == _Mode.change || widget.mode == _Mode.account) {
       if (_old.text.isEmpty) {
-        setState(() => _error = tr('Escribe la contraseña actual'));
+        setState(() => _error = _useAccount
+            ? tr('Escribe la contraseña de tu cuenta')
+            : tr('Escribe la contraseña actual'));
         return;
       }
-      setState(() => _busy = true);
-      final ok = await widget.vault.unlock(_old.text);
+      setState(() {
+        _busy = true;
+        _error = null;
+      });
+      final bool? ok = _useAccount
+          ? await widget.vault.verifyAccountPassword(_old.text)
+          : await widget.vault.unlock(_old.text);
       if (!mounted) return;
-      if (!ok) {
+      if (ok != true) {
         setState(() {
           _busy = false;
-          _error = widget.vault.blockedSeconds > 0
-              ? trf('Demasiados intentos. Espera {0} s',
-                  [widget.vault.blockedSeconds])
-              : tr('La contraseña actual no es correcta');
+          _error = ok == null
+              ? tr('No se pudo comprobar. Revisa la conexión.')
+              : widget.vault.blockedSeconds > 0
+                  ? trf('Demasiados intentos. Espera {0} s',
+                      [widget.vault.blockedSeconds])
+                  : _useAccount
+                      ? tr('La contraseña de la cuenta no es correcta')
+                      : tr('La contraseña actual no es correcta');
         });
         return;
       }
@@ -297,13 +320,23 @@ class _NewPasswordDialogState extends State<_NewPasswordDialog> {
           Icons.shield_outlined,
           tr('Crea tu Vault'),
           tr('Elige una contraseña maestra. Las notas que muevas al Vault solo '
-              'se verán con ella. Puedes cambiarla desde ⋯ escribiendo la '
-              'actual.')
+              'se verán con ella. Puedes cambiarla desde ⋯ con la actual o con '
+              'la contraseña de tu cuenta.')
         ),
       _Mode.change => (
           Icons.password_rounded,
           tr('Cambiar contraseña del Vault'),
-          tr('Escribe la contraseña actual y la nueva.')
+          _useAccount
+              ? tr('Escribe la contraseña de tu cuenta y la nueva del Vault.')
+              : tr('Escribe la contraseña actual y la nueva.')
+        ),
+      _Mode.account => (
+          Icons.manage_accounts_outlined,
+          tr('Restablecer con tu cuenta'),
+          trf(
+              'Escribe la contraseña de tu cuenta ({0}) y elige una '
+              'contraseña maestra nueva.',
+              [widget.vault.email ?? ''])
         ),
       _Mode.reset => (
           Icons.lock_reset_rounded,
@@ -318,20 +351,65 @@ class _NewPasswordDialogState extends State<_NewPasswordDialog> {
           mainAxisSize: MainAxisSize.min,
           children: [
             _header(context, icon, title, text),
-            if (widget.mode == _Mode.change) ...[
-              _PasswordField(
-                  controller: _old,
-                  hint: tr('Contraseña actual'),
-                  autofocus: true,
-                  enabled: !_busy),
-              const SizedBox(height: 10),
+            if (widget.mode == _Mode.change ||
+                widget.mode == _Mode.account) ...[
+              AnimatedSwitcher(
+                duration: Anim.medium,
+                transitionBuilder: (c, a) => FadeTransition(
+                  opacity: a,
+                  child: SlideTransition(
+                    position: Tween(
+                            begin: const Offset(0, 0.25), end: Offset.zero)
+                        .animate(CurvedAnimation(parent: a, curve: Anim.curve)),
+                    child: c,
+                  ),
+                ),
+                child: _PasswordField(
+                    key: ValueKey(_useAccount),
+                    controller: _old,
+                    hint: _useAccount
+                        ? tr('Contraseña de tu cuenta')
+                        : tr('Contraseña actual del Vault'),
+                    icon: _useAccount
+                        ? Icons.account_circle_outlined
+                        : Icons.key_rounded,
+                    autofocus: true,
+                    enabled: !_busy),
+              ),
+              // Cambiar entre la contraseña del Vault y la de la cuenta.
+              if (widget.mode == _Mode.change &&
+                  widget.vault.canUseAccountPassword)
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton.icon(
+                    onPressed: _busy
+                        ? null
+                        : () => setState(() {
+                              _useAccount = !_useAccount;
+                              _old.clear();
+                              _error = null;
+                            }),
+                    icon: Icon(
+                        _useAccount
+                            ? Icons.key_rounded
+                            : Icons.account_circle_outlined,
+                        size: 18),
+                    label: Text(_useAccount
+                        ? tr('Usar la contraseña del Vault')
+                        : tr('Usar la contraseña de la cuenta')),
+                  ),
+                )
+              else
+                const SizedBox(height: 10),
             ],
             _PasswordField(
                 controller: _a,
-                hint: widget.mode == _Mode.change
-                    ? tr('Contraseña nueva')
-                    : tr('Contraseña maestra'),
-                autofocus: widget.mode != _Mode.change,
+                hint:
+                    widget.mode == _Mode.change || widget.mode == _Mode.account
+                        ? tr('Contraseña nueva')
+                        : tr('Contraseña maestra'),
+                autofocus:
+                    widget.mode != _Mode.change && widget.mode != _Mode.account,
                 enabled: !_busy),
             const SizedBox(height: 10),
             _PasswordField(

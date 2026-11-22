@@ -37,4 +37,12 @@ void main() {
     expect(v.blockedSeconds, greaterThan(0));
     expect(await v.unlock('secreta1'), isFalse);
   });
+
+  test('sin sesión no se puede usar la contraseña de la cuenta', () async {
+    SharedPreferences.setMockInitialValues({});
+    final v = VaultLock.forUser('u3');
+    await v.load();
+    expect(v.canUseAccountPassword, isFalse);
+    expect(await v.verifyAccountPassword('loquesea'), isFalse);
+  });
 }

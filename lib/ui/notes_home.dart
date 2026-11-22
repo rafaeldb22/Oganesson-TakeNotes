@@ -68,6 +68,30 @@ class _NotesHomeState extends State<NotesHome> {
   String? _openId;
   final Set<String> _removing = {}; // filas que se están plegando
   bool _openAutofocus = false;
+
+  /// La nota abierta se acaba de eliminar: el editor sale con la animación
+  /// de descarte y lo que hay debajo (lista o calendario) se queda quieto.
+  bool _discarding = false;
+
+  /// Hasta cuándo las filas entran con su animación escalonada. Solo al
+  /// mostrar la lista (inicio o cambio de vista): al borrar, archivar o
+  /// volver de una nota la lista ya estaba ahí y no se vuelve a animar.
+  bool? _entering; // null: la lista aún no se ha mostrado
+  Timer? _entranceTimer;
+  bool get _entranceOpen {
+    if (_entering == null) {
+      _entering = true;
+      _entranceTimer?.cancel();
+      _entranceTimer =
+          Timer(const Duration(milliseconds: 900), () => _entering = false);
+    }
+    return _entering!;
+  }
+
+  /// El título hace su fundido solo al abrir la app.
+  bool _titleIntro = true;
+  Timer? _titleTimer;
+
   StreamSubscription<Uri?>? _widgetSub;
 
   /// 'todas' | 'calendario' | id de carpeta
@@ -112,6 +136,9 @@ class _NotesHomeState extends State<NotesHome> {
     vault.addListener(_onVault);
     repo.onLocalEdit = vault.touch;
     WidgetBridge.initialUri().then(_onWidgetUri);
+    _titleTimer = Timer(const Duration(milliseconds: 900), () {
+      _titleIntro = false;
+    });
     SharedPreferences.getInstance().then((p) {
       final v = p.getString(_kSort);
       final open = p.getStringList(_kOpenFolders);
@@ -130,6 +157,8 @@ class _NotesHomeState extends State<NotesHome> {
   @override
   void dispose() {
     _widgetSub?.cancel();
+    _entranceTimer?.cancel();
+    _titleTimer?.cancel();
     vault.removeListener(_onVault);
     repo.onLocalEdit = null;
     _search.dispose();
@@ -225,7 +254,16 @@ class _NotesHomeState extends State<NotesHome> {
     if (f == _filter) return;
     // Al ir al calendario o a la red se cierra la nota abierta para que se vea.
     if ((f == 'calendario' || f == 'red') && _openId != null) _close();
-    setState(() => _filter = f);
+    // En PC Todas / Red / Calendario comparten la misma lista (no se vuelve
+    // a montar): sus filas no deben repetir la entrada.
+    const shared = {'todas', 'red', 'calendario'};
+    final sameList = MediaQuery.sizeOf(context).width >= _wideBreakpoint &&
+        shared.contains(f) &&
+        shared.contains(_filter);
+    setState(() {
+      _filter = f;
+      if (!sameList) _entering = null;
+    });
   }
 
   void _open(String id, {bool autofocus = false}) {
@@ -233,6 +271,7 @@ class _NotesHomeState extends State<NotesHome> {
     setState(() {
       _openId = id;
       _openAutofocus = autofocus;
+      _discarding = false;
     });
     // Una nota nueva que se dejó vacía se descarta al cambiar de nota.
     if (prev != null && prev != id) repo.finishEditing(prev);
@@ -241,15 +280,23 @@ class _NotesHomeState extends State<NotesHome> {
   void _close() {
     final prev = _openId;
     if (prev == null || !mounted) return;
-    setState(() => _openId = null);
+    setState(() {
+      _openId = null;
+      _discarding = false;
+    });
     repo.finishEditing(prev);
   }
 
   /// Pliega la fila con animación y después la borra.
   void _deleteAnimated(String id) {
     if (_removing.contains(id)) return;
-    if (_openId == id) _openId = null;
-    setState(() => _removing.add(id));
+    setState(() {
+      if (_openId == id) {
+        _openId = null;
+        _discarding = true;
+      }
+      _removing.add(id);
+    });
     Future.delayed(Anim.medium, () {
       if (!mounted) return;
       _removing.remove(id);
@@ -260,7 +307,12 @@ class _NotesHomeState extends State<NotesHome> {
   void _deleteNote(String id) {
     final n = repo.byId(id);
     final hadContent = n != null && !n.isEmpty;
-    if (_openId == id) setState(() => _openId = null);
+    if (_openId == id) {
+      setState(() {
+        _openId = null;
+        _discarding = true;
+      });
+    }
     repo.delete(id);
     if (!hadContent || !mounted) return;
     showToast(
@@ -495,7 +547,14 @@ class _NotesHomeState extends State<NotesHome> {
                             duration: Anim.medium,
                             switchInCurve: Anim.curve,
                             switchOutCurve: Curves.easeIn,
-                            transitionBuilder: fadeThrough,
+                            // Al eliminar la nota abierta solo se anima su
+                            // salida; el calendario aparece sin más.
+                            transitionBuilder: (child, anim) => !_discarding
+                                ? fadeThrough(child, anim)
+                                : '${(child.key as ValueKey?)?.value}'
+                                        .startsWith('editor-')
+                                    ? discardTransition(child, anim)
+                                    : stillTransition(child, anim, fade: true),
                             child: hasOpen
                                 ? _editor(showBack: false)
                                 // Sin nota abierta se ve el calendario (o la
@@ -539,11 +598,17 @@ class _NotesHomeState extends State<NotesHome> {
                   },
                   child: AnimatedSwitcher(
                     duration: Anim.slow,
-                    transitionBuilder: (child, anim) => pushTransition(
-                      child,
-                      anim,
-                      isPage: child.key != const ValueKey('lista'),
-                    ),
+                    transitionBuilder: (child, anim) {
+                      final isPage = child.key != const ValueKey('lista');
+                      // Nota eliminada: la nota se va y la lista, que es la
+                      // misma de antes, no hace la animación de "volver".
+                      if (_discarding) {
+                        return isPage
+                            ? discardTransition(child, anim)
+                            : stillTransition(child, anim);
+                      }
+                      return pushTransition(child, anim, isPage: isPage);
+                    },
                     layoutBuilder: (current, previous) => Stack(
                       fit: StackFit.expand,
                       children: [...previous, if (current != null) current],
@@ -683,7 +748,7 @@ class _NotesHomeState extends State<NotesHome> {
           fit: BoxFit.scaleDown,
           alignment: Alignment.centerLeft,
           child: WaveTitle(text: 'oganesson', fontSize: 30),
-        ).animate().fadeIn(duration: Anim.slow),
+        ).animate(value: _titleIntro ? null : 1).fadeIn(duration: Anim.slow),
         actions: [
           _SyncIndicator(repo: repo),
           Builder(
@@ -1021,6 +1086,9 @@ class _NotesHomeState extends State<NotesHome> {
   Widget _tilesCard(BuildContext context, List<Note> notes, bool wide,
       int Function() nextIndex) {
     final tiles = <Widget>[];
+    // Fuera de la ventana de entrada las filas aparecen ya colocadas
+    // (value: 1), sin cambiar el árbol para no perder su estado.
+    final entering = _entranceOpen;
     for (var i = 0; i < notes.length; i++) {
       final n = notes[i];
       final order = nextIndex();
@@ -1048,7 +1116,9 @@ class _NotesHomeState extends State<NotesHome> {
             ),
           ],
         )
-            .animate(delay: (min(order, 10) * 40).ms)
+            .animate(
+                delay: entering ? (min(order, 10) * 40).ms : Duration.zero,
+                value: entering ? null : 1)
             .fadeIn(duration: Anim.medium)
             .slideY(begin: 0.25, curve: Anim.curve, duration: Anim.slow),
       ));
@@ -1195,7 +1265,12 @@ class _NotesHomeState extends State<NotesHome> {
   }
 
   void _archiveNote(String id) {
-    if (_openId == id) setState(() => _openId = null);
+    if (_openId == id) {
+      setState(() {
+        _openId = null;
+        _discarding = true;
+      });
+    }
     repo.setArchived(id, true);
     showToast(
       context,

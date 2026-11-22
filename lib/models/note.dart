@@ -91,17 +91,23 @@ class Note {
   bool isOverdue([DateTime? now]) =>
       dueAt != null && !done && (now ?? DateTime.now()).toUtc().isAfter(dueAt!);
 
+  /// Las imágenes ocupan un carácter U+FFFC en el texto plano: no cuentan
+  /// para el título ni para la vista previa.
   List<String> get _lines => content
       .split('\n')
-      .map((l) => l.trim())
+      .map((l) => l.replaceAll('\uFFFC', '').trim())
       .where((l) => l.isNotEmpty)
       .toList();
 
   /// Primera línea con texto = título (como en Notas de iPhone).
   String get title {
     final l = _lines;
-    return l.isEmpty ? tr('Nota nueva') : l.first;
+    if (l.isNotEmpty) return l.first;
+    return hasImages ? tr('Imagen') : tr('Nota nueva');
   }
+
+  /// ¿Tiene alguna imagen?
+  bool get hasImages => content.contains('\uFFFC');
 
   String get preview {
     final l = _lines;

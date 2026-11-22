@@ -340,8 +340,8 @@ const enStrings = <String, String>{
   'Desbloquear': 'Unlock',
   'Demasiados intentos. Espera {0} s': 'Too many attempts. Wait {0} s',
   'Crea tu Vault': 'Create your Vault',
-  'Elige una contraseña maestra. Las notas que muevas al Vault solo se verán con ella. Puedes cambiarla desde ⋯ escribiendo la actual.':
-      'Choose a master password. Notes you move to the Vault will only show with it. You can change it from ⋯ by entering the current one.',
+  'Elige una contraseña maestra. Las notas que muevas al Vault solo se verán con ella. Puedes cambiarla desde ⋯ con la actual o con la contraseña de tu cuenta.':
+      'Choose a master password. Notes you move to the Vault will only show with it. You can change it from ⋯ with the current one or with your account password.',
   'Crear Vault': 'Create Vault',
   'Escribe la contraseña actual y la nueva.':
       'Enter the current password and the new one.',
@@ -409,4 +409,43 @@ const enStrings = <String, String>{
   // --- Widgets de Android
   'Sin notas todavía': 'No notes yet',
   'Toca «Nueva nota» para escribir': 'Tap “New note” to write',
+
+  // --- Imágenes en las notas
+  'Imagen': 'Image',
+  'Añadir imagen': 'Add image',
+  'Añadir imagen  (o pega con Ctrl+V)': 'Add image  (or paste with Ctrl+V)',
+  'Galería': 'Gallery',
+  'Cámara': 'Camera',
+  'Algún archivo no es una imagen': 'Some files are not images',
+  'No se pudo abrir la imagen': 'Could not open the image',
+  'Imagen copiada': 'Image copied',
+  'No se pudo copiar la imagen': 'Could not copy the image',
+  'Guardada en la galería': 'Saved to the gallery',
+  'Imagen guardada': 'Image saved',
+  'No se pudo guardar la imagen': 'Could not save the image',
+  'Ver imagen': 'View image',
+  'Copiar imagen': 'Copy image',
+  'Guardar en la galería': 'Save to gallery',
+  'Guardar como…': 'Save as…',
+  'Quitar imagen': 'Remove image',
+  'Subiendo…': 'Uploading…',
+  'Pendiente de subir': 'Waiting to upload',
+  'Imagen no disponible': 'Image not available',
+  'Reintentar': 'Retry',
+  'Solo se pueden añadir imágenes': 'Only images can be added',
+  'Suelta para añadir las imágenes': 'Drop to add the images',
+
+  // --- Vault con la contraseña de la cuenta
+  'Escribe la contraseña de tu cuenta': 'Enter your account password',
+  'La contraseña de la cuenta no es correcta':
+      'The account password is not correct',
+  'Escribe la contraseña de tu cuenta y la nueva del Vault.':
+      'Enter your account password and the new Vault password.',
+  'Restablecer con tu cuenta': 'Reset with your account',
+  'Escribe la contraseña de tu cuenta ({0}) y elige una contraseña maestra nueva.':
+      'Enter your account password ({0}) and choose a new master password.',
+  'Contraseña de tu cuenta': 'Your account password',
+  'Contraseña actual del Vault': 'Current Vault password',
+  'Usar la contraseña del Vault': 'Use the Vault password',
+  'Usar la contraseña de la cuenta': 'Use the account password',
 };

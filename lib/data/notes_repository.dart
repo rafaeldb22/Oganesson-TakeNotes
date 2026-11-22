@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/note.dart';
+import 'note_images.dart';
 import 'widget_bridge.dart';
 
 enum SyncStatus { syncing, synced, pending, offline }
@@ -201,18 +202,21 @@ class NotesRepository extends ChangeNotifier {
   /// Borra para siempre (de este dispositivo y de la nube).
   void deleteForever(String id) {
     if (_disposed || !_notes.containsKey(id)) return;
-    _notes.remove(id);
+    final n = _notes.remove(id)!;
     _dirty.remove(id);
     _purge.add(id);
+    _releaseImages([n]);
     _changed();
   }
 
   void emptyTrash() {
-    for (final n in trash) {
+    final gone = trash;
+    for (final n in gone) {
       _notes.remove(n.id);
       _dirty.remove(n.id);
       _purge.add(n.id);
     }
+    _releaseImages(gone);
     _changed();
   }
 
@@ -224,11 +228,24 @@ class NotesRepository extends ChangeNotifier {
         .where((n) => n.deleted && !n.updatedAt.isAfter(limit))
         .map((n) => n.id)
         .toList();
+    final gone = <Note>[];
     for (final id in old) {
-      _notes.remove(id);
+      gone.add(_notes.remove(id)!);
       _dirty.remove(id);
       _purge.add(id);
     }
+    _releaseImages(gone);
+  }
+
+  /// Borra de la nube las imágenes de notas eliminadas para siempre, salvo
+  /// las que siga usando otra nota (una imagen copiada de una nota a otra).
+  void _releaseImages(List<Note> gone) {
+    final paths = {for (final n in gone) ...NoteImages.pathsIn(n.rich)};
+    if (paths.isEmpty) return;
+    for (final n in _notes.values) {
+      paths.removeAll(NoteImages.pathsIn(n.rich));
+    }
+    NoteImages.instance.remove(paths);
   }
 
   Note? byId(String id) => _notes[id];

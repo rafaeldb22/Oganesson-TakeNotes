@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../config.dart';
+import '../data/note_images.dart';
 import '../data/notes_repository.dart';
 import '../data/reminders.dart';
 import '../data/vault.dart';
@@ -54,6 +55,9 @@ class _NotesShellState extends State<NotesShell> with WidgetsBindingObserver {
     repo.vaultUnlocked = () => vault.unlocked;
     vault.addListener(repo.vaultChanged);
     vault.load();
+    // Imágenes de las notas: caché local, subida y cola pendiente.
+    NoteImages.instance.attach(
+        AppConfig.demo ? null : Supabase.instance.client, widget.userId);
     repo.addListener(_reprogramar);
     repo.start().then((_) {
       if (AppConfig.demo) repo.seedDemo();
@@ -67,6 +71,7 @@ class _NotesShellState extends State<NotesShell> with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       repo.sync();
+      NoteImages.instance.retryPending();
       // Redibuja los widgets (p. ej. la cuenta atrás de "Próxima tarea").
       WidgetBridge.refresh();
     }

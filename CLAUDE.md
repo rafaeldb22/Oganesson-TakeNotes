@@ -25,7 +25,8 @@ symlinks for plugins: `start ms-settings:developers`; the setup script enables i
 flutter run -d windows             # or: flutter build windows --release
 ```
 
-Android (device or emulator connected):
+Android (device or emulator connected). Gradle needs **JDK 21** (with JDK 17 the release
+lint of `image_picker_android` crashes on `List.removeLast()`); CI uses Java 21:
 
 ```bash
 bash scripts/prepare_android.sh    # generates android/, copies widgets/manifest, desugaring, icons
@@ -67,13 +68,28 @@ that it still arrives. On Windows, check toasts are enabled first:
   auto-lock after 5 min without activity. The Vault is only reachable from ⋯ (its own screen,
   `lib/ui/vault_screen.dart`); `NotesRepository.notes` never contains vault notes
   (`vaultNotes` does, when unlocked). Password change needs the current one
-  (`lib/ui/vault_dialogs.dart`); email-code reset exists but is gated by
-  `AppConfig.emailCodes`. Vault notes are not end-to-end encrypted (same RLS as other notes).
+  (`lib/ui/vault_dialogs.dart`) **or the account password** (`VaultLock.verifyAccountPassword`,
+  re-signs in with `signInWithPassword`; also used by "forgot password" on the locked Vault).
+  Email-code reset exists but is gated by `AppConfig.emailCodes`. Vault notes are not end-to-end
+  encrypted (same RLS as other notes).
 - Archive & manual order: `Note.archived` / `Note.position` (migration 006; uploads skip them
   while the columns are missing, `serverHasArchive`). Swipe left → archive, right → delete.
   Drag & drop in the list: `Draggable` (vertical, desktop) / `LongPressDraggable` (Android),
   drop targets on tiles, folder headers (`FolderGroup.onDropNote`) and `DropZone` headers.
   Reordering switches the sort to `'manual'`. Archived list: `lib/ui/archived_sheet.dart`.
+- Images in notes: `lib/data/note_images.dart` (`NoteImages`: Quill image embeds with source
+  `sb://<user>/<id>?w=&h=`, private Storage bucket `note-images` from migration 007, disk cache,
+  persistent upload queue, background compression `compressImage`, cleanup on hard delete) and
+  `lib/ui/note_image.dart` (`NoteImageEmbedBuilder`/`NoteImageView`, full-screen viewer,
+  `pasteImagesFromClipboard` — wired as `QuillClipboardConfig.onClipboardPaste` on the
+  controller —, `pickAndInsertImages` (image_picker), `ImageDropZone` (desktop_drop), copy with
+  pasteboard, save with quill_native_bridge). Images are U+FFFC in `Note.content`; `Note.title`
+  and `preview` ignore it.
+- Screen transitions (`lib/ui/anim.dart`) all share one widget structure (`_layered`) so the
+  transition can change mid-way without rebuilding the outgoing screen. Deleting/archiving the
+  open note sets `_discarding` in `notes_home.dart` (editor uses `discardTransition`, the list
+  `stillTransition`); list rows only play their entrance animation during `_entranceOpen`
+  (first 900 ms after the list is shown / the view changes).
 - Smooth wheel scrolling: use `SmoothScrollController` (`lib/ui/smooth_scroll.dart`) for new
   scroll views on desktop.
 - Completed tasks: `Note.doneAt` (column `notes.done_at`); done > 3 days → hidden from lists and
@@ -95,7 +111,8 @@ that it still arrives. On Windows, check toasts are enabled first:
   (`showContextMenu` for right-click menus), `toast.dart` (`showToast`, animated pop-up
   notifications; use it instead of SnackBar).
 - `supabase/migrations/` — schema, RLS, realtime, colour column, delete policy, `vaults`
-  table (005). Migrations are run by hand in the Supabase SQL Editor.
+  table (005), archive/order (006), `note-images` Storage bucket + policies (007). Migrations are
+  run by hand in the Supabase SQL Editor.
 - `installer/oganesson.iss` — Inno Setup script for `Oganesson-Setup.exe`.
 - `lib/ui/logo.dart` — logo stroke/colours (`logoGlyphPath`, centred and scaled to `logoFill`)
   and the `StartupSplash` animation (wraps the whole app in `main.dart`). On Windows the window
@@ -134,6 +151,10 @@ that it still arrives. On Windows, check toasts are enabled first:
 - Migrations 005 (Vault, links, done_at) and 006 (archived, position) were applied to the
   production Supabase project on 2026-11-21 (via the Management API). New migrations still
   have to be run by hand (SQL Editor) or with a personal access token.
+- Migration 007 (images bucket) is **pending** as of 2026-11-22: until it runs, images stay on
+  the device that added them ("Waiting to upload") and other devices show "Image not available".
+- Images: not yet verified on a real phone (Android paste via pasteboard, camera, saving to the
+  gallery on Android < 10).
 - Vault password reset by email code needs the Supabase *Magic Link* email template to include
   `{{ .Token }}`; on the free plan editing templates requires custom SMTP (Brevo, Resend…).
 - In-app updates need the repository to be public (the GitHub API returns 404 while it is

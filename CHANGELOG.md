@@ -2,6 +2,34 @@
 
 All notable changes to Oganesson TakeNotes (formerly *Notas* / *BabuNotes*).
 
+## [1.6.0] — 2026-11-22
+
+### Added
+- **Images in notes.** Paste a screenshot or a copied image with **Ctrl+V**, drop image files
+  onto the note (Windows), or use the new image button in the format bar (Android: gallery or
+  camera; Windows: pick several files). Images appear instantly with a soft fade, show
+  *Uploading…* / *Waiting to upload* while syncing, and on hover offer view, copy, save and
+  remove. Tap one to open it full screen: it flies out of the note, zooms with pinch, wheel or
+  double tap, and closes by dragging it down or with Esc. Right click / long press for the same
+  actions.
+  - Photos are compressed in the background (longest side ≤ 2048 px, JPEG); small screenshots
+    stay PNG so text stays sharp. GIFs are kept as they are.
+  - Stored in a private Supabase Storage bucket, one folder per user (migration
+    `007_note_images.sql`), and cached on the device. Without connection (or before the
+    migration runs) images stay on the device and upload later.
+  - Images of notes deleted for good are removed from the cloud too.
+- **Vault password with your account password.** When changing the Vault password you can type
+  your account password instead of the current Vault one, and *Forgot your password?* on the
+  locked Vault now resets it with the account password (no email code needed).
+
+### Changed
+- Deleting or archiving the open note no longer replays the "back to the list" animation: the
+  note leaves with its own discard animation (shrinks and fades) and the list, which was already
+  there, stays still. The list's entrance animation only plays when the view is first shown.
+- Notes that only contain an image are titled *Image*; images don't count for titles or
+  previews.
+- Android builds now use JDK 21 (CI included).
+
 ## [1.5.2] — 2026-11-21
 
 ### Added

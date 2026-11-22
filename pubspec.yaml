@@ -1,7 +1,7 @@
 name: notas
 description: Oganesson TakeNotes — synced notes for Android and Windows (Flutter + Supabase).
 publish_to: 'none'
-version: 1.5.2+15
+version: 1.6.0+16
 
 environment:
   sdk: '>=3.4.0 <4.0.0'
@@ -24,15 +24,18 @@ dependencies:
   path_provider: '>=2.1.6 <3.0.0'
   open_filex: '>=5.0.0 <6.0.0'
   cryptography: '>=2.9.0 <3.0.0'
+  image_picker: '>=1.2.4 <2.0.0'
+  pasteboard: '>=0.6.2 <0.7.0'
+  # Comprime las imágenes de las notas (y genera las del README).
+  image: '>=4.13.1 <5.0.0'
+  quill_native_bridge: '>=11.2.0 <12.0.0'
+  desktop_drop: '>=0.8.4 <0.9.0'
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_launcher_icons: '>=0.14.0 <0.15.0'
   flutter_lints: '>=6.0.0 <7.0.0'
-  # Only for tool/record_gifs_test.dart (README animations).
-  image: 4.13.1
-
 flutter:
   uses-material-design: true
   fonts:

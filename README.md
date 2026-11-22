@@ -76,6 +76,7 @@ Sign in with the **same account** on every device and your notes sync automatica
 - Swipe right to delete, swipe left to archive (both ask first); archived notes live in ⋯ → Archived.
 - Drag notes up and down to reorder them or move them between folders.
 - Rich text editor: titles, bold/italic/underline/strikethrough, bullet & numbered lists, checklists, quotes, code, text colour and highlight. New notes start with a big title line.
+- Images: paste screenshots with **Ctrl+V**, drop image files onto a note (Windows) or add them from the gallery / camera (Android). Tap one to view it full screen with zoom; copy, save or remove it from its menu. Photos are compressed and synced through your account (they upload later if you are offline).
 - Collapsible folders inside the list (like Zen browser), with name and colour; custom colour per note.
 - Sort by last modified, creation date or name.
 - Trash: deleted notes stay **3 days** before being removed for good (restore, delete forever, empty trash). Every delete can be undone for 3 seconds.
@@ -87,7 +88,7 @@ Sign in with the **same account** on every device and your notes sync automatica
 
 **Vault**
 - Notes behind a master password, in their own screen from the ⋯ menu (never in the normal lists or widgets).
-- Locks itself after 5 minutes without use. Change the Vault or account password from ⋯ by typing the current one.
+- Locks itself after 5 minutes without use. Change the Vault password from ⋯ with the current one **or with your account password** (also if you forgot it).
 
 **Completed & languages**
 - Tasks completed more than 3 days ago move to *Completed* by themselves and are kept for 30 days.

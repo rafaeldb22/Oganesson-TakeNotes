@@ -9,11 +9,15 @@ import 'i18n.dart';
 /// Barra de formato propia: limpia, con estados activos claros y una paleta
 /// de colores cuidada (sin selector de tamaño: se usan estilos de texto).
 class EditorToolbar extends StatelessWidget {
-  const EditorToolbar({super.key, required this.controller, this.onLink});
+  const EditorToolbar(
+      {super.key, required this.controller, this.onLink, this.onImage});
   final QuillController controller;
 
   /// Enlazar otra nota (`[[…]]`); null = sin botón.
   final VoidCallback? onLink;
+
+  /// Añadir imágenes (galería, cámara o archivo); null = sin botón.
+  final VoidCallback? onImage;
 
   static const textColors = <(String, Color?)>[
     ('Por defecto', null),
@@ -166,6 +170,13 @@ class EditorToolbar extends StatelessWidget {
                 tooltip: tr('Quitar formato'),
                 onTap: _clear),
           ],
+          if (onImage != null)
+            [
+              _Btn(
+                  icon: Icons.add_photo_alternate_outlined,
+                  tooltip: tr('Añadir imagen  (o pega con Ctrl+V)'),
+                  onTap: onImage),
+            ],
           if (onLink != null)
             [
               _Btn(
