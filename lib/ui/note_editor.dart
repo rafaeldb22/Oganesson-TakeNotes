@@ -165,6 +165,13 @@ class _NoteEditorState extends State<NoteEditor> {
     }
     final recentlyTyped =
         DateTime.now().difference(_lastTyped) < const Duration(seconds: 2);
+    // Nota nueva aún vacía en los dos lados: no es un cambio remoto. Si se
+    // tratara como tal, se perdería el formato de título que la nota nueva
+    // tiene preparado antes de escribir la primera letra.
+    if (n.rich == null && n.content.trim().isEmpty && _plain().trim().isEmpty) {
+      setState(() {});
+      return;
+    }
     final remoteRich = n.rich ?? jsonEncode(_docFor(n).toDelta().toJson());
     if (!recentlyTyped && remoteRich != _lastSaved) {
       _applyingRemote = true;

@@ -87,8 +87,19 @@ class _GraphViewState extends State<GraphView> with TickerProviderStateMixin {
   /// creciendo y con un fundido; luego los enlaces y las etiquetas.
   late final AnimationController _intro = AnimationController(
     vsync: this,
-    duration: const Duration(milliseconds: 1100),
+    duration: const Duration(milliseconds: 420),
   )..addListener(() => setState(() {}));
+
+  /// Colocación final calculada antes de mostrar la red (la cámara se
+  /// encuadra en ella desde el principio: sin zoom a tirones).
+  Map<String, Offset> _finalLayout = {};
+
+  // Rebote de entrada: cuánto se recogen las notas, energía inicial,
+  // velocidad máxima y amortiguación (más alta = rebota más).
+  static const _bounceFrom = 0.45;
+  static const _bounceAlpha = 0.5;
+  static const _maxSpeed = 9.0;
+  static const _damping = 0.875;
 
   /// Retraso de cada nodo en la entrada (0 = el del centro, 1 = el último).
   final Map<String, double> _introDelay = {};
@@ -127,7 +138,19 @@ class _GraphViewState extends State<GraphView> with TickerProviderStateMixin {
     // La red se coloca ANTES de verse (sin dibujar): así no "explota" al
     // entrar; solo queda la animación de entrada, suave.
     _presettle();
-    _alpha = 0.02;
+    // Rebote de entrada: las notas parten recogidas hacia el centro de su
+    // sitio final y se expanden hasta él con un rebote suave.
+    _finalLayout = {for (final n in _nodes.values) n.id: n.pos};
+    var center = Offset.zero;
+    for (final p in _finalLayout.values) {
+      center += p;
+    }
+    if (_finalLayout.isNotEmpty) center /= _finalLayout.length.toDouble();
+    for (final n in _nodes.values) {
+      n.pos = center + (n.pos - center) * _bounceFrom;
+      n.vel = Offset.zero;
+    }
+    _alpha = _bounceAlpha;
   }
 
   @override
@@ -239,7 +262,7 @@ class _GraphViewState extends State<GraphView> with TickerProviderStateMixin {
         if (dist == 0) continue;
         f += d / dist * ((dist - springLength) * spring);
       }
-      a.vel = (a.vel + f * _alpha) * 0.82;
+      a.vel = (a.vel + f * _alpha) * _damping;
     }
     var energy = 0.0;
     for (final n in list) {
@@ -247,7 +270,9 @@ class _GraphViewState extends State<GraphView> with TickerProviderStateMixin {
         n.vel = Offset.zero;
         continue;
       }
-      final v = n.vel.distance > 30 ? n.vel / n.vel.distance * 30 : n.vel;
+      final v = n.vel.distance > _maxSpeed
+          ? n.vel / n.vel.distance * _maxSpeed
+          : n.vel;
       n.pos += v;
       energy += v.distanceSquared;
     }
@@ -283,6 +308,20 @@ class _GraphViewState extends State<GraphView> with TickerProviderStateMixin {
       _offset = targetOffset;
     }
     _centered = true;
+  }
+
+  /// Encuadre inicial sobre la colocación final (no sobre las notas, que
+  /// aún están recogidas en el centro).
+  void _fitToFinal() {
+    if (_finalLayout.isEmpty) return _fit();
+    final saved = {for (final n in _nodes.values) n.id: n.pos};
+    for (final n in _nodes.values) {
+      n.pos = _finalLayout[n.id] ?? n.pos;
+    }
+    _fit();
+    for (final n in _nodes.values) {
+      n.pos = saved[n.id] ?? n.pos;
+    }
   }
 
   Offset _toWorld(Offset screen) => (screen - _offset) / _scale;
@@ -373,7 +412,10 @@ class _GraphViewState extends State<GraphView> with TickerProviderStateMixin {
                         if (!_centered) {
                           WidgetsBinding.instance.addPostFrameCallback((_) {
                             if (!mounted) return;
-                            setState(_fit);
+                            setState(() {
+                              _fitToFinal();
+                              _autoFit = false;
+                            });
                             if (!_intro.isAnimating && _intro.value == 0) {
                               _startIntro();
                             }
@@ -602,8 +644,8 @@ class _GraphPainter extends CustomPainter {
   double appear(String id) {
     if (intro >= 1) return 1;
     final d = introDelay[id] ?? 0;
-    // Cada nodo tarda el 45 % de la animación; el último empieza al 55 %.
-    final p = ((intro - d * 0.55) / 0.45).clamp(0.0, 1.0);
+    // Fundido rápido y casi a la vez (el movimiento lo da el rebote).
+    final p = ((intro - d * 0.25) / 0.75).clamp(0.0, 1.0);
     return Curves.easeOutCubic.transform(p);
   }
 
@@ -660,7 +702,7 @@ class _GraphPainter extends CustomPainter {
       final a0 = appear(n.id);
       if (a0 <= 0.01) continue;
       final grow = (isHover ? lerp(1, 1.4) : (inFocus ? lerp(1, 1.12) : 1.0)) *
-          (0.35 + 0.65 * a0);
+          (0.6 + 0.4 * a0);
       final r = radius(n.id) * scale.clamp(0.6, 1.6) * grow;
       final base = note.color != null ? Color(note.color!) : colors.accent;
       final orphan = graph.degree(n.id) == 0;

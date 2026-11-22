@@ -2,6 +2,19 @@
 
 All notable changes to Oganesson TakeNotes (formerly *Notas* / *BabuNotes*).
 
+## [1.7.4] — 2026-11-22
+
+### Changed
+- **Note network entrance: the bounce is back, but gentle**. Notes start gathered towards the
+  centre of their final places and spread out with a soft spring (about half a second), with
+  lower force and top speed than before 1.7.3. The camera is framed on the final layout from the
+  start, so there is no jerky zoom.
+
+### Fixed
+- **New notes start with the title style again**: any update from the notes repository (for
+  example a sync status change) before typing the first letter was treated as a remote change and
+  replaced the empty note, dropping the big title format of the first line.
+
 ## [1.7.3] — 2026-11-22
 
 ### Changed
