@@ -15,6 +15,7 @@ class NotasColors extends ThemeExtension<NotasColors> {
     required this.selected,
     required this.searchFill,
     required this.hover,
+    this.titleBar,
   });
 
   final Color accent;
@@ -27,10 +28,21 @@ class NotasColors extends ThemeExtension<NotasColors> {
   final Color searchFill;
   final Color hover;
 
+  /// Color de la barra de título de Windows. null = el de la tarjeta con un
+  /// toque del acento.
+  final Color? titleBar;
+
+  bool get _isDark => card.computeLuminance() < 0.2;
+
+  /// Barra de título: la propia del tema o la tarjeta teñida con el acento.
+  Color get titleBarColor =>
+      titleBar ??
+      Color.alphaBlend(accent.withValues(alpha: _isDark ? 0.12 : 0.08), card);
+
   /// Versión más suave de una paleta clara: baja el brillo del fondo y de
   /// las tarjetas (que dejan de ser blanco puro) y oscurece un poco los
   /// textos secundarios y separadores para que se lean mejor.
-  NotasColors softened() {
+  NotasColors softened([SoftStyle style = SoftStyle.standard]) {
     Color shift(Color c, double dl, {double maxL = 1, double ds = 0}) {
       final h = HSLColor.fromColor(c);
       return h
@@ -39,18 +51,59 @@ class NotasColors extends ThemeExtension<NotasColors> {
           .toColor();
     }
 
+    // Gris neutro: sin ningún tinte (ni azulado ni cálido).
+    Color grey(Color c, double dl, {double maxL = 1}) {
+      final h = HSLColor.fromColor(c);
+      return h
+          .withLightness((h.lightness + dl).clamp(0.0, maxL))
+          .withSaturation(0)
+          .toColor();
+    }
+
+    switch (style) {
+      case SoftStyle.legacy:
+        // Como en la 1.x (más claro): el que gustaba en Café.
+        return NotasColors(
+          accent: shift(accent, -0.04, ds: 0.04),
+          onAccent: onAccent,
+          background: shift(background, -0.055, ds: 0.03),
+          card: shift(card, -0.045, maxL: 0.955),
+          secondary: shift(secondary, -0.08),
+          separator: shift(separator, -0.07),
+          selected: shift(selected, -0.05, ds: 0.05),
+          searchFill: shift(searchFill, -0.06),
+          hover: shift(hover, -0.07, maxL: 0.93),
+        );
+      case SoftStyle.neutral:
+        // Igual de apagado que el estándar, pero en gris blanco neutro.
+        return NotasColors(
+          accent: shift(accent, -0.06, ds: 0.04),
+          onAccent: onAccent,
+          background: grey(background, -0.10, maxL: 0.865),
+          card: grey(card, -0.09, maxL: 0.905),
+          secondary: grey(secondary, -0.10),
+          separator: grey(separator, -0.11),
+          selected: shift(selected, -0.09, ds: 0.05),
+          searchFill: grey(searchFill, -0.11, maxL: 0.84),
+          hover: grey(hover, -0.12, maxL: 0.875),
+        );
+      case SoftStyle.standard:
+        break;
+    }
+
     // Modo claro apagado: nada de blanco brillante (2.0: un poco más oscuro
-    // que antes, que se veía demasiado claro).
+    // que antes) y colores suaves: al oscurecer se baja la saturación en vez
+    // de subirla, para que no se vean chillones.
     return NotasColors(
-      accent: shift(accent, -0.06, ds: 0.04),
+      accent: shift(accent, -0.06, ds: -0.08),
       onAccent: onAccent,
-      background: shift(background, -0.10, maxL: 0.865, ds: 0.03),
-      card: shift(card, -0.09, maxL: 0.905),
-      secondary: shift(secondary, -0.10),
-      separator: shift(separator, -0.11),
-      selected: shift(selected, -0.09, ds: 0.05),
-      searchFill: shift(searchFill, -0.11, maxL: 0.84),
-      hover: shift(hover, -0.12, maxL: 0.875),
+      background: shift(background, -0.10, maxL: 0.865, ds: -0.12),
+      card: shift(card, -0.09, maxL: 0.905, ds: -0.12),
+      secondary: shift(secondary, -0.10, ds: -0.08),
+      separator: shift(separator, -0.11, ds: -0.10),
+      selected: shift(selected, -0.09, ds: -0.10),
+      searchFill: shift(searchFill, -0.11, maxL: 0.84, ds: -0.12),
+      hover: shift(hover, -0.12, maxL: 0.875, ds: -0.12),
     );
   }
 
@@ -65,6 +118,7 @@ class NotasColors extends ThemeExtension<NotasColors> {
     Color? selected,
     Color? searchFill,
     Color? hover,
+    Color? titleBar,
   }) =>
       NotasColors(
         accent: accent ?? this.accent,
@@ -76,6 +130,7 @@ class NotasColors extends ThemeExtension<NotasColors> {
         selected: selected ?? this.selected,
         searchFill: searchFill ?? this.searchFill,
         hover: hover ?? this.hover,
+        titleBar: titleBar ?? this.titleBar,
       );
 
   @override
@@ -92,11 +147,26 @@ class NotasColors extends ThemeExtension<NotasColors> {
       selected: l(selected, other.selected),
       searchFill: l(searchFill, other.searchFill),
       hover: l(hover, other.hover),
+      titleBar: titleBar == null && other.titleBar == null
+          ? null
+          : l(titleBarColor, other.titleBarColor),
     );
   }
 }
 
 /// Un tema = nombre + emoji + versión clara y oscura.
+/// Cómo se apaga el modo claro de un tema.
+enum SoftStyle {
+  /// Más oscuro (2.0).
+  standard,
+
+  /// Como en la 1.x, más claro.
+  legacy,
+
+  /// Más oscuro y en gris neutro, sin tinte de color.
+  neutral,
+}
+
 class AppTheme {
   const AppTheme({
     required this.id,
@@ -104,6 +174,7 @@ class AppTheme {
     required this.description,
     required this.light,
     required this.dark,
+    this.soft = SoftStyle.standard,
   });
 
   final String id;
@@ -111,12 +182,14 @@ class AppTheme {
   final String description;
   final NotasColors light;
   final NotasColors dark;
+  final SoftStyle soft;
 
   static final _soft = <String, NotasColors>{};
 
   /// Modo claro suavizado (el que usa la app): sin blancos puros que
   /// deslumbren, con más contraste en textos secundarios y separadores.
-  NotasColors get lightSoft => _soft.putIfAbsent(id, () => light.softened());
+  NotasColors get lightSoft =>
+      _soft.putIfAbsent(id, () => light.softened(soft));
 }
 
 const appThemes = <AppTheme>[
@@ -124,6 +197,8 @@ const appThemes = <AppTheme>[
     id: 'clasico',
     name: 'Clásico',
     description: 'Amarillo de toda la vida',
+    // Gris blanco neutro (el fondo original tira a azulado).
+    soft: SoftStyle.neutral,
     light: NotasColors(
       accent: Color(0xFFD99A00),
       onAccent: Colors.white,
@@ -145,6 +220,8 @@ const appThemes = <AppTheme>[
       selected: Color(0xFF4A4120),
       searchFill: Color(0xFF1C1C1E),
       hover: Color(0xFF2C2C2E),
+      // Barra de título casi negra (sin el tinte amarillo del acento).
+      titleBar: Color(0xFF141416),
     ),
   ),
   AppTheme(
@@ -313,6 +390,8 @@ const appThemes = <AppTheme>[
     id: 'cafe',
     name: 'Café',
     description: 'Marrón tostado y crema',
+    // Como estaba antes de la 2.0.
+    soft: SoftStyle.legacy,
     light: NotasColors(
       accent: Color(0xFF9C6644),
       onAccent: Colors.white,
@@ -568,10 +647,7 @@ class Palette {
   /// Fondo de la barra de título de Windows: la superficie de tarjeta con un
   /// toque del acento, para que se distinga del contenido de la app.
   static Color titleBar(BuildContext c) {
-    final p = of(c);
-    final dark = Theme.of(c).brightness == Brightness.dark;
-    return Color.alphaBlend(
-        p.accent.withValues(alpha: dark ? 0.12 : 0.08), p.card);
+    return of(c).titleBarColor;
   }
 }
 

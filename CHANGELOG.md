@@ -2,6 +2,14 @@
 
 All notable changes to Oganesson TakeNotes (formerly *Notas* / *BabuNotes*).
 
+## [2.0.1] — 2026-11-22
+
+### Changed
+- **Classic light theme**: neutral grey-white with no bluish tint, still as dark as in 2.0.
+- **Coffee light theme**: back to how it looked before 2.0.
+- **Other light themes**: less saturated (softer colours), same darkness as 2.0.
+- **Classic dark theme**: the Windows title bar is near-black instead of yellow-tinted.
+
 ## [2.0.0] — 2026-11-22
 
 ### Added
