@@ -570,6 +570,32 @@ class _Bubble extends StatelessWidget {
               },
               icon: const Icon(Icons.content_copy_rounded),
             ),
+          if (message.sources.any((id) => repo.byId(id) != null))
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Wrap(
+                spacing: 6,
+                runSpacing: 4,
+                children: [
+                  for (final id in message.sources)
+                    if (repo.byId(id) case final src?)
+                      if (!src.deleted && !src.vault)
+                        ActionChip(
+                          visualDensity: VisualDensity.compact,
+                          avatar:
+                              const Icon(Icons.description_outlined, size: 15),
+                          label: ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 170),
+                            child: Text(src.title,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(fontSize: 12.5)),
+                          ),
+                          onPressed: () => onOpenNote(id),
+                        ),
+                ],
+              ),
+            ),
           for (final a in message.actions)
             Padding(
               padding: const EdgeInsets.only(top: 6),

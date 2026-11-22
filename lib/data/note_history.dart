@@ -65,14 +65,14 @@ class NoteHistory {
       List.unmodifiable((_data[id] ?? const <NoteVersion>[]).reversed);
 
   /// Guarda el estado actual de [n], que está a punto de cambiar.
-  void record(Note n, {DateTime? now}) {
+  void record(Note n, {DateTime? now, bool force = false}) {
     if (n.vault || n.content.trim().isEmpty) return;
     final at = (now ?? DateTime.now()).toUtc();
     final list = _data.putIfAbsent(n.id, () => []);
     if (list.isNotEmpty) {
       final last = list.last;
       if (last.content == n.content) return;
-      if (at.difference(last.at) < gap) return;
+      if (!force && at.difference(last.at) < gap) return;
     }
     list.add(NoteVersion(at, n.content, n.rich));
     if (list.length > maxPerNote) list.removeAt(0);

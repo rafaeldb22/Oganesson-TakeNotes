@@ -9,6 +9,7 @@ import 'package:flutter_quill/flutter_quill.dart';
 import '../data/note_links.dart';
 import '../data/notes_repository.dart';
 import '../models/note.dart';
+import 'ai_tools_ui.dart';
 import 'anim.dart';
 import 'editor_toolbar.dart';
 import 'folders.dart';
@@ -273,6 +274,8 @@ class _NoteEditorState extends State<NoteEditor> {
         saveAsTemplate(context, n);
       case 'exportar':
         showExportNote(context, n);
+      case 'ia':
+        showNoteAiActions(context, repo, n.id);
       case 'voz':
         showVoiceRecorder(context, _ctrl);
       case 'adjuntar':
@@ -390,6 +393,14 @@ class _NoteEditorState extends State<NoteEditor> {
               icon: const Icon(Icons.more_horiz_rounded),
               onSelected: _toolAction,
               itemBuilder: (_) => [
+                if (n?.vault != true)
+                  PopupMenuItem(
+                      value: 'ia',
+                      child: ListTile(
+                          dense: true,
+                          contentPadding: EdgeInsets.zero,
+                          leading: const Icon(Icons.auto_awesome_outlined),
+                          title: Text(tr('Acciones con IA')))),
                 PopupMenuItem(
                     value: 'voz',
                     child: ListTile(
@@ -509,6 +520,14 @@ class _NoteEditorState extends State<NoteEditor> {
                         contentPadding: EdgeInsets.zero,
                         leading: const Icon(Icons.add_photo_alternate_outlined),
                         title: Text(tr('Añadir imagen')))),
+                if (n?.vault != true)
+                  PopupMenuItem(
+                      value: 'ia',
+                      child: ListTile(
+                          dense: true,
+                          contentPadding: EdgeInsets.zero,
+                          leading: const Icon(Icons.auto_awesome_outlined),
+                          title: Text(tr('Acciones con IA')))),
                 PopupMenuItem(
                     value: 'voz',
                     child: ListTile(

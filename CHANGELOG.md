@@ -2,6 +2,20 @@
 
 All notable changes to Oganesson TakeNotes (formerly *Notas* / *BabuNotes*).
 
+## [2.5.0] — 2026-11-22
+
+### Added
+- **Ask all your notes**: the assistant searches and reads your notes, answers from them and links
+  the notes it used under the answer.
+- **AI actions on a note**: summarize, fix writing, translate or turn into subtasks. You review
+  the result first, and replacing a note can be undone.
+- **Daily summary** of overdue, today's and upcoming tasks, on demand.
+- **Tasks from a photo**: pick an image, review what the AI found and create a note with subtasks.
+
+### Fixed
+- **Privacy**: while the Vault was open, the assistant's task list could include completed Vault
+  tasks. Vault notes are now excluded there too.
+
 ## [2.4.0] — 2026-11-22
 
 ### Added

@@ -387,8 +387,11 @@ class NotesRepository extends ChangeNotifier {
       _edit(id, (n) => n.subtasks.removeWhere((t) => t.id == taskId));
 
   /// Vuelve a una versión guardada; la actual queda también en el historial.
-  void restoreVersion(String id, NoteVersion v) =>
-      updateContent(id, v.content, rich: v.rich);
+  void restoreVersion(String id, NoteVersion v) {
+    final n = _notes[id];
+    if (n != null && !n.vault) history.record(n, force: true);
+    updateContent(id, v.content, rich: v.rich);
+  }
 
   /// Mezcla una copia: añade lo que falta y actualiza lo que sea más nuevo.
   /// Nunca borra nada ni importa notas del Vault.

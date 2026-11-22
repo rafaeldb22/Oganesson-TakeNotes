@@ -24,6 +24,7 @@ import '../models/note.dart';
 import 'anim.dart';
 import '../data/updater.dart';
 import 'account_dialogs.dart';
+import 'ai_tools_ui.dart';
 import 'archived_sheet.dart';
 import 'assistant_panel.dart';
 import 'calendar_view.dart';
@@ -359,6 +360,10 @@ class _NotesHomeState extends State<NotesHome> {
       commands: [
         PaletteCommand(Icons.edit_note, tr('Nueva nota'), _newNote,
             shortcut: 'Ctrl+N'),
+        PaletteCommand(Icons.wb_sunny_outlined, tr('Resumen de hoy'),
+            () => showDailyBrief(context, repo, onOpen: _open)),
+        PaletteCommand(Icons.add_a_photo_outlined, tr('Tareas desde una foto'),
+            () => tasksFromPhoto(context, repo, onOpen: _open)),
         PaletteCommand(Icons.dashboard_customize_outlined,
             tr('Nueva desde plantilla'), _fromTemplate),
         PaletteCommand(Icons.ios_share_rounded, tr('Exportar notas'),
@@ -1385,6 +1390,9 @@ class _NotesHomeState extends State<NotesHome> {
             badge: trash == 0 ? null : '$trash'),
         MenuEntry('asistente', Icons.auto_awesome_outlined, tr('Asistente IA'),
             subtitle: tr('Con tu clave de Gemini')),
+        MenuEntry('resumen', Icons.wb_sunny_outlined, tr('Resumen de hoy')),
+        MenuEntry('foto-tareas', Icons.add_a_photo_outlined,
+            tr('Tareas desde una foto')),
         MenuEntry('vault', Icons.shield_outlined, 'Vault',
             subtitle: vault.unlocked
                 ? tr('Abierto')
@@ -1432,6 +1440,10 @@ class _NotesHomeState extends State<NotesHome> {
     );
     if (!mounted || choice == null) return;
     switch (choice) {
+      case 'resumen':
+        await showDailyBrief(context, repo, onOpen: _open);
+      case 'foto-tareas':
+        await tasksFromPhoto(context, repo, onOpen: _open);
       case 'plantillas':
         await _fromTemplate();
       case 'exportar':

@@ -742,4 +742,30 @@ const enStrings = <String, String>{
       "Claude cannot transcribe audio. Use Gemini or ChatGPT.",
   "La IA no ha querido procesar este contenido.":
       "The AI declined to process this content.",
+
+  // --- 2.5
+  "La IA no ha podido hacerlo. Vuelve a probar.":
+      "The AI could not do it. Try again.",
+  "La nota no tiene texto": "The note has no text",
+  "Resumir": "Summarize",
+  "Corregir": "Fix writing",
+  "Traducir": "Translate",
+  "Convertir en tareas": "Turn into tasks",
+  "La IA está trabajando…": "The AI is working…",
+  "{0} subtareas añadidas": "{0} subtasks added",
+  "Resultado": "Result",
+  "Añadir al final": "Add at the end",
+  "Nota actualizada": "Note updated",
+  "Reemplazar": "Replace",
+  "No se han encontrado tareas": "No tasks found",
+  "Tareas encontradas": "Tasks found",
+  "Añadir {0}": "Add {0}",
+  "Preparando tu resumen…": "Preparing your summary…",
+  "Resumen de hoy": "Today’s summary",
+  "Guardar como nota": "Save as note",
+  "Tareas de la foto": "Tasks from photo",
+  "Tareas desde una foto": "Tasks from a photo",
+  "Acciones con IA": "AI actions",
+  "Las notas del Vault no se envían a la IA.":
+      "Vault notes are never sent to the AI.",
 };
