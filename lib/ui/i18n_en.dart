@@ -768,4 +768,8 @@ const enStrings = <String, String>{
   "Acciones con IA": "AI actions",
   "Las notas del Vault no se envían a la IA.":
       "Vault notes are never sent to the AI.",
+
+  // --- 2.6
+  "{0} tareas añadidas": "{0} tasks added",
+  "IA": "AI",
 };

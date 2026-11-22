@@ -5,7 +5,7 @@ import '../ui/i18n.dart';
 DateTime? _parseDate(Object? v) =>
     v is String && v.isNotEmpty ? DateTime.parse(v).toUtc() : null;
 
-/// Un paso de una nota con subtareas.
+/// Formato antiguo (2.3): al cargar se convierte en casillas de la nota.
 class Subtask {
   Subtask({required this.id, required this.text, this.done = false});
   final String id;
@@ -50,13 +50,13 @@ class Note {
   /// Repetición de la tarea (ver `RepeatRule`). null = no se repite.
   String? repeat;
 
-  /// Pasos de la tarea, con su barra de progreso.
+  /// Solo para leer notas de la 2.3: el repositorio las pasa a casillas.
   List<Subtask> subtasks;
 
-  /// Fracción de subtareas hechas (0 si no hay).
-  double get subtaskProgress => subtasks.isEmpty
-      ? 0
-      : subtasks.where((t) => t.done).length / subtasks.length;
+  /// ¿Tiene casillas de verificación?
+  bool get hasChecklist =>
+      rich != null &&
+      (rich!.contains('"unchecked"') || rich!.contains('"checked"'));
 
   /// Nota archivada: sale de las listas y se ve en ⋯ → Archivadas.
   bool archived;

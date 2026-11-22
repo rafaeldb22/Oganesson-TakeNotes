@@ -121,11 +121,9 @@ Future<void> showNoteAiActions(
   if (action == NoteAiAction.tasks) {
     final tasks = await _reviewTasks(context, parseTasks(reply));
     if (tasks == null) return;
-    for (final t in tasks) {
-      repo.addSubtask(n.id, t);
-    }
+    repo.addChecklist(n.id, tasks);
     if (context.mounted && tasks.isNotEmpty) {
-      showToast(context, trf('{0} subtareas añadidas', [tasks.length]),
+      showToast(context, trf('{0} tareas añadidas', [tasks.length]),
           icon: Icons.checklist_rounded);
     }
     return;
@@ -360,8 +358,6 @@ Future<void> tasksFromPhoto(BuildContext context, NotesRepository repo,
   if (tasks == null || tasks.isEmpty) return;
   final n = createNoteFrom(repo, text: tr('Tareas de la foto'));
   if (n == null) return;
-  for (final t in tasks) {
-    repo.addSubtask(n.id, t);
-  }
+  repo.addChecklist(n.id, tasks);
   onOpen?.call(n.id);
 }

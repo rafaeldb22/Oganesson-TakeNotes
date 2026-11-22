@@ -141,6 +141,8 @@ that it still arrives. On Windows, check toasts are enabled first:
 - AI actions (2.5): `lib/data/ai_actions.dart` (one-shot calls without tools, `parseTasks`,
   `dailyBriefData`), UI in `lib/ui/ai_tools_ui.dart`. `repo.completed` can contain Vault notes while
   it is unlocked: filter `!n.vault` before giving anything to an AI.
+- Subtasks were removed in 2.6: `Note.subtasks` only exists to read 2.3 data, and the repository
+  converts it to Quill checkboxes (`_absorbSubtasks`). Editor tools live in `EditorToolbar`.
 - Smooth wheel scrolling: use `SmoothScrollController` (`lib/ui/smooth_scroll.dart`) for new
   scroll views on desktop.
 - Completed tasks: `Note.doneAt` (column `notes.done_at`); done > 3 days → hidden from lists and

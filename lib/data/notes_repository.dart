@@ -1,4 +1,5 @@
 import 'note_export.dart';
+import 'note_factory.dart';
 import 'note_files.dart';
 import 'note_history.dart';
 import 'recurrence.dart';
@@ -294,6 +295,7 @@ class NotesRepository extends ChangeNotifier {
     await history.load(_prefs);
     if (_disposed) return;
     _loadLocal();
+    _notes.values.toList().forEach(_absorbSubtasks);
     loaded = true;
     _notify();
     _subscribe();
@@ -356,9 +358,7 @@ class NotesRepository extends ChangeNotifier {
           final shift = next.toUtc().difference(due);
           n.dueAt = next.toUtc();
           n.remindAt = n.remindAt?.add(shift);
-          for (final t in n.subtasks) {
-            t.done = false;
-          }
+          n.rich = uncheckAll(n.rich);
           return;
         }
         n.done = !n.done;
@@ -367,24 +367,28 @@ class NotesRepository extends ChangeNotifier {
 
   void setRepeat(String id, String? rule) => _edit(id, (n) => n.repeat = rule);
 
-  void addSubtask(String id, String text) => _edit(id, (n) {
-        n.subtasks.add(Subtask(id: newNoteId(), text: text.trim()));
-      });
+  /// Añade casillas al final de la nota.
+  void addChecklist(String id, List<String> items) {
+    final n = _notes[id];
+    if (n == null || items.isEmpty) return;
+    final (content, rich) =
+        withChecklist(n.content, n.rich, [for (final t in items) (t, false)]);
+    updateContent(id, content, rich: rich);
+  }
 
-  void toggleSubtask(String id, String taskId) => _edit(id, (n) {
-        for (final t in n.subtasks) {
-          if (t.id == taskId) t.done = !t.done;
-        }
-      });
-
-  void renameSubtask(String id, String taskId, String text) => _edit(id, (n) {
-        for (final t in n.subtasks) {
-          if (t.id == taskId) t.text = text.trim();
-        }
-      });
-
-  void removeSubtask(String id, String taskId) =>
-      _edit(id, (n) => n.subtasks.removeWhere((t) => t.id == taskId));
+  /// Pasa las subtareas de la 2.3 a casillas dentro de la nota: no se pierde
+  /// nada y deja de haber dos sistemas de tareas.
+  void _absorbSubtasks(Note n) {
+    if (n.subtasks.isEmpty) return;
+    final (content, rich) = withChecklist(
+        n.content, n.rich, [for (final t in n.subtasks) (t.text, t.done)]);
+    n
+      ..content = content
+      ..rich = rich
+      ..subtasks = []
+      ..updatedAt = DateTime.now().toUtc();
+    _dirty.add(n.id);
+  }
 
   /// Vuelve a una versión guardada; la actual queda también en el historial.
   void restoreVersion(String id, NoteVersion v) {
@@ -772,6 +776,7 @@ class NotesRepository extends ChangeNotifier {
     _notes[remote.id] = remote;
     _dirty.remove(remote.id);
     _fresh.remove(remote.id);
+    _absorbSubtasks(remote);
     return true;
   }
 

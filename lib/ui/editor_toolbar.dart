@@ -10,8 +10,23 @@ import 'i18n.dart';
 /// de colores cuidada (sin selector de tamaño: se usan estilos de texto).
 class EditorToolbar extends StatelessWidget {
   const EditorToolbar(
-      {super.key, required this.controller, this.onLink, this.onImage});
+      {super.key,
+      required this.controller,
+      this.onLink,
+      this.onImage,
+      this.onVoice,
+      this.onAttach,
+      this.onDraw,
+      this.onAi});
   final QuillController controller;
+
+  /// Nota de voz, adjuntar archivo y dibujar; null = sin botón.
+  final VoidCallback? onVoice;
+  final VoidCallback? onAttach;
+  final VoidCallback? onDraw;
+
+  /// Acciones con IA; null en las notas del Vault.
+  final VoidCallback? onAi;
 
   /// Enlazar otra nota (`[[…]]`); null = sin botón.
   final VoidCallback? onLink;
@@ -170,47 +185,169 @@ class EditorToolbar extends StatelessWidget {
                 tooltip: tr('Quitar formato'),
                 onTap: _clear),
           ],
-          if (onImage != null)
-            [
-              _Btn(
-                  icon: Icons.add_photo_alternate_outlined,
-                  tooltip: tr('Añadir imagen  (o pega con Ctrl+V)'),
-                  onTap: onImage),
-            ],
-          if (onLink != null)
-            [
-              _Btn(
-                  icon: Icons.link_rounded,
-                  tooltip: tr('Enlazar nota  [['),
-                  onTap: onLink),
-            ],
         ];
 
-        return Container(
-          height: 46,
-          margin: const EdgeInsets.fromLTRB(12, 4, 12, 6),
-          decoration: BoxDecoration(
-            color: Palette.background(context),
-            borderRadius: BorderRadius.circular(14),
-          ),
-          child: _ToolbarScroller(
-            children: [
-              for (var g = 0; g < groups.length; g++) ...[
-                if (g > 0)
-                  Center(
-                    child: Container(
-                      width: 1,
-                      height: 20,
-                      margin: const EdgeInsets.symmetric(horizontal: 6),
-                      color: Palette.separator(context),
-                    ),
-                  ),
-                ...groups[g],
+        // Insertar: siempre a mano en PC, fijo a la derecha.
+        final insert = <Widget>[
+          if (onImage != null)
+            _Btn(
+                icon: Icons.add_photo_alternate_outlined,
+                tooltip: tr('Añadir imagen  (o pega con Ctrl+V)'),
+                onTap: onImage),
+          if (onAttach != null)
+            _Btn(
+                icon: Icons.attach_file_rounded,
+                tooltip: tr('Adjuntar archivo'),
+                onTap: onAttach),
+          if (onVoice != null)
+            _Btn(
+                icon: Icons.mic_none_rounded,
+                tooltip: tr('Nota de voz'),
+                onTap: onVoice),
+          if (onDraw != null)
+            _Btn(
+                icon: Icons.draw_outlined,
+                tooltip: tr('Dibujar'),
+                onTap: onDraw),
+          if (onLink != null)
+            _Btn(
+                icon: Icons.link_rounded,
+                tooltip: tr('Enlazar nota  [['),
+                onTap: onLink),
+        ];
+
+        return LayoutBuilder(builder: (context, c) {
+          final pinned = c.maxWidth >= 760 && insert.isNotEmpty;
+          final all = [
+            ...groups,
+            if (!pinned && insert.isNotEmpty) insert,
+          ];
+          final p = Palette.of(context);
+          return Container(
+            height: 50,
+            margin: const EdgeInsets.fromLTRB(12, 4, 12, 8),
+            decoration: BoxDecoration(
+              color: p.background,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: p.separator.withValues(alpha: 0.55)),
+              boxShadow: [
+                BoxShadow(
+                  color: Theme.of(context).shadowColor.withValues(alpha: 0.07),
+                  blurRadius: 12,
+                  offset: const Offset(0, 3),
+                ),
               ],
-            ],
-          ),
-        );
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: _ToolbarScroller(
+                    children: [
+                      for (var g = 0; g < all.length; g++) ...[
+                        if (g > 0) const _GroupGap(),
+                        ...all[g],
+                      ],
+                    ],
+                  ),
+                ),
+                if (pinned) ...[
+                  const _GroupGap(),
+                  ...insert,
+                ],
+                // La IA siempre a la vista, también en el móvil.
+                if (onAi != null) _AiButton(onTap: onAi!),
+                const SizedBox(width: 7),
+              ],
+            ),
+          );
+        });
       },
+    );
+  }
+}
+
+/// Separador corto y redondeado entre grupos de botones.
+class _GroupGap extends StatelessWidget {
+  const _GroupGap();
+
+  @override
+  Widget build(BuildContext context) => Center(
+        child: Container(
+          width: 1.5,
+          height: 18,
+          margin: const EdgeInsets.symmetric(horizontal: 6),
+          decoration: BoxDecoration(
+            color: Palette.separator(context),
+            borderRadius: BorderRadius.circular(1),
+          ),
+        ),
+      );
+}
+
+/// Botón de la IA: destaca del resto y su destello gira al pasar el ratón.
+class _AiButton extends StatefulWidget {
+  const _AiButton({required this.onTap});
+  final VoidCallback onTap;
+
+  @override
+  State<_AiButton> createState() => _AiButtonState();
+}
+
+class _AiButtonState extends State<_AiButton> {
+  bool _hover = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = Palette.accent(context);
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hover = true),
+      onExit: (_) => setState(() => _hover = false),
+      child: Tooltip(
+        message: tr('Acciones con IA'),
+        waitDuration: const Duration(milliseconds: 500),
+        child: Bouncy(
+          pressedScale: 0.9,
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: widget.onTap,
+            child: AnimatedContainer(
+              duration: Anim.medium,
+              curve: Anim.curve,
+              height: 36,
+              margin: const EdgeInsets.only(left: 4, top: 6, bottom: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 11),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(colors: [
+                  accent.withValues(alpha: _hover ? 0.30 : 0.18),
+                  accent.withValues(alpha: _hover ? 0.16 : 0.08),
+                ]),
+                borderRadius: BorderRadius.circular(11),
+                border: Border.all(
+                    color: accent.withValues(alpha: _hover ? 0.5 : 0.25)),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  AnimatedRotation(
+                    turns: _hover ? 0.125 : 0,
+                    duration: Anim.medium,
+                    curve: Curves.easeOutBack,
+                    child: Icon(Icons.auto_awesome_rounded,
+                        size: 17, color: accent),
+                  ),
+                  const SizedBox(width: 5),
+                  Text(tr('IA'),
+                      style: TextStyle(
+                          color: accent,
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.w800)),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
@@ -231,6 +368,7 @@ class _ToolbarScrollerState extends State<_ToolbarScroller> {
   final _ctrl = ScrollController();
   bool _atStart = true;
   bool _atEnd = true;
+  double? _wheelTarget;
 
   @override
   void initState() {
@@ -264,9 +402,18 @@ class _ToolbarScrollerState extends State<_ToolbarScroller> {
     if (!_ctrl.hasClients) return;
     GestureBinding.instance.pointerSignalResolver.register(event, (e) {
       final p = _ctrl.position;
-      final target = (p.pixels + (e as PointerScrollEvent).scrollDelta.dy)
+      final target = ((_wheelTarget ?? p.pixels) +
+              (e as PointerScrollEvent).scrollDelta.dy)
           .clamp(p.minScrollExtent, p.maxScrollExtent);
-      if (target != p.pixels) _ctrl.jumpTo(target);
+      if (target == p.pixels) return;
+      _wheelTarget = target;
+      _ctrl
+          .animateTo(target,
+              duration: const Duration(milliseconds: 180),
+              curve: Curves.easeOutCubic)
+          .whenComplete(() {
+        if (_wheelTarget == target) _wheelTarget = null;
+      });
     });
   }
 
@@ -316,7 +463,7 @@ class _ToolbarScrollerState extends State<_ToolbarScroller> {
   }
 }
 
-class _Btn extends StatelessWidget {
+class _Btn extends StatefulWidget {
   const _Btn({
     required this.icon,
     required this.tooltip,
@@ -330,34 +477,62 @@ class _Btn extends StatelessWidget {
   final bool active;
 
   @override
+  State<_Btn> createState() => _BtnState();
+}
+
+class _BtnState extends State<_Btn> {
+  bool _hover = false;
+
+  @override
   Widget build(BuildContext context) {
-    final accent = Palette.accent(context);
-    final enabled = onTap != null;
-    return Tooltip(
-      message: tooltip,
-      waitDuration: const Duration(milliseconds: 500),
-      child: Bouncy(
-        pressedScale: 0.85,
-        child: GestureDetector(
-          onTap: onTap,
-          child: AnimatedContainer(
-            duration: Anim.fast,
-            width: 36,
-            height: 34,
-            margin: const EdgeInsets.symmetric(horizontal: 1, vertical: 6),
-            decoration: BoxDecoration(
-              color:
-                  active ? accent.withValues(alpha: 0.16) : Colors.transparent,
-              borderRadius: BorderRadius.circular(9),
-            ),
-            child: Icon(
-              icon,
-              size: 20,
-              color: active
-                  ? accent
-                  : (enabled
-                      ? null
-                      : Palette.secondary(context).withValues(alpha: 0.4)),
+    final p = Palette.of(context);
+    final accent = p.accent;
+    final enabled = widget.onTap != null;
+    final active = widget.active;
+    final fg = active
+        ? accent
+        : (enabled
+            ? Theme.of(context).colorScheme.onSurface
+            : p.secondary.withValues(alpha: 0.35));
+    return MouseRegion(
+      cursor: enabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
+      onEnter: (_) => setState(() => _hover = true),
+      onExit: (_) => setState(() => _hover = false),
+      child: Tooltip(
+        message: widget.tooltip,
+        waitDuration: const Duration(milliseconds: 500),
+        child: Bouncy(
+          pressedScale: 0.85,
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: widget.onTap,
+            child: AnimatedContainer(
+              duration: Anim.fast,
+              curve: Anim.curve,
+              width: 36,
+              height: 36,
+              margin: const EdgeInsets.symmetric(horizontal: 1, vertical: 6),
+              decoration: BoxDecoration(
+                color: active
+                    ? accent.withValues(alpha: 0.16)
+                    : (_hover && enabled ? p.hover : Colors.transparent),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                    color: active
+                        ? accent.withValues(alpha: 0.3)
+                        : Colors.transparent),
+              ),
+              child: AnimatedScale(
+                scale: active ? 1.08 : (_hover && enabled ? 1.06 : 1),
+                duration: Anim.medium,
+                curve: Curves.easeOutBack,
+                child: TweenAnimationBuilder<Color?>(
+                  tween: ColorTween(end: fg),
+                  duration: Anim.fast,
+                  builder: (_, color, __) =>
+                      Icon(widget.icon, size: 20, color: color),
+                ),
+              ),
             ),
           ),
         ),
@@ -400,8 +575,20 @@ class _StyleMenu extends StatelessWidget {
         ),
         child: Row(
           children: [
-            Text(tr(_names[current] ?? 'Texto'),
-                style: const TextStyle(fontWeight: FontWeight.w600)),
+            AnimatedSwitcher(
+              duration: Anim.fast,
+              transitionBuilder: (c, a) => FadeTransition(
+                opacity: a,
+                child: SlideTransition(
+                  position: Tween(begin: const Offset(0, 0.3), end: Offset.zero)
+                      .animate(a),
+                  child: c,
+                ),
+              ),
+              child: Text(tr(_names[current] ?? 'Texto'),
+                  key: ValueKey(current),
+                  style: const TextStyle(fontWeight: FontWeight.w600)),
+            ),
             const SizedBox(width: 2),
             const Icon(Icons.expand_more_rounded, size: 18),
           ],
@@ -472,7 +659,9 @@ class _ColorButton extends StatelessWidget {
                 Text(tr('A'),
                     style:
                         TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
-                Container(
+                AnimatedContainer(
+                  duration: Anim.medium,
+                  curve: Anim.curve,
                   width: 18,
                   height: 3.5,
                   decoration: BoxDecoration(
@@ -496,10 +685,26 @@ class _ColorButton extends StatelessWidget {
     final pos =
         box.localToGlobal(Offset(0, box.size.height), ancestor: overlay);
 
-    await showDialog<void>(
+    await showGeneralDialog<void>(
       context: context,
+      barrierDismissible: true,
+      barrierLabel: tr('Cerrar'),
       barrierColor: Colors.transparent,
-      builder: (ctx) {
+      transitionDuration: Anim.medium,
+      transitionBuilder: (_, a, __, child) {
+        final curved = CurvedAnimation(
+            parent: a, curve: Curves.easeOutBack, reverseCurve: Curves.easeIn);
+        return FadeTransition(
+          opacity: CurvedAnimation(parent: a, curve: Curves.easeOut),
+          child: ScaleTransition(
+            alignment: Alignment((pos.dx / overlay.size.width) * 2 - 1,
+                (pos.dy / overlay.size.height) * 2 - 1),
+            scale: Tween(begin: 0.92, end: 1.0).animate(curved),
+            child: child,
+          ),
+        );
+      },
+      pageBuilder: (ctx, _, __) {
         final maxX = overlay.size.width - 300;
         return Stack(
           children: [

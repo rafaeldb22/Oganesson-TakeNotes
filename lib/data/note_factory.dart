@@ -48,3 +48,52 @@ Note? createNoteFrom(
   repo.updateContent(n.id, plain, rich: richFor(clean, images: images));
   return repo.byId(n.id);
 }
+
+/// Añade casillas al final de una nota, conservando su formato.
+(String content, String rich) withChecklist(
+    String content, String? rich, List<(String, bool)> items) {
+  var ops = <Object?>[];
+  if (rich != null) {
+    try {
+      final d = jsonDecode(rich);
+      if (d is List) ops = List<Object?>.of(d);
+    } catch (_) {}
+  }
+  final base = content.trimRight();
+  if (ops.isEmpty && base.isNotEmpty)
+    ops = [
+      {'insert': '$base\n'}
+    ];
+  final last = ops.isEmpty ? null : ops.last;
+  if (last is Map && last['insert'] is String) {
+    if (!(last['insert'] as String).endsWith('\n')) ops.add({'insert': '\n'});
+  }
+  for (final (text, done) in items) {
+    ops
+      ..add({'insert': text})
+      ..add({
+        'insert': '\n',
+        'attributes': {'list': done ? 'checked' : 'unchecked'}
+      });
+  }
+  final lines = [for (final (text, _) in items) text].join('\n');
+  return (base.isEmpty ? '$lines\n' : '$base\n$lines\n', jsonEncode(ops));
+}
+
+/// Desmarca todas las casillas (al repetirse una tarea).
+String? uncheckAll(String? rich) {
+  if (rich == null || !rich.contains('"checked"')) return rich;
+  try {
+    final ops = jsonDecode(rich);
+    if (ops is! List) return rich;
+    for (final op in ops) {
+      if (op is Map && op['attributes'] is Map) {
+        final a = op['attributes'] as Map;
+        if (a['list'] == 'checked') a['list'] = 'unchecked';
+      }
+    }
+    return jsonEncode(ops);
+  } catch (_) {
+    return rich;
+  }
+}

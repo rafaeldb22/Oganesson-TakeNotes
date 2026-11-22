@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:notas/data/note_export.dart';
+import 'package:notas/data/note_factory.dart';
 import 'package:notas/data/note_filters.dart';
 import 'package:notas/data/note_history.dart';
 import 'package:notas/data/notes_repository.dart';
@@ -53,36 +54,44 @@ void main() {
           RepeatRule.yearly.next(DateTime(2028, 2, 29)), DateTime(2029, 2, 28));
     });
 
-    test('completar avanza la fecha y reinicia las subtareas', () {
+    test('completar avanza la fecha y desmarca las casillas', () {
       final repo = _repo();
       final n = repo.notes.firstWhere((x) => !x.isEmpty);
       final due = DateTime.now().add(const Duration(hours: 2));
       repo.setSchedule(n.id,
           remindAt: due.subtract(const Duration(hours: 1)), dueAt: due);
       repo.setRepeat(n.id, 'daily');
-      repo.addSubtask(n.id, 'paso');
-      repo.toggleSubtask(n.id, n.subtasks.first.id);
+      final (c, r) = withChecklist(n.content, n.rich, [('paso', true)]);
+      repo.updateContent(n.id, c, rich: r);
       repo.toggleDone(n.id);
       expect(n.done, isFalse);
       expect(n.dueAt!.isAfter(due.toUtc()), isTrue);
-      expect(n.subtasks.first.done, isFalse);
+      expect(n.rich, isNot(contains('"checked"')));
+      expect(n.rich, contains('"unchecked"'));
       repo.dispose();
     });
   });
 
-  test('subtareas: añadir, progreso, renombrar y quitar', () {
-    final repo = _repo();
-    final n = repo.notes.firstWhere((x) => !x.isEmpty);
-    repo.addSubtask(n.id, ' uno ');
-    repo.addSubtask(n.id, 'dos');
-    repo.toggleSubtask(n.id, n.subtasks.first.id);
-    expect(n.subtaskProgress, 0.5);
-    repo.renameSubtask(n.id, n.subtasks.last.id, 'tres');
-    expect(n.subtasks.map((t) => t.text), ['uno', 'tres']);
-    repo.removeSubtask(n.id, n.subtasks.first.id);
-    expect(n.subtasks.length, 1);
-    final back = Note.fromRow(jsonDecode(jsonEncode(n.toRow())));
-    expect(back.subtasks.single.text, 'tres');
+  test('las subtareas antiguas pasan a casillas sin perderse', () async {
+    final old = _note('vieja', 'Compra')
+      ..subtasks = [
+        Subtask(id: '1', text: 'Pan', done: true),
+        Subtask(id: '2', text: 'Leche'),
+      ];
+    SharedPreferences.setMockInitialValues({
+      'notas_cache_demo': jsonEncode([old.toRow()]),
+    });
+    final repo = NotesRepository(
+        SupabaseClient('http://127.0.0.1:9', 'clave-de-prueba',
+            authOptions: const AuthClientOptions(autoRefreshToken: false)),
+        'demo');
+    await repo.start();
+    final n = repo.byId('vieja')!;
+    expect(n.subtasks, isEmpty);
+    expect(n.content, contains('Pan'));
+    expect(n.content, contains('Leche'));
+    expect(n.rich, contains('"checked"'));
+    expect(n.rich, contains('"unchecked"'));
     repo.dispose();
   });
 
@@ -142,13 +151,11 @@ void main() {
             'insert': '\n',
             'attributes': {'list': 'checked'}
           },
-        ])
-        ..subtasks = [Subtask(id: 's', text: 'paso', done: true)];
+        ]);
       final md = noteToMarkdown(n);
       expect(md, contains('# Título'));
       expect(md, contains('- **negrita**'));
       expect(md, contains('- [x] hecha'));
-      expect(md, contains('- [x] paso'));
     });
 
     test('la copia no incluye el Vault y se recupera entera', () {

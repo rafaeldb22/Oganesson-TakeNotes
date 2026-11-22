@@ -142,12 +142,7 @@ String noteToMarkdown(Note n) {
     if (line.isNotEmpty) endLine(null);
     if (inCode) out.writeln('```');
   }
-  var text = out.toString().trimRight();
-  if (n.subtasks.isNotEmpty) {
-    text += '\n\n';
-    text +=
-        n.subtasks.map((t) => '- [${t.done ? 'x' : ' '}] ${t.text}').join('\n');
-  }
+  final text = out.toString().trimRight();
   return '$text\n';
 }
 
@@ -209,9 +204,6 @@ Future<Uint8List> notesToPdf(List<Note> notes) async {
             child: pw.Text(clean(line),
                 style: const pw.TextStyle(fontSize: 11.5, lineSpacing: 2)),
           ),
-        for (final t in n.subtasks)
-          pw.Text('${t.done ? '[x]' : '[  ]'} ${clean(t.text)}',
-              style: const pw.TextStyle(fontSize: 11.5)),
       ],
       if (list.isEmpty) pw.SizedBox(),
     ],

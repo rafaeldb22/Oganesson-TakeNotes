@@ -18,146 +18,6 @@ import 'i18n.dart';
 import 'theme.dart';
 import 'toast.dart';
 
-// ---------------------------------------------------------------- subtareas
-
-/// Pasos de la nota con su barra de progreso.
-class SubtasksPanel extends StatefulWidget {
-  const SubtasksPanel({super.key, required this.repo, required this.note});
-  final NotesRepository repo;
-  final Note note;
-
-  @override
-  State<SubtasksPanel> createState() => _SubtasksPanelState();
-}
-
-class _SubtasksPanelState extends State<SubtasksPanel> {
-  final _input = TextEditingController();
-  final _inputFocus = FocusNode();
-
-  @override
-  void dispose() {
-    _input.dispose();
-    _inputFocus.dispose();
-    super.dispose();
-  }
-
-  void _add() {
-    final t = _input.text.trim();
-    if (t.isEmpty) return;
-    widget.repo.addSubtask(widget.note.id, t);
-    _input.clear();
-    _inputFocus.requestFocus();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final p = Palette.of(context);
-    final n = widget.note;
-    final done = n.subtasks.where((t) => t.done).length;
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.fromLTRB(12, 10, 8, 6),
-      decoration: BoxDecoration(
-        color: p.background,
-        borderRadius: BorderRadius.circular(14),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              Text(tr('Subtareas'),
-                  style: const TextStyle(
-                      fontSize: 13.5, fontWeight: FontWeight.w700)),
-              const Spacer(),
-              if (n.subtasks.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(right: 6),
-                  child: Text('$done/${n.subtasks.length}',
-                      style: TextStyle(fontSize: 12.5, color: p.secondary)),
-                ),
-            ],
-          ),
-          if (n.subtasks.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(top: 6, right: 6, bottom: 2),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(3),
-                child: TweenAnimationBuilder<double>(
-                  tween: Tween(end: n.subtaskProgress),
-                  duration: Anim.medium,
-                  curve: Anim.curve,
-                  builder: (_, v, __) => LinearProgressIndicator(
-                    value: v,
-                    minHeight: 5,
-                    color: p.accent,
-                    backgroundColor: p.separator,
-                  ),
-                ),
-              ),
-            ),
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxHeight: 176),
-            child: ListView(
-              shrinkWrap: true,
-              padding: EdgeInsets.zero,
-              children: [
-                for (final t in n.subtasks)
-                  Row(
-                    key: ValueKey(t.id),
-                    children: [
-                      Checkbox(
-                        value: t.done,
-                        visualDensity: VisualDensity.compact,
-                        onChanged: (_) => widget.repo.toggleSubtask(n.id, t.id),
-                      ),
-                      Expanded(
-                        child: AnimatedDefaultTextStyle(
-                          duration: Anim.fast,
-                          style: DefaultTextStyle.of(context).style.copyWith(
-                                fontSize: 14.5,
-                                color: t.done ? p.secondary : null,
-                                decoration:
-                                    t.done ? TextDecoration.lineThrough : null,
-                              ),
-                          child: Text(t.text),
-                        ),
-                      ),
-                      IconButton(
-                        tooltip: tr('Quitar'),
-                        visualDensity: VisualDensity.compact,
-                        iconSize: 16,
-                        color: p.secondary,
-                        icon: const Icon(Icons.close_rounded),
-                        onPressed: () => widget.repo.removeSubtask(n.id, t.id),
-                      ),
-                    ],
-                  ),
-              ],
-            ),
-          ),
-          TextField(
-            key: const ValueKey('nueva-subtarea'),
-            controller: _input,
-            focusNode: _inputFocus,
-            onSubmitted: (_) => _add(),
-            style: const TextStyle(fontSize: 14.5),
-            decoration: InputDecoration(
-              isDense: true,
-              border: InputBorder.none,
-              hintText: tr('Añadir un paso…'),
-              prefixIcon: Icon(Icons.add_rounded, size: 18, color: p.accent),
-              prefixIconConstraints:
-                  const BoxConstraints(minWidth: 40, minHeight: 32),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 // ---------------------------------------------------------------- historial
 
 /// Versiones anteriores de una nota, con vista previa y restaurar.
@@ -256,12 +116,15 @@ Future<void> showHistorySheet(
 
 class NoteTemplate {
   const NoteTemplate(this.name, this.icon, this.text,
-      {this.steps = const [], this.custom = false});
+      {this.steps = const [], this.custom = false, this.rich});
   final String name;
   final IconData icon;
   final String text;
   final List<String> steps;
   final bool custom;
+
+  /// Formato de una plantilla propia (con sus casillas).
+  final String? rich;
 }
 
 List<NoteTemplate> builtInTemplates() => [
@@ -303,7 +166,8 @@ Future<List<NoteTemplate>> loadCustomTemplates() async {
           m['name'] as String,
           Icons.bookmark_outline_rounded,
           m['text'] as String,
-          steps: (m['steps'] as List).cast<String>(),
+          steps: ((m['steps'] as List?) ?? const []).cast<String>(),
+          rich: m['rich'] as String?,
           custom: true,
         )
     ];
@@ -317,7 +181,8 @@ Future<void> _storeTemplates(List<NoteTemplate> list) async {
   await p.setString(
       _templatesKey,
       jsonEncode([
-        for (final t in list) {'name': t.name, 'text': t.text, 'steps': t.steps}
+        for (final t in list)
+          {'name': t.name, 'text': t.text, 'steps': t.steps, 'rich': t.rich}
       ]));
 }
 
@@ -329,7 +194,7 @@ Future<void> saveAsTemplate(BuildContext context, Note n) async {
     n.title,
     Icons.bookmark_outline_rounded,
     n.content.replaceAll('￼', '').trim(),
-    steps: [for (final t in n.subtasks) t.text],
+    rich: n.hasImages || n.hasFiles ? null : n.rich,
     custom: true,
   ));
   await _storeTemplates(list);
@@ -391,11 +256,15 @@ Future<Note?> pickTemplate(BuildContext context, NotesRepository repo) async {
 }
 
 Note? createFromTemplate(NotesRepository repo, NoteTemplate t) {
+  final rich = t.rich;
+  if (rich != null) {
+    final n = repo.createNote();
+    repo.updateContent(n.id, t.text, rich: rich);
+    return repo.byId(n.id);
+  }
   final n = createNoteFrom(repo, text: t.text);
   if (n == null) return null;
-  for (final s in t.steps) {
-    repo.addSubtask(n.id, s);
-  }
+  repo.addChecklist(n.id, t.steps);
   return n;
 }
 

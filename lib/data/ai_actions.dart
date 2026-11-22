@@ -123,10 +123,7 @@ String dailyBriefData(NotesRepository repo, {DateTime? now}) {
         ? ''
         : ' (${d.day}/${d.month} ${d.hour}:'
             '${d.minute.toString().padLeft(2, '0')})';
-    final steps = n.subtasks.isEmpty
-        ? ''
-        : ' [${n.subtasks.where((s) => s.done).length}/${n.subtasks.length}]';
-    return '- ${n.title}$when$steps';
+    return '- ${n.title}$when';
   }
 
   final tasks = repo.temporales.where((n) => !n.vault && !n.done).toList();

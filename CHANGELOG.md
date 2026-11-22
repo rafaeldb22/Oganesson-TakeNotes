@@ -2,15 +2,26 @@
 
 All notable changes to Oganesson TakeNotes (formerly *Notas* / *BabuNotes*).
 
+## [2.6.0] — 2026-11-23
+
+### Changed
+- **New editor toolbar**: voice notes, attachments, drawing and AI actions now live next to the
+  formatting tools. Smoother hover, press and active animations, an animated color palette, smooth
+  wheel scrolling and a highlighted AI button.
+
+### Removed
+- **Subtasks**. Existing subtasks are converted into checkboxes inside their note, so nothing is
+  lost. AI "turn into tasks", templates and tasks from a photo now create checkboxes too.
+
 ## [2.5.0] — 2026-11-22
 
 ### Added
 - **Ask all your notes**: the assistant searches and reads your notes, answers from them and links
   the notes it used under the answer.
-- **AI actions on a note**: summarize, fix writing, translate or turn into subtasks. You review
+- **AI actions on a note**: summarize, fix writing, translate or turn into checkboxes. You review
   the result first, and replacing a note can be undone.
 - **Daily summary** of overdue, today's and upcoming tasks, on demand.
-- **Tasks from a photo**: pick an image, review what the AI found and create a note with subtasks.
+- **Tasks from a photo**: pick an image, review what the AI found and create a note with checkboxes.
 
 ### Fixed
 - **Privacy**: while the Vault was open, the assistant's task list could include completed Vault

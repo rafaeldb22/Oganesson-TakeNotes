@@ -3,6 +3,7 @@ import 'package:flutter_quill/flutter_quill.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:notas/data/note_history.dart';
 import 'package:notas/data/notes_repository.dart';
+import 'package:notas/ui/editor_toolbar.dart';
 import 'package:notas/ui/i18n.dart';
 import 'package:notas/ui/note_tools.dart';
 import 'package:notas/ui/notes_home.dart';
@@ -50,24 +51,70 @@ Future<void> _openTool(WidgetTester tester, String label) async {
 }
 
 void main() {
-  testWidgets('subtareas desde el menú de la nota', (tester) async {
+  testWidgets('las herramientas están en la barra y no en el menú',
+      (tester) async {
     final repo = await _pump(tester);
     final n = repo.notes.firstWhere((x) => x.title == 'Pelis pendientes');
     await tester.tap(find.text(n.title).first);
     await _settle(tester);
-    await _openTool(tester, 'Subtareas');
-    await tester.enterText(
-        find.byKey(const ValueKey('nueva-subtarea')), 'Primer paso');
-    await tester.testTextInput.receiveAction(TextInputAction.done);
+    for (final t in [
+      'Nota de voz',
+      'Adjuntar archivo',
+      'Dibujar',
+      'Acciones con IA'
+    ]) {
+      expect(find.byTooltip(t), findsOneWidget, reason: t);
+    }
+    await tester.tap(find.byTooltip('Más').first);
     await _settle(tester);
-    expect(n.subtasks.single.text, 'Primer paso');
-    expect(find.text('0/1'), findsOneWidget);
-    await tester.tap(find.byType(Checkbox).first);
+    for (final t in ['Subtareas', 'Nota de voz', 'Dibujar']) {
+      expect(find.text(t), findsNothing, reason: t);
+    }
+    expect(tester.takeException(), isNull);
+    await tester.tap(find.text('Exportar'));
     await _settle(tester);
-    expect(n.subtasks.single.done, isTrue);
-    expect(find.text('1/1'), findsOneWidget);
+    await tester.tapAt(const Offset(5, 5));
+    await _settle(tester);
+    await _end(tester, repo);
+  });
+
+  testWidgets('en una nota del Vault no se ofrece la IA', (tester) async {
+    final repo = await _pump(tester);
+    final n = repo.notes.firstWhere((x) => x.title == 'Pelis pendientes');
+    await tester.tap(find.text(n.title).first);
+    await _settle(tester);
+    n.vault = true;
+    repo.updateContent(n.id, '${n.content} ');
+    await _settle(tester);
+    expect(find.byTooltip('Acciones con IA'), findsNothing);
     expect(tester.takeException(), isNull);
     await _end(tester, repo);
+  });
+
+  testWidgets('la barra cabe en un móvil', (tester) async {
+    appLanguage.code = 'es';
+    tester.view.physicalSize = const Size(360, 700);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final c = QuillController.basic();
+    await tester.pumpWidget(MaterialApp(
+      theme: buildTheme(themeById(''), Brightness.dark),
+      home: Scaffold(
+        body: EditorToolbar(
+            controller: c,
+            onImage: () {},
+            onLink: () {},
+            onVoice: () {},
+            onAttach: () {},
+            onDraw: () {},
+            onAi: () {}),
+      ),
+    ));
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(tester.takeException(), isNull);
+    await tester.dragUntilVisible(find.byTooltip('Acciones con IA'),
+        find.byType(ListView), const Offset(-120, 0));
+    expect(find.byTooltip('Acciones con IA'), findsOneWidget);
   });
 
   testWidgets('restaurar una versión cambia el editor abierto', (tester) async {
@@ -123,7 +170,8 @@ void main() {
     final t = builtInTemplates().firstWhere((x) => x.name == 'Viaje');
     final n = createFromTemplate(repo, t)!;
     expect(n.title, 'Viaje');
-    expect(n.subtasks.length, 3);
+    expect(n.hasChecklist, isTrue);
+    expect(n.content, contains('Maleta'));
     repo.dispose();
   });
 }

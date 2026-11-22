@@ -41,7 +41,7 @@ class NoteFilters {
 
   bool matches(Note n, {DateTime? now}) {
     if (withImages && !n.hasImages) return false;
-    if (withTasks && n.subtasks.isEmpty && !n.isTemporal) return false;
+    if (withTasks && !n.hasChecklist && !n.isTemporal) return false;
     if (color != null && n.color != color) return false;
     if (folderId != null && (n.folderId ?? '') != folderId) return false;
     if (date != DateFilter.any) {

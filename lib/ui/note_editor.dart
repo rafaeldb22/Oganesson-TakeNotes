@@ -255,8 +255,6 @@ class _NoteEditorState extends State<NoteEditor> {
     );
   }
 
-  bool _subtasksOpen = false;
-
   Future<void> _draw() async {
     final png = await showDrawingPad(context);
     if (png != null && mounted) await insertImages(context, _ctrl, [png]);
@@ -266,22 +264,12 @@ class _NoteEditorState extends State<NoteEditor> {
     final n = repo.byId(widget.noteId);
     if (n == null) return;
     switch (v) {
-      case 'subtareas':
-        setState(() => _subtasksOpen = !_subtasksOpen);
       case 'historial':
         showHistorySheet(context, repo, n.id);
       case 'plantilla':
         saveAsTemplate(context, n);
       case 'exportar':
         showExportNote(context, n);
-      case 'ia':
-        showNoteAiActions(context, repo, n.id);
-      case 'voz':
-        showVoiceRecorder(context, _ctrl);
-      case 'adjuntar':
-        pickAndAttachFiles(context, _ctrl);
-      case 'dibujar':
-        _draw();
     }
   }
 
@@ -393,42 +381,6 @@ class _NoteEditorState extends State<NoteEditor> {
               icon: const Icon(Icons.more_horiz_rounded),
               onSelected: _toolAction,
               itemBuilder: (_) => [
-                if (n?.vault != true)
-                  PopupMenuItem(
-                      value: 'ia',
-                      child: ListTile(
-                          dense: true,
-                          contentPadding: EdgeInsets.zero,
-                          leading: const Icon(Icons.auto_awesome_outlined),
-                          title: Text(tr('Acciones con IA')))),
-                PopupMenuItem(
-                    value: 'voz',
-                    child: ListTile(
-                        dense: true,
-                        contentPadding: EdgeInsets.zero,
-                        leading: const Icon(Icons.mic_none_rounded),
-                        title: Text(tr('Nota de voz')))),
-                PopupMenuItem(
-                    value: 'adjuntar',
-                    child: ListTile(
-                        dense: true,
-                        contentPadding: EdgeInsets.zero,
-                        leading: const Icon(Icons.attach_file_rounded),
-                        title: Text(tr('Adjuntar archivo')))),
-                PopupMenuItem(
-                    value: 'dibujar',
-                    child: ListTile(
-                        dense: true,
-                        contentPadding: EdgeInsets.zero,
-                        leading: const Icon(Icons.draw_outlined),
-                        title: Text(tr('Dibujar')))),
-                PopupMenuItem(
-                    value: 'subtareas',
-                    child: ListTile(
-                        dense: true,
-                        contentPadding: EdgeInsets.zero,
-                        leading: const Icon(Icons.checklist_rounded),
-                        title: Text(tr('Subtareas')))),
                 PopupMenuItem(
                     value: 'historial',
                     child: ListTile(
@@ -520,42 +472,6 @@ class _NoteEditorState extends State<NoteEditor> {
                         contentPadding: EdgeInsets.zero,
                         leading: const Icon(Icons.add_photo_alternate_outlined),
                         title: Text(tr('Añadir imagen')))),
-                if (n?.vault != true)
-                  PopupMenuItem(
-                      value: 'ia',
-                      child: ListTile(
-                          dense: true,
-                          contentPadding: EdgeInsets.zero,
-                          leading: const Icon(Icons.auto_awesome_outlined),
-                          title: Text(tr('Acciones con IA')))),
-                PopupMenuItem(
-                    value: 'voz',
-                    child: ListTile(
-                        dense: true,
-                        contentPadding: EdgeInsets.zero,
-                        leading: const Icon(Icons.mic_none_rounded),
-                        title: Text(tr('Nota de voz')))),
-                PopupMenuItem(
-                    value: 'adjuntar',
-                    child: ListTile(
-                        dense: true,
-                        contentPadding: EdgeInsets.zero,
-                        leading: const Icon(Icons.attach_file_rounded),
-                        title: Text(tr('Adjuntar archivo')))),
-                PopupMenuItem(
-                    value: 'dibujar',
-                    child: ListTile(
-                        dense: true,
-                        contentPadding: EdgeInsets.zero,
-                        leading: const Icon(Icons.draw_outlined),
-                        title: Text(tr('Dibujar')))),
-                PopupMenuItem(
-                    value: 'subtareas',
-                    child: ListTile(
-                        dense: true,
-                        contentPadding: EdgeInsets.zero,
-                        leading: const Icon(Icons.checklist_rounded),
-                        title: Text(tr('Subtareas')))),
                 PopupMenuItem(
                     value: 'historial',
                     child: ListTile(
@@ -619,14 +535,37 @@ class _NoteEditorState extends State<NoteEditor> {
               duration: Anim.medium,
               curve: Anim.curve,
               alignment: Alignment.topCenter,
-              child: _toolbarOpen
-                  ? EditorToolbar(
-                      controller: _ctrl,
-                      onImage: () => pickAndInsertImages(context, _ctrl),
-                      onLink: () =>
-                          showLinkNotesPicker(context, repo, widget.noteId),
-                    )
-                  : const SizedBox(width: double.infinity),
+              child: AnimatedSwitcher(
+                duration: Anim.medium,
+                switchInCurve: Anim.curve,
+                switchOutCurve: Curves.easeIn,
+                transitionBuilder: (c, a) => FadeTransition(
+                  opacity: a,
+                  child: SlideTransition(
+                    position:
+                        Tween(begin: const Offset(0, -0.25), end: Offset.zero)
+                            .animate(a),
+                    child: c,
+                  ),
+                ),
+                child: _toolbarOpen
+                    ? EditorToolbar(
+                        key: const ValueKey('barra-formato'),
+                        controller: _ctrl,
+                        onImage: () => pickAndInsertImages(context, _ctrl),
+                        onLink: () =>
+                            showLinkNotesPicker(context, repo, widget.noteId),
+                        onVoice: () => showVoiceRecorder(context, _ctrl),
+                        onAttach: () => pickAndAttachFiles(context, _ctrl),
+                        onDraw: _draw,
+                        // Las notas del Vault nunca se envían a la IA.
+                        onAi: n == null || n.vault
+                            ? null
+                            : () => showNoteAiActions(context, repo, n.id),
+                      )
+                    : const SizedBox(
+                        key: ValueKey('sin-barra'), width: double.infinity),
+              ),
             ),
             Expanded(
               child: Center(
@@ -655,9 +594,6 @@ class _NoteEditorState extends State<NoteEditor> {
                                   fontSize: 13),
                             ),
                           ),
-                        if (n != null &&
-                            (_subtasksOpen || n.subtasks.isNotEmpty))
-                          SubtasksPanel(repo: repo, note: n),
                         Expanded(
                           child: ImageDropZone(
                             onImages: (images) =>
