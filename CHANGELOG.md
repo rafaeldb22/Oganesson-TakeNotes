@@ -2,6 +2,20 @@
 
 All notable changes to Oganesson TakeNotes (formerly *Notas* / *BabuNotes*).
 
+## [1.8.0] — 2026-11-22
+
+### Added
+- **AI assistant with your own Gemini key** (✨ button in the bottom bar, ⋯ → *AI assistant*,
+  **Ctrl+J**). Each user pastes their own free Gemini API key from Google AI Studio; it is stored
+  encrypted on the device only (flutter_secure_storage) and never uploaded.
+  - It uses Gemini function calling to work with your notes: list and read notes and tasks, list
+    folders, create notes (title, text, folder, deadline), append text, set or clear dates, mark
+    tasks done, pin and move notes. Archive and delete ask for confirmation.
+  - **Vault notes are never visible to it** (not listed, not readable, not editable).
+  - Every change it makes shows up as a card with *Open* and *Undo*.
+  - Guided setup with key test, model choice (Gemini Flash-Lite / Gemini Flash / custom), a
+    privacy note, and clear messages for an invalid key, no connection or the free-plan limit.
+
 ## [1.7.4] — 2026-11-22
 
 ### Changed

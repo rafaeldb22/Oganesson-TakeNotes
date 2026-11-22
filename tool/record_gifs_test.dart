@@ -17,12 +17,15 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
+import 'package:notas/data/ai_assistant.dart';
 import 'package:notas/data/note_images.dart';
 import 'package:notas/data/notes_repository.dart';
+import 'package:notas/ui/assistant_panel.dart';
 import 'package:notas/ui/logo.dart';
 import 'package:notas/ui/note_image.dart';
 import 'package:notas/ui/notes_home.dart';
 import 'package:notas/ui/theme.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -737,6 +740,59 @@ void main() {
     await rec.hold(1400);
     await mouse.removePointer();
     rec.save('docs/images.gif');
+    await _cleanUp(tester, repo);
+  });
+
+  testWidgets('Captura: asistente de IA', (tester) async {
+    _setSize(tester, const Size(430, 760));
+    addTearDown(tester.view.reset);
+    // ignore: invalid_use_of_visible_for_testing_member
+    FlutterSecureStorage.setMockInitialValues({});
+    await AiSettings.instance
+        .save(apiKey: 'demo', model: 'gemini-3.5-flash-lite');
+    final repo = _demoRepo();
+    final session = AiSession(repo);
+    final note = repo.notes.firstWhere((n) => n.title == 'Examen de historia');
+    session.messages
+      ..add(AiMessage(AiRole.user, 'What do I have pending this week?'))
+      ..add(AiMessage(
+          AiRole.assistant,
+          'This week you have **2 tasks**:\n'
+          '- **Examen de historia**: Thursday at 9:00\n'
+          '- **Entregar trabajo de física**: Friday at 20:00'))
+      ..add(AiMessage(AiRole.user,
+          'Move the exam to Friday at 10 and create a note to revise'))
+      ..add(AiMessage(
+          AiRole.assistant,
+          'Done: the exam is now on Friday at 10:00 and I created the note '
+          '**Revise history** in Clase.',
+          actions: [
+            AiAction(
+                icon: 'alarm',
+                label: 'Deadline of “Examen de historia”: 2026-11-27 10:00',
+                noteId: note.id,
+                undo: () {}),
+            AiAction(
+                icon: 'note_add',
+                label: 'Note created: Revise history',
+                noteId: note.id,
+                undo: () {}),
+          ]));
+    await tester.pumpWidget(_app(
+      buildTheme(themeById('galaxia'), Brightness.dark),
+      Scaffold(
+        body: SafeArea(
+          child: AssistantPanel(
+              session: session, onOpenNote: (_) {}, onClose: () {}),
+        ),
+      ),
+      boundary: _root,
+    ));
+    for (var i = 0; i < 20; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    await tester.runAsync(
+        () => _Recorder.png('docs/screenshot-assistant.png', pixelRatio: 2));
     await _cleanUp(tester, repo);
   });
 

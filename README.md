@@ -66,6 +66,7 @@
 | 🕸️ **Note network** | Link notes or create linked sub-notes, then explore them as a live graph. |
 | 🔒 **Vault** | Notes behind a master password that locks itself after 5 minutes; reset it with your account password. |
 | 🔄 **Sync** | Same account on every device, real-time sync through Supabase, works offline (images too) and uploads when back online. |
+| ✨ **AI assistant** | Bring your own free Gemini API key: ask *"what's pending this week?"*, have it create notes, set deadlines, move notes to folders, mark tasks done… Every change can be undone, deleting needs your OK, and it **never sees Vault notes**. |
 | 📱 **Widgets** | Android home-screen widgets: calendar, tasks, next task with countdown, pinned notes and quick actions. |
 
 ---
@@ -102,6 +103,13 @@ Sign in with the **same account** on every device and your notes sync automatica
 - Right-click a note (long press on Android) to link it with other notes or create a linked sub-note.
 - Graph view of all your notes and links: zoom, pan, drag nodes, hover to highlight neighbours, tap to open.
 - Every note shows its links and backlinks.
+
+**AI assistant (bring your own key)**
+- Open it with the ✨ button, ⋯ → *AI assistant* or **Ctrl+J**. Paste your own **Gemini API key** (free from [Google AI Studio](https://aistudio.google.com/apikey)); it is stored encrypted on that device only, never uploaded.
+- It can list and read your notes and tasks, create notes (with folder and deadline), add text, set or clear dates, mark tasks done, pin and move notes. Archiving or deleting asks you first, and every change has an *Undo* button.
+- **Vault notes are never sent to the AI.** Choose Gemini Flash-Lite (more free requests per day) or Gemini Flash (smarter, fewer free requests); the free plan's limits are shown in Google AI Studio and the app tells you clearly when you hit them.
+
+<p align="center"><img src="docs/screenshot-assistant.png" width="320" alt="AI assistant"></p>
 
 **Vault**
 - Notes behind a master password, in their own screen from the ⋯ menu (never in the normal lists or widgets).

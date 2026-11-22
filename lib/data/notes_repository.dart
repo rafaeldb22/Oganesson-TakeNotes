@@ -371,6 +371,23 @@ class NotesRepository extends ChangeNotifier {
         if (dueAt == null) n.done = false;
       });
 
+  /// Devuelve una nota al estado de [s] (Deshacer lo que hizo el asistente).
+  void restoreState(Note s) => _edit(s.id, (n) {
+        n
+          ..content = s.content
+          ..rich = s.rich
+          ..folderId = s.folderId
+          ..remindAt = s.remindAt
+          ..dueAt = s.dueAt
+          ..done = s.done
+          ..doneAt = s.doneAt
+          ..color = s.color
+          ..pinned = s.pinned
+          ..deleted = s.deleted
+          ..archived = s.archived
+          ..links = List.of(s.links);
+      });
+
   void _edit(String id, void Function(Note n) change) {
     final n = _notes[id];
     if (_disposed || n == null) return;

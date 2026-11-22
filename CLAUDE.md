@@ -98,6 +98,15 @@ that it still arrives. On Windows, check toasts are enabled first:
   all of them during `_entranceOpen` (first 900 ms after the list is shown / the view changes),
   afterwards only ids that were not in the previous build (`_knownIds`). Regression tests:
   `test/discard_animation_test.dart` (checks that no `State` of the list is recreated).
+- AI assistant (bring your own key): `lib/data/ai_assistant.dart` — `AiSettings` (Gemini key in
+  flutter_secure_storage, never in Supabase; model in SharedPreferences), `GeminiClient` (REST
+  `generateContent` with function calling, injectable `AiTransport` for tests, friendly errors
+  incl. 429 quota), `AiTools` (function declarations + execution on `NotesRepository`; Vault notes
+  are invisible: `repo.notes` excludes them and `_note()` rejects them; destructive actions go
+  through `confirm`; every change records an `AiAction` with undo via `repo.restoreState`) and
+  `AiSession` (keeps the raw model `content` so Gemini's thought signatures are sent back).
+  UI: `lib/ui/assistant_panel.dart` (`openAssistant`: right panel on wide, bottom sheet on phone).
+  Free-tier limits are per Google project and only shown in AI Studio (reset at midnight PT).
 - Smooth wheel scrolling: use `SmoothScrollController` (`lib/ui/smooth_scroll.dart`) for new
   scroll views on desktop.
 - Completed tasks: `Note.doneAt` (column `notes.done_at`); done > 3 days → hidden from lists and

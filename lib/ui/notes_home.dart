@@ -10,6 +10,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../config.dart';
+import '../data/ai_assistant.dart';
 import '../data/note_images.dart';
 import '../data/note_links.dart';
 import '../data/notes_repository.dart';
@@ -20,6 +21,7 @@ import 'anim.dart';
 import '../data/updater.dart';
 import 'account_dialogs.dart';
 import 'archived_sheet.dart';
+import 'assistant_panel.dart';
 import 'calendar_view.dart';
 import 'completed_sheet.dart';
 import 'context_menu.dart';
@@ -180,6 +182,12 @@ class _NotesHomeState extends State<NotesHome> {
   }
 
   late final VaultLock vault = VaultLock.forUser(repo.userId);
+
+  /// Conversación con el asistente de IA (se mantiene mientras la app está
+  /// abierta).
+  late final AiSession _ai = AiSession(repo);
+
+  void _openAssistant() => openAssistant(context, _ai, onOpenNote: _open);
 
   /// El menú ⋯ cambia según el Vault esté abierto o no.
   void _onVault() {
@@ -531,6 +539,9 @@ class _NotesHomeState extends State<NotesHome> {
             _setFilter('red');
           },
           // Ctrl+,: tema y colores.
+          // Ctrl+J: asistente de IA.
+          const SingleActivator(LogicalKeyboardKey.keyJ, control: true):
+              _openAssistant,
           const SingleActivator(LogicalKeyboardKey.comma, control: true): () =>
               showThemePicker(context),
         },
@@ -908,6 +919,14 @@ class _NotesHomeState extends State<NotesHome> {
                 ),
                 const SizedBox(width: 4),
               ],
+              _BarButton(
+                tooltip: isDesktopWindows
+                    ? '${tr('Asistente IA')} (Ctrl+J)'
+                    : tr('Asistente IA'),
+                icon: Icons.auto_awesome_outlined,
+                onTap: _openAssistant,
+              ),
+              const SizedBox(width: 4),
               for (final (view, tip, on, off) in [
                 ('red', tr('Red de notas'), Icons.hub, Icons.hub_outlined),
                 (
@@ -994,6 +1013,8 @@ class _NotesHomeState extends State<NotesHome> {
             badge: done == 0 ? null : '$done'),
         MenuEntry('papelera', Icons.delete_outline, tr('Papelera'),
             badge: trash == 0 ? null : '$trash'),
+        MenuEntry('asistente', Icons.auto_awesome_outlined, tr('Asistente IA'),
+            subtitle: tr('Con tu clave de Gemini')),
         MenuEntry('vault', Icons.shield_outlined, 'Vault',
             subtitle: vault.unlocked
                 ? tr('Abierto')
@@ -1028,6 +1049,8 @@ class _NotesHomeState extends State<NotesHome> {
         showThemePicker(context);
       case 'idioma':
         showLanguagePicker(context);
+      case 'asistente':
+        _openAssistant();
       case 'vault':
         _openVault();
       case 'vault-lock':

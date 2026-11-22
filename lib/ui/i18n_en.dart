@@ -457,4 +457,93 @@ const enStrings = <String, String>{
   'Subir': 'Move up',
   'Bajar': 'Move down',
   'Arrastra para moverla': 'Drag to move it',
+
+  // --- Asistente de IA
+  'Sin conexión. Revisa internet y vuelve a probar.':
+      'No connection. Check your internet and try again.',
+  'La IA ha tardado demasiado. Vuelve a probar.':
+      'The AI took too long. Try again.',
+  'Has llegado al límite de peticiones gratis de tu clave. El límite diario se reinicia a medianoche (hora del Pacífico, las 9:00 en España). Prueba más tarde o cambia al modelo Flash-Lite en los ajustes.':
+      'You have reached the free request limit of your key. The daily limit resets at midnight Pacific time (9:00 in Spain). Try later or switch to the Flash-Lite model in the settings.',
+  'La clave no es válida. Revísala en los ajustes.':
+      'The key is not valid. Check it in the settings.',
+  'Ese modelo no existe o tu clave no tiene acceso. Elige otro en los ajustes.':
+      'That model does not exist or your key has no access to it. Choose another one in the settings.',
+  'Tu clave no tiene permiso para usar la API de Gemini.':
+      'Your key is not allowed to use the Gemini API.',
+  'La IA respondió con un error ({0}). {1}':
+      'The AI replied with an error ({0}). {1}',
+  'Nota creada: {0}': 'Note created: {0}',
+  'Texto añadido a «{0}»': 'Text added to “{0}”',
+  'Fechas quitadas de «{0}»': 'Dates removed from “{0}”',
+  'Fecha límite de «{0}»: {1}': 'Deadline of “{0}”: {1}',
+  'Tarea hecha: {0}': 'Task done: {0}',
+  'Tarea pendiente: {0}': 'Task pending: {0}',
+  '«{0}» sin carpeta': '“{0}” without folder',
+  '«{0}» movida a {1}': '“{0}” moved to {1}',
+  'Fijada: {0}': 'Pinned: {0}',
+  'Desfijada: {0}': 'Unpinned: {0}',
+  'La IA quiere archivar «{0}». ¿Archivarla?':
+      'The AI wants to archive “{0}”. Archive it?',
+  'La IA quiere mover «{0}» a la papelera. ¿Eliminarla?':
+      'The AI wants to move “{0}” to the trash. Delete it?',
+  'Archivada: {0}': 'Archived: {0}',
+  'A la papelera: {0}': 'Moved to trash: {0}',
+  'Primero pon tu clave de Gemini.': 'First add your Gemini key.',
+  'Pensando…': 'Thinking…',
+  'La IA no ha devuelto respuesta. Vuelve a probar.':
+      'The AI returned no answer. Try again.',
+  'La IA no ha querido responder a eso.': 'The AI declined to answer that.',
+  'Hecho.': 'Done.',
+  'Buscando notas…': 'Searching notes…',
+  'Leyendo la nota…': 'Reading the note…',
+  'Mirando tus tareas…': 'Checking your tasks…',
+  'Mirando las carpetas…': 'Checking folders…',
+  'Creando la nota…': 'Creating the note…',
+  'Escribiendo en la nota…': 'Writing in the note…',
+  'Poniendo fechas…': 'Setting dates…',
+  'Haciendo cambios…': 'Making changes…',
+  'No': 'No',
+  'Sí': 'Yes',
+  'Asistente': 'Assistant',
+  '{0} · tu clave': '{0} · your key',
+  'Con tu propia clave de Gemini': 'With your own Gemini key',
+  'Nueva conversación': 'New conversation',
+  'Volver al chat': 'Back to chat',
+  'Ajustes': 'Settings',
+  'Pregunta o pide algo…': 'Ask or request something…',
+  'Enviar': 'Send',
+  '¿Qué tengo pendiente esta semana?': 'What do I have pending this week?',
+  '¿Tengo alguna tarea vencida?': 'Do I have any overdue tasks?',
+  'Crea una nota con la lista de la compra: leche, pan y huevos':
+      'Create a note with the shopping list: milk, bread and eggs',
+  'Resume mis notas más recientes': 'Summarise my latest notes',
+  '¿En qué te ayudo?': 'How can I help?',
+  'Puedo ver tus notas y tareas (nunca las del Vault), crear notas, poner fechas, moverlas de carpeta y más.':
+      'I can see your notes and tasks (never the Vault ones), create notes, set dates, move them to folders and more.',
+  'Cambio deshecho': 'Change undone',
+  'Abrir': 'Open',
+  'Pega tu clave de Gemini.': 'Paste your Gemini key.',
+  'Escribe el nombre del modelo.': 'Type the model name.',
+  'Clave guardada. ¡Listo!': 'Key saved. All set!',
+  'Clave borrada de este dispositivo': 'Key removed from this device',
+  'El asistente usa tu propia clave de la API de Gemini (gratis con una cuenta de Google). Se guarda cifrada solo en este dispositivo.':
+      'The assistant uses your own Gemini API key (free with a Google account). It is stored encrypted on this device only.',
+  'Crea tu clave en Google AI Studio': 'Create your key in Google AI Studio',
+  'Abrir Google AI Studio': 'Open Google AI Studio',
+  'Pega la clave aquí': 'Paste the key here',
+  'Elige el modelo': 'Choose the model',
+  'Otro modelo': 'Another model',
+  'Escribe su nombre (p. ej. gemini-3.6-flash)':
+      'Type its name (e.g. gemini-3.6-flash)',
+  'Para responder, la IA recibe el texto de las notas que consulta (nunca las del Vault). En el plan gratuito, Google puede usar esos datos para mejorar sus productos. El plan gratis tiene un límite de peticiones por minuto y por día (se ve en Google AI Studio).':
+      'To answer, the AI receives the text of the notes it looks at (never the Vault ones). On the free plan, Google may use that data to improve its products. The free plan has a limit of requests per minute and per day (shown in Google AI Studio).',
+  'Borrar clave': 'Remove key',
+  'Probar y guardar': 'Test and save',
+  'Asistente IA': 'AI assistant',
+  'Con tu clave de Gemini': 'With your Gemini key',
+  'Rápido y con más peticiones gratis al día':
+      'Fast, with more free requests per day',
+  'Más listo, pero con pocas peticiones gratis al día':
+      'Smarter, but with few free requests per day',
 };
