@@ -2,6 +2,23 @@
 
 All notable changes to Oganesson TakeNotes (formerly *Notas* / *BabuNotes*).
 
+## [2.4.0] — 2026-11-22
+
+### Added
+- **Voice notes** recorded inside a note, with playback.
+- **Transcription** of voice notes with your own Gemini or ChatGPT key.
+- **PDF and file attachments** up to 25 MB.
+- **Drawing**: a canvas with colors, thickness, eraser, undo and redo, also on top of an image.
+- **OCR**: extract the text of a photo or screenshot with your own AI key, review it and add it
+  to the note.
+
+### Privacy
+- Transcription and OCR only run when you ask for them, and are not offered in Vault notes.
+
+### Setup
+- Run `supabase/migrations/009_note_files.sql` so attachments sync between devices. Without it
+  they keep working on the device where they were added.
+
 ## [2.3.0] — 2026-11-22
 
 ### Added

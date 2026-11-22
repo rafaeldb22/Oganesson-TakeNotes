@@ -123,7 +123,14 @@ String noteToMarkdown(Note n) {
       final ins = op['insert'];
       final a = op['attributes'] as Map?;
       if (ins is Map) {
-        line.write(ins.containsKey('image') ? '*[imagen]*' : '');
+        if (ins.containsKey('image')) {
+          line.write('*[imagen]*');
+        } else if (ins['custom'] is String) {
+          final name = RegExp(r'name\\*":\\*"([^"\\]+)')
+              .firstMatch(ins['custom'] as String)
+              ?.group(1);
+          line.write('*[adjunto${name == null ? '' : ': $name'}]*');
+        }
       } else if (ins is String) {
         final parts = ins.split('\n');
         for (var i = 0; i < parts.length; i++) {

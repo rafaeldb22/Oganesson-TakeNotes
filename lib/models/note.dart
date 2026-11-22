@@ -135,11 +135,16 @@ class Note {
   String get title {
     final l = _lines;
     if (l.isNotEmpty) return l.first;
-    return hasImages ? tr('Imagen') : tr('Nota nueva');
+    if (hasImages) return tr('Imagen');
+    return hasFiles ? tr('Adjunto') : tr('Nota nueva');
   }
 
   /// ¿Tiene alguna imagen?
-  bool get hasImages => content.contains('\uFFFC');
+  bool get hasImages =>
+      content.contains('\uFFFC') && (rich == null || rich!.contains('"image"'));
+
+  /// ¿Tiene adjuntos (PDF, archivos, notas de voz)?
+  bool get hasFiles => rich?.contains('ogf://') ?? false;
 
   String get preview {
     final l = _lines;

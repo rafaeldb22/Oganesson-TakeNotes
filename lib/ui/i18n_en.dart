@@ -703,4 +703,43 @@ const enStrings = <String, String>{
   "Cada semana": "Every week",
   "Cada mes": "Every month",
   "Cada año": "Every year",
+
+  // --- 2.4
+  "Adjunto": "Attachment",
+  "El archivo pasa de 25 MB": "The file is over 25 MB",
+  "No se pudo adjuntar el archivo": "Could not attach the file",
+  "Copiado": "Copied",
+  "Añadir a la nota": "Add to note",
+  "Leyendo con la IA…": "Reading with AI…",
+  "No se ha encontrado texto": "No text found",
+  "No se ha podido leer": "Could not read it",
+  "Texto de la imagen": "Text from the image",
+  "Nota de voz": "Voice note",
+  "No se pudo guardar la grabación": "Could not save the recording",
+  "Oganesson no tiene permiso de micrófono.":
+      "Oganesson has no microphone permission.",
+  "No se pudo iniciar la grabación.": "Could not start recording.",
+  "Terminar": "Finish",
+  "No se pudo abrir el archivo": "Could not open the file",
+  "Guardado": "Saved",
+  "Transcripción": "Transcription",
+  "Abrir o compartir": "Open or share",
+  "Transcribir": "Transcribe",
+  "Opciones": "Options",
+  "Adjuntar archivo": "Attach file",
+  "Dibujar": "Draw",
+  "Dibujar encima": "Draw on it",
+  "Sacar el texto (OCR)": "Extract text (OCR)",
+  "¿Descartar el dibujo?": "Discard the drawing?",
+  "Seguir dibujando": "Keep drawing",
+  "Descartar": "Discard",
+  "Dibujo": "Drawing",
+  "Grosor": "Thickness",
+  "Goma": "Eraser",
+  "Añade tu clave en el Asistente IA para usar esto.":
+      "Add your key in the AI assistant to use this.",
+  "Claude no puede transcribir audio. Usa Gemini o ChatGPT.":
+      "Claude cannot transcribe audio. Use Gemini or ChatGPT.",
+  "La IA no ha querido procesar este contenido.":
+      "The AI declined to process this content.",
 };

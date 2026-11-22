@@ -1,7 +1,7 @@
 name: notas
 description: Oganesson TakeNotes — synced notes for Android and Windows (Flutter + Supabase).
 publish_to: 'none'
-version: 2.3.0+29
+version: 2.4.0+30
 
 environment:
   sdk: '>=3.4.0 <4.0.0'
@@ -41,6 +41,7 @@ dependencies:
   file_selector: ^1.1.0
   record: ^7.2.0
   pdf: ^3.13.1
+  audioplayers: ^6.8.1
 
 # pdf needs xml 7; flutter_local_notifications_windows 1.x pins xml 6 but only
 # uses API that is unchanged in 7 (checked by the Windows build).

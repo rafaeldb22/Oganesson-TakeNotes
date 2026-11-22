@@ -1,4 +1,5 @@
 import 'note_export.dart';
+import 'note_files.dart';
 import 'note_history.dart';
 import 'recurrence.dart';
 import 'dart:async';
@@ -217,6 +218,7 @@ class NotesRepository extends ChangeNotifier {
     _purge.add(id);
     history.forget(id);
     _releaseImages([n]);
+    _releaseFiles([n]);
     _changed();
   }
 
@@ -229,6 +231,7 @@ class NotesRepository extends ChangeNotifier {
       history.forget(n.id);
     }
     _releaseImages(gone);
+    _releaseFiles(gone);
     _changed();
   }
 
@@ -248,6 +251,7 @@ class NotesRepository extends ChangeNotifier {
       history.forget(id);
     }
     _releaseImages(gone);
+    _releaseFiles(gone);
   }
 
   /// Borra de la nube las imágenes de notas eliminadas para siempre, salvo
@@ -259,6 +263,16 @@ class NotesRepository extends ChangeNotifier {
       paths.removeAll(NoteImages.pathsIn(n.rich));
     }
     NoteImages.instance.remove(paths);
+  }
+
+  /// Igual con los adjuntos.
+  void _releaseFiles(List<Note> gone) {
+    final paths = {for (final n in gone) ...NoteFiles.pathsIn(n.rich)};
+    if (paths.isEmpty) return;
+    for (final n in _notes.values) {
+      paths.removeAll(NoteFiles.pathsIn(n.rich));
+    }
+    NoteFiles.instance.remove(paths);
   }
 
   Note? byId(String id) => _notes[id];

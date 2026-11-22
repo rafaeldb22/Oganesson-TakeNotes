@@ -14,7 +14,9 @@ import 'editor_toolbar.dart';
 import 'folders.dart';
 import 'note_color_sheet.dart';
 import 'image_tools.dart';
+import 'drawing_pad.dart';
 import 'note_image.dart';
+import 'note_media.dart';
 import 'note_tools.dart';
 import 'format.dart';
 import 'link_picker.dart';
@@ -254,6 +256,11 @@ class _NoteEditorState extends State<NoteEditor> {
 
   bool _subtasksOpen = false;
 
+  Future<void> _draw() async {
+    final png = await showDrawingPad(context);
+    if (png != null && mounted) await insertImages(context, _ctrl, [png]);
+  }
+
   void _toolAction(String v) {
     final n = repo.byId(widget.noteId);
     if (n == null) return;
@@ -266,6 +273,12 @@ class _NoteEditorState extends State<NoteEditor> {
         saveAsTemplate(context, n);
       case 'exportar':
         showExportNote(context, n);
+      case 'voz':
+        showVoiceRecorder(context, _ctrl);
+      case 'adjuntar':
+        pickAndAttachFiles(context, _ctrl);
+      case 'dibujar':
+        _draw();
     }
   }
 
@@ -378,6 +391,27 @@ class _NoteEditorState extends State<NoteEditor> {
               onSelected: _toolAction,
               itemBuilder: (_) => [
                 PopupMenuItem(
+                    value: 'voz',
+                    child: ListTile(
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        leading: const Icon(Icons.mic_none_rounded),
+                        title: Text(tr('Nota de voz')))),
+                PopupMenuItem(
+                    value: 'adjuntar',
+                    child: ListTile(
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        leading: const Icon(Icons.attach_file_rounded),
+                        title: Text(tr('Adjuntar archivo')))),
+                PopupMenuItem(
+                    value: 'dibujar',
+                    child: ListTile(
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        leading: const Icon(Icons.draw_outlined),
+                        title: Text(tr('Dibujar')))),
+                PopupMenuItem(
                     value: 'subtareas',
                     child: ListTile(
                         dense: true,
@@ -475,6 +509,27 @@ class _NoteEditorState extends State<NoteEditor> {
                         contentPadding: EdgeInsets.zero,
                         leading: const Icon(Icons.add_photo_alternate_outlined),
                         title: Text(tr('Añadir imagen')))),
+                PopupMenuItem(
+                    value: 'voz',
+                    child: ListTile(
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        leading: const Icon(Icons.mic_none_rounded),
+                        title: Text(tr('Nota de voz')))),
+                PopupMenuItem(
+                    value: 'adjuntar',
+                    child: ListTile(
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        leading: const Icon(Icons.attach_file_rounded),
+                        title: Text(tr('Adjuntar archivo')))),
+                PopupMenuItem(
+                    value: 'dibujar',
+                    child: ListTile(
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        leading: const Icon(Icons.draw_outlined),
+                        title: Text(tr('Dibujar')))),
                 PopupMenuItem(
                     value: 'subtareas',
                     child: ListTile(
@@ -591,65 +646,70 @@ class _NoteEditorState extends State<NoteEditor> {
                             child: ImageMoveTarget(
                               controller: _ctrl,
                               editorKey: _editorKey,
-                              child: QuillEditor(
-                                controller: _ctrl,
-                                focusNode: _focus,
-                                scrollController: _scroll,
-                                config: QuillEditorConfig(
-                                  editorKey: _editorKey,
-                                  showCursor: !_caretByImage,
-                                  placeholder: tr('Escribe algo…'),
-                                  autoFocus: widget.autofocus,
-                                  expands: true,
-                                  padding: const EdgeInsets.only(bottom: 40),
-                                  customStyles: _styles(context),
-                                  // Imágenes: se dibujan con su propio estilo,
-                                  // Ctrl+V pega capturas y el teclado de Android
-                                  // puede insertar imágenes directamente.
-                                  embedBuilders: const [
-                                    NoteImageEmbedBuilder()
-                                  ],
-                                  customShortcuts:
-                                      widget.onCommandPalette == null
-                                          ? null
-                                          : const {
-                                              SingleActivator(
-                                                LogicalKeyboardKey.keyK,
-                                                control: true,
-                                              ): _PaletteIntent(),
-                                            },
-                                  customActions: widget.onCommandPalette == null
-                                      ? null
-                                      : {
-                                          _PaletteIntent:
-                                              CallbackAction<_PaletteIntent>(
-                                            onInvoke: (_) {
-                                              widget.onCommandPalette!();
-                                              return null;
-                                            },
-                                          ),
-                                        },
-                                  contentInsertionConfiguration:
-                                      ContentInsertionConfiguration(
-                                    allowedMimeTypes: const [
-                                      'image/png',
-                                      'image/jpeg',
-                                      'image/gif',
-                                      'image/webp',
+                              child: NoteMediaScope(
+                                allowAi: n != null && !n.vault,
+                                child: QuillEditor(
+                                  controller: _ctrl,
+                                  focusNode: _focus,
+                                  scrollController: _scroll,
+                                  config: QuillEditorConfig(
+                                    editorKey: _editorKey,
+                                    showCursor: !_caretByImage,
+                                    placeholder: tr('Escribe algo…'),
+                                    autoFocus: widget.autofocus,
+                                    expands: true,
+                                    padding: const EdgeInsets.only(bottom: 40),
+                                    customStyles: _styles(context),
+                                    // Imágenes: se dibujan con su propio estilo,
+                                    // Ctrl+V pega capturas y el teclado de Android
+                                    // puede insertar imágenes directamente.
+                                    embedBuilders: const [
+                                      NoteImageEmbedBuilder(),
+                                      NoteFileEmbedBuilder(),
                                     ],
-                                    onContentInserted: (c) {
-                                      final data = c.data;
-                                      if (data != null && data.isNotEmpty) {
-                                        insertImages(context, _ctrl, [data]);
-                                      }
-                                    },
+                                    customShortcuts:
+                                        widget.onCommandPalette == null
+                                            ? null
+                                            : const {
+                                                SingleActivator(
+                                                  LogicalKeyboardKey.keyK,
+                                                  control: true,
+                                                ): _PaletteIntent(),
+                                              },
+                                    customActions: widget.onCommandPalette ==
+                                            null
+                                        ? null
+                                        : {
+                                            _PaletteIntent:
+                                                CallbackAction<_PaletteIntent>(
+                                              onInvoke: (_) {
+                                                widget.onCommandPalette!();
+                                                return null;
+                                              },
+                                            ),
+                                          },
+                                    contentInsertionConfiguration:
+                                        ContentInsertionConfiguration(
+                                      allowedMimeTypes: const [
+                                        'image/png',
+                                        'image/jpeg',
+                                        'image/gif',
+                                        'image/webp',
+                                      ],
+                                      onContentInserted: (c) {
+                                        final data = c.data;
+                                        if (data != null && data.isNotEmpty) {
+                                          insertImages(context, _ctrl, [data]);
+                                        }
+                                      },
+                                    ),
+                                    // Menú de cortar/copiar/pegar con el estilo de la app.
+                                    contextMenuBuilder: (context, state) =>
+                                        buildTextMenu(
+                                            context,
+                                            state.contextMenuButtonItems,
+                                            state.contextMenuAnchors),
                                   ),
-                                  // Menú de cortar/copiar/pegar con el estilo de la app.
-                                  contextMenuBuilder: (context, state) =>
-                                      buildTextMenu(
-                                          context,
-                                          state.contextMenuButtonItems,
-                                          state.contextMenuAnchors),
                                 ),
                               ),
                             ),

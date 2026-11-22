@@ -14,7 +14,9 @@ import 'package:quill_native_bridge/quill_native_bridge.dart';
 
 import '../data/note_images.dart';
 import 'anim.dart';
+import 'drawing_pad.dart';
 import 'image_tools.dart';
+import 'note_media.dart';
 import 'context_menu.dart';
 import 'i18n.dart';
 import 'theme.dart';
@@ -479,6 +481,11 @@ class _NoteImageViewState extends State<NoteImageView> {
       MenuEntry('ver', Icons.open_in_full_rounded, tr('Ver imagen')),
       if (widget.onCropped != null)
         MenuEntry('recortar', Icons.crop_rounded, tr('Recortar')),
+      if (widget.onCropped != null)
+        MenuEntry('dibujar', Icons.draw_outlined, tr('Dibujar encima')),
+      if (NoteMediaScope.aiAllowed(context))
+        MenuEntry(
+            'ocr', Icons.document_scanner_outlined, tr('Sacar el texto (OCR)')),
       if (widget.onMoveUp != null)
         MenuEntry('subir', Icons.arrow_upward_rounded, tr('Subir')),
       if (widget.onMoveDown != null)
@@ -529,6 +536,16 @@ class _NoteImageViewState extends State<NoteImageView> {
         _open();
       case 'recortar':
         await _crop();
+      case 'dibujar':
+        final b = await _currentBytes();
+        if (b == null || !mounted) return;
+        final drawn = await showDrawingPad(context, background: b);
+        if (drawn != null) await widget.onCropped?.call(drawn);
+      case 'ocr':
+        final b = await _currentBytes();
+        if (b != null && mounted) {
+          await readImageText(context, widget.controller, b);
+        }
       case 'subir':
         widget.onMoveUp?.call();
       case 'bajar':

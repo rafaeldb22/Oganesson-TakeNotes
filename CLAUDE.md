@@ -134,6 +134,10 @@ that it still arrives. On Windows, check toasts are enabled first:
   Vault), `note_filters.dart`, `note_export.dart` (Markdown, PDF, `Backup`), UI in
   `lib/ui/note_tools.dart`. Migration 008 is optional at runtime (`serverHasTasks`). The note list
   is memoized: anything that changes it must be part of its hash in `notes_home.dart`.
+- Media (2.4): `lib/data/note_files.dart` (bucket `note-files`, migration 009, Quill custom embed
+  `oga-file`, sources `ogf://`), `lib/ui/note_media.dart` (cards, recorder, AI reading),
+  `lib/ui/drawing_pad.dart`. `NoteMediaScope.allowAi` is false in Vault notes: anything that sends
+  note content to an AI provider must check it.
 - Smooth wheel scrolling: use `SmoothScrollController` (`lib/ui/smooth_scroll.dart`) for new
   scroll views on desktop.
 - Completed tasks: `Note.doneAt` (column `notes.done_at`); done > 3 days → hidden from lists and

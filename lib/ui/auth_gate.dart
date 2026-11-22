@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../config.dart';
+import '../data/note_files.dart';
 import '../data/note_images.dart';
 import '../data/notes_repository.dart';
 import '../data/reminders.dart';
@@ -57,6 +58,8 @@ class _NotesShellState extends State<NotesShell> with WidgetsBindingObserver {
     vault.load();
     // Imágenes de las notas: caché local, subida y cola pendiente.
     NoteImages.instance.attach(
+        AppConfig.demo ? null : Supabase.instance.client, widget.userId);
+    NoteFiles.instance.attach(
         AppConfig.demo ? null : Supabase.instance.client, widget.userId);
     repo.addListener(_reprogramar);
     repo.start().then((_) {
