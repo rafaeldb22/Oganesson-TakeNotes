@@ -10,7 +10,7 @@ void main() {
       final card = HSLColor.fromColor(c.card).lightness;
       // Apagado: ni el fondo ni las tarjetas brillan (el estilo de la 1.x,
       // un poco más claro, sigue sin blanco puro).
-      final legacy = t.soft == SoftStyle.legacy;
+      final legacy = t.soft != SoftStyle.standard;
       expect(card, lessThanOrEqualTo(legacy ? 0.96 : 0.91), reason: t.id);
       expect(bg, lessThanOrEqualTo(legacy ? 0.93 : 0.87), reason: t.id);
       expect(card, greaterThan(bg - 0.02), reason: t.id);
@@ -19,7 +19,7 @@ void main() {
     }
   });
 
-  test('Clásico: gris blanco neutro, sin tinte azulado', () {
+  test('Clásico: casi blanco y neutro, sin tinte azulado', () {
     final c = themeById('clasico').lightSoft;
     for (final color in [c.background, c.card, c.hover, c.searchFill]) {
       final h = HSLColor.fromColor(color);
@@ -27,6 +27,9 @@ void main() {
       expect(color.b, closeTo(color.r, 0.002)); // nada de azul de más
     }
     expect(themeById('clasico').soft, SoftStyle.neutral);
+    // Casi blanco, pero sin blanco puro.
+    final card = HSLColor.fromColor(c.card).lightness;
+    expect(card, inInclusiveRange(0.94, 0.96));
   });
 
   test('Café: como antes de la 2.0', () {

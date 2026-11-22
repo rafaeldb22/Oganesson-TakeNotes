@@ -149,6 +149,8 @@ class _AssistantPanelState extends State<AssistantPanel> {
     s.addListener(_changed);
     settings.addListener(_changed);
     s.confirm = _confirm;
+    // La conversación de la última vez sigue ahí.
+    s.load();
     _settings = !settings.configured;
   }
 
@@ -298,12 +300,18 @@ class _AssistantPanelState extends State<AssistantPanel> {
                     if (i == s.messages.length) {
                       return _Thinking(text: s.activity ?? tr('Pensando…'));
                     }
+                    final last = i == s.messages.length - 1;
                     return _Bubble(
                       key: ObjectKey(s.messages[i]),
                       message: s.messages[i],
                       repo: s.repo,
                       onOpenNote: widget.onOpenNote,
                       onChanged: () => setState(() {}),
+                      // Solo el último error se puede reintentar.
+                      onRetry:
+                          last && s.messages[i].role == AiRole.error && !s.busy
+                              ? s.retryLast
+                              : null,
                     );
                   },
                 ),
@@ -348,15 +356,29 @@ class _AssistantPanelState extends State<AssistantPanel> {
                 ),
                 Padding(
                   padding: const EdgeInsets.only(bottom: 4),
+                  // Mientras responde, el botón detiene la respuesta.
                   child: AnimatedScale(
-                    scale: _input.text.trim().isEmpty || s.busy ? 0.85 : 1,
+                    scale: _input.text.trim().isEmpty && !s.busy ? 0.85 : 1,
                     duration: Anim.medium,
                     curve: Curves.easeOutBack,
-                    child: IconButton.filled(
-                      tooltip: tr('Enviar'),
-                      onPressed:
-                          _input.text.trim().isEmpty || s.busy ? null : _send,
-                      icon: const Icon(Icons.arrow_upward_rounded),
+                    child: AnimatedSwitcher(
+                      duration: Anim.fast,
+                      transitionBuilder: (c, a) =>
+                          ScaleTransition(scale: a, child: c),
+                      child: s.busy
+                          ? IconButton.filledTonal(
+                              key: const ValueKey('detener'),
+                              tooltip: tr('Detener'),
+                              onPressed: s.cancel,
+                              icon: const Icon(Icons.stop_rounded),
+                            )
+                          : IconButton.filled(
+                              key: const ValueKey('enviar'),
+                              tooltip: tr('Enviar'),
+                              onPressed:
+                                  _input.text.trim().isEmpty ? null : _send,
+                              icon: const Icon(Icons.arrow_upward_rounded),
+                            ),
                     ),
                   ),
                 ),
@@ -451,12 +473,14 @@ class _Bubble extends StatelessWidget {
     required this.repo,
     required this.onOpenNote,
     required this.onChanged,
+    this.onRetry,
   });
 
   final AiMessage message;
   final NotesRepository repo;
   final void Function(String id) onOpenNote;
   final VoidCallback onChanged;
+  final VoidCallback? onRetry;
 
   @override
   Widget build(BuildContext context) {
@@ -503,6 +527,31 @@ class _Bubble extends StatelessWidget {
             user ? CrossAxisAlignment.end : CrossAxisAlignment.start,
         children: [
           if (message.text.isNotEmpty) bubble,
+          // Debajo: reintentar (errores) o copiar (respuestas).
+          if (onRetry != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: TextButton.icon(
+                onPressed: onRetry,
+                style:
+                    TextButton.styleFrom(visualDensity: VisualDensity.compact),
+                icon: const Icon(Icons.refresh_rounded, size: 18),
+                label: Text(tr('Reintentar')),
+              ),
+            )
+          else if (message.role == AiRole.assistant && message.text.isNotEmpty)
+            IconButton(
+              tooltip: tr('Copiar'),
+              visualDensity: VisualDensity.compact,
+              iconSize: 16,
+              color: p.secondary,
+              onPressed: () {
+                Clipboard.setData(ClipboardData(text: message.text));
+                showToast(context, tr('Respuesta copiada'),
+                    icon: Icons.content_copy_rounded);
+              },
+              icon: const Icon(Icons.content_copy_rounded),
+            ),
           for (final a in message.actions)
             Padding(
               padding: const EdgeInsets.only(top: 6),
@@ -530,7 +579,8 @@ class _Bubble extends StatelessWidget {
   }
 }
 
-/// Texto con un Markdown mínimo: **negrita**, listas con "-" o "*".
+/// Texto con un Markdown mínimo: **negrita**, `código`, listas con "-",
+/// "*" o numeradas, y títulos (#) en negrita.
 class _RichText extends StatelessWidget {
   const _RichText(this.text, {this.color});
   final String text;
@@ -538,15 +588,22 @@ class _RichText extends StatelessWidget {
 
   List<InlineSpan> _inline(String line) {
     final spans = <InlineSpan>[];
-    final re = RegExp(r'\*\*(.+?)\*\*');
+    final re = RegExp(r'\*\*(.+?)\*\*|`([^`]+)`');
     var last = 0;
     for (final m in re.allMatches(line)) {
       if (m.start > last) {
         spans.add(TextSpan(text: line.substring(last, m.start)));
       }
-      spans.add(TextSpan(
-          text: m.group(1),
-          style: const TextStyle(fontWeight: FontWeight.w700)));
+      spans.add(m.group(1) != null
+          ? TextSpan(
+              text: m.group(1),
+              style: const TextStyle(fontWeight: FontWeight.w700))
+          : TextSpan(
+              text: m.group(2),
+              style: TextStyle(
+                  fontFamily: 'monospace',
+                  backgroundColor:
+                      (color ?? Colors.grey).withValues(alpha: 0.15))));
       last = m.end;
     }
     if (last < line.length) spans.add(TextSpan(text: line.substring(last)));
@@ -566,6 +623,29 @@ class _RichText extends StatelessWidget {
         for (final raw in lines)
           if (raw.trim().isEmpty)
             const SizedBox(height: 6)
+          else if (RegExp(r'^\s*\d+[.)]\s+').hasMatch(raw))
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('${RegExp(r'^\s*(\d+)').firstMatch(raw)!.group(1)}.  ',
+                      style: style.copyWith(fontWeight: FontWeight.w600)),
+                  Expanded(
+                    child: Text.rich(
+                        TextSpan(
+                            children: _inline(raw.replaceFirst(
+                                RegExp(r'^\s*\d+[.)]\s+'), ''))),
+                        style: style),
+                  ),
+                ],
+              ),
+            )
+          else if (RegExp(r'^#+\s').hasMatch(raw))
+            Text.rich(
+                TextSpan(
+                    children: _inline(raw.replaceFirst(RegExp(r'^#+\s*'), ''))),
+                style: style.copyWith(fontWeight: FontWeight.w800))
           else if (RegExp(r'^\s*[-*•]\s+').hasMatch(raw))
             Padding(
               padding: const EdgeInsets.only(top: 2),
@@ -616,6 +696,8 @@ class _ActionChip extends StatelessWidget {
     'push_pin': Icons.push_pin_outlined,
     'archive': Icons.archive_outlined,
     'delete': Icons.delete_outline_rounded,
+    'palette': Icons.palette_outlined,
+    'link': Icons.hub_outlined,
   };
 
   @override

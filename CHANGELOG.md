@@ -2,6 +2,26 @@
 
 All notable changes to Oganesson TakeNotes (formerly *Notas* / *BabuNotes*).
 
+## [2.1.0] — 2026-11-22
+
+### Added
+- AI assistant: **Stop** button while it answers, **Retry** on errors, **copy** an answer, and the
+  conversation is **kept when you close the app** (old changes keep *Open*, not *Undo*).
+- New AI tools: **set a note's colour** and **link notes** (they show up in the note network);
+  note search now returns a snippet around the match.
+- Answers render numbered lists, `code` and headings.
+
+### Changed
+- **Prompt caching**: the assistant's instructions no longer contain the date and time (which
+  changed on every request and made every question be processed from scratch); the date, time
+  and folders now travel with each question. Claude requests also use automatic caching and low
+  effort (the recommended setting for chat): faster and cheaper answers.
+- Tool descriptions now say *when* to use each tool, which helps every model pick the right one,
+  and the instructions were tightened (ask when ambiguous, natural dates, never show ids).
+- Temporary errors (rate limit per minute, overloaded service) are retried automatically.
+- **Classic light theme**: almost white again (no bluish tint), just slightly dimmed so it does
+  not glare.
+
 ## [2.0.1] — 2026-11-22
 
 ### Changed

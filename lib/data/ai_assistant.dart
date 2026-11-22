@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/note.dart';
 import '../ui/i18n.dart';
+import '../ui/urgency.dart' show noteColors;
 import 'notes_repository.dart';
 
 // ===================================================================
@@ -193,9 +194,18 @@ class AiSettings extends ChangeNotifier {
 
 /// Error de la API explicado para el usuario.
 class AiException implements Exception {
-  AiException(this.message, {this.code, this.modelSpecific = false});
+  AiException(this.message,
+      {this.code,
+      this.modelSpecific = false,
+      this.retryable = false,
+      this.retryAfter});
   final String message;
   final int? code;
+
+  /// Error pasajero (servicio saturado, demasiadas peticiones seguidas): se
+  /// reintenta solo, tras [retryAfter] o un momento.
+  final bool retryable;
+  final Duration? retryAfter;
 
   /// El problema es del modelo (no existe, o sin cuota para él): puede que
   /// otro modelo sí funcione con la misma clave.
@@ -267,6 +277,22 @@ abstract class AiClient {
 
   /// Mensaje del usuario en el formato de la API.
   Map<String, dynamic> userMessage(String text);
+
+  /// ¿Es un mensaje escrito por el usuario (no una respuesta de función)?
+  /// El historial guardado solo se recorta por aquí, para no separar una
+  /// llamada a función de su respuesta.
+  bool isUserText(Map<String, dynamic> msg) {
+    if (msg['role'] != 'user') return false;
+    final parts = msg['parts'] ?? msg['content'];
+    if (parts is String) return true;
+    if (parts is List) {
+      return parts.every((p) =>
+          p is Map &&
+          (p['text'] != null && p['functionResponse'] == null) &&
+          p['type'] != 'tool_result');
+    }
+    return false;
+  }
 
   /// Respuestas de las funciones, en el formato de la API.
   List<Map<String, dynamic>> toolResults(
@@ -519,7 +545,12 @@ class GeminiClient extends AiClient {
         text = tr('Google ha limitado tu clave por ahora (límite del plan '
             'gratis). Espera un poco y vuelve a probar, o elige otro modelo.');
       }
-      return AiException('$text$google', code: 429, modelSpecific: true);
+      return AiException('$text$google',
+          code: 429,
+          modelSpecific: true,
+          // Solo el límite por minuto se arregla esperando un poco.
+          retryable: wait != null && wait <= 20,
+          retryAfter: wait == null ? null : Duration(seconds: wait));
     }
     if (msg.contains('API key not valid') ||
         msg.contains('API_KEY_INVALID') ||
@@ -538,6 +569,13 @@ class GeminiClient extends AiClient {
       return AiException(
           tr('Tu clave no tiene permiso para usar la API de Gemini.'),
           code: code);
+    }
+    if (code == 503 || code == 500) {
+      return AiException(
+          tr('El servicio de la IA está saturado ahora mismo. Vuelve a probar '
+              'en un rato.'),
+          code: code,
+          retryable: true);
     }
     return AiException(
         '${trf('La IA respondió con un error ({0}).', [code])}$google',
@@ -694,7 +732,15 @@ class OpenAiClient extends AiClient {
       return AiException(
           '${tr('Demasiadas peticiones seguidas. Espera un minuto y vuelve a '
               'probar.')}$openai',
-          code: code);
+          code: code,
+          retryable: true);
+    }
+    if (code >= 500) {
+      return AiException(
+          tr('El servicio de la IA está saturado ahora mismo. Vuelve a probar '
+              'en un rato.'),
+          code: code,
+          retryable: true);
     }
     if (code == 404 || type == 'model_not_found') {
       return AiException(
@@ -796,6 +842,11 @@ class ClaudeClient extends AiClient {
           }
       ],
       if (_withFallbacks.contains(model)) 'fallbacks': 'default',
+      // Caché automática: herramientas, instrucciones y conversación previa
+      // no se vuelven a procesar en cada pregunta (más rápido y barato).
+      'cache_control': {'type': 'ephemeral'},
+      // Para un chat basta esfuerzo bajo: respuestas rápidas y baratas.
+      'output_config': {'effort': 'low'},
     });
     if (code != 200) throw _error(code, res, model: model);
     if (res['stop_reason'] == 'refusal') {
@@ -851,12 +902,14 @@ class ClaudeClient extends AiClient {
       return AiException(
           '${tr('Demasiadas peticiones seguidas. Espera un minuto y vuelve a '
               'probar.')}$claude',
-          code: code);
+          code: code,
+          retryable: true);
     }
-    if (code == 529 || type == 'overloaded_error') {
+    if (code == 529 || type == 'overloaded_error' || code >= 500) {
       return AiException(
           tr('Claude está saturado ahora mismo. Vuelve a probar en un rato.'),
-          code: code);
+          code: code,
+          retryable: true);
     }
     return AiException(
         '${trf('La IA respondió con un error ({0}).', [code])}$claude',
@@ -911,55 +964,77 @@ class AiTools {
         if (enumValues != null) 'enum': enumValues,
       };
 
+  // Las descripciones dicen CUÁNDO usar cada función (no solo qué hace):
+  // así los modelos aciertan más al elegir.
   static final declarations = <Map<String, dynamic>>[
     {
       'name': 'list_notes',
-      'description': 'Lista las notas del usuario (nunca las del Vault). '
-          'Opcionalmente filtra por texto o carpeta.',
+      'description': 'Busca y lista las notas del usuario (nunca las del '
+          'Vault), con un fragmento del texto. Úsala siempre que el usuario '
+          'pregunte por sus notas, quiera encontrar una, resumir varias o '
+          'antes de cambiar una nota de la que no tienes el id.',
       'parameters': _obj({
-        'query': _s('Texto a buscar en las notas (opcional).'),
-        'folder': _s('Nombre de la carpeta (opcional).'),
-        'limit': {'type': 'INTEGER', 'description': 'Máximo (por defecto 30).'},
+        'query': _s('Palabras a buscar en el título o el texto (opcional).'),
+        'folder': _s('Nombre de la carpeta para filtrar (opcional).'),
+        'limit': {
+          'type': 'INTEGER',
+          'description': 'Máximo de notas (por defecto 30).'
+        },
       }),
     },
     {
       'name': 'read_note',
-      'description': 'Lee el texto completo de una nota por su id.',
-      'parameters': _obj({'id': _s('Id de la nota.')}, ['id']),
+      'description': 'Lee el texto completo de una nota. Úsala cuando '
+          'necesites el contenido entero (para resumirla, responder sobre ella '
+          'o antes de añadirle algo); list_notes solo da un fragmento.',
+      'parameters': _obj({'id': _s('Id de la nota (de list_notes).')}, ['id']),
     },
     {
       'name': 'list_tasks',
       'description': 'Lista las tareas (notas con fecha límite) con su '
-          'inicio, fecha límite y estado.',
+          'inicio, fecha límite y si están hechas. Úsala cuando el usuario '
+          'pregunte qué tiene pendiente, qué vence, qué tiene hoy, esta '
+          'semana, qué está atrasado o qué ha terminado.',
       'parameters': _obj({
-        'status': _s('Qué tareas.',
+        'status': _s(
+            'Qué tareas: pending (pendientes), overdue (vencidas), done '
+            '(hechas) o all.',
             enumValues: ['pending', 'overdue', 'done', 'all']),
       }),
     },
     {
       'name': 'list_folders',
       // Sin parámetros: Gemini no acepta un objeto vacío.
-      'description': 'Lista las carpetas y cuántas notas tiene cada una.',
+      'description': 'Lista las carpetas y cuántas notas tiene cada una. '
+          'Úsala cuando el usuario pregunte por sus carpetas o antes de mover '
+          'una nota si no sabes qué carpetas existen.',
     },
     {
       'name': 'create_note',
-      'description': 'Crea una nota. La primera línea es el título. Si tiene '
-          'fecha límite, es una tarea.',
+      'description': 'Crea una nota nueva. Úsala cuando el usuario pida '
+          'apuntar, crear, guardar o anotar algo. Si menciona una fecha u hora '
+          'límite, pásala en "due" (así se convierte en tarea con avisos).',
       'parameters': _obj({
-        'title': _s('Título de la nota.'),
-        'body': _s('Texto de la nota, debajo del título (opcional).'),
+        'title': _s('Título corto (la primera línea de la nota).'),
+        'body': _s('Texto debajo del título; usa saltos de línea para las '
+            'listas (opcional).'),
         'folder': _s('Carpeta (se crea si no existe, opcional).'),
         'due': _s('Fecha límite, ISO 8601 en hora local, p. ej. '
             '2026-11-28T20:00 (opcional).'),
         'start': _s('Inicio del periodo de la tarea, ISO 8601 (opcional).'),
-        'pinned': {'type': 'BOOLEAN', 'description': 'Fijarla arriba.'},
+        'pinned': {
+          'type': 'BOOLEAN',
+          'description': 'Fijarla arriba de la lista.'
+        },
       }, [
         'title'
       ]),
     },
     {
       'name': 'append_to_note',
-      'description': 'Añade texto al final de una nota existente.',
+      'description': 'Añade texto al final de una nota que ya existe. Úsala '
+          'cuando el usuario quiera añadir algo a una nota (un punto a una '
+          'lista, una idea, un comentario).',
       'parameters': _obj({
         'id': _s('Id de la nota.'),
         'text': _s('Texto a añadir.'),
@@ -970,8 +1045,10 @@ class AiTools {
     },
     {
       'name': 'set_dates',
-      'description': 'Pone, cambia o quita la fecha límite y el inicio de una '
-          'nota (con fecha límite pasa a ser una tarea).',
+      'description': 'Pone, cambia o quita la fecha límite (y el inicio) de '
+          'una nota; con fecha límite pasa a ser una tarea con avisos. Úsala '
+          'cuando el usuario quiera programar, aplazar, adelantar o quitar la '
+          'fecha de algo.',
       'parameters': _obj({
         'id': _s('Id de la nota.'),
         'due': _s('Fecha límite ISO 8601 en hora local.'),
@@ -986,7 +1063,9 @@ class AiTools {
     },
     {
       'name': 'set_done',
-      'description': 'Marca una tarea como hecha o pendiente.',
+      'description': 'Marca una tarea como hecha o como pendiente otra vez. '
+          'Úsala cuando el usuario diga que ha terminado algo o que lo '
+          'desmarque.',
       'parameters': _obj({
         'id': _s('Id de la nota.'),
         'done': {'type': 'BOOLEAN', 'description': 'Hecha (true) o no.'},
@@ -998,7 +1077,8 @@ class AiTools {
     {
       'name': 'move_to_folder',
       'description': 'Mueve una nota a una carpeta (se crea si no existe). '
-          'Carpeta vacía = sin carpeta.',
+          'Úsala para organizar o clasificar notas. Carpeta vacía = sin '
+          'carpeta.',
       'parameters': _obj({
         'id': _s('Id de la nota.'),
         'folder': _s('Nombre de la carpeta.'),
@@ -1009,7 +1089,8 @@ class AiTools {
     },
     {
       'name': 'set_pinned',
-      'description': 'Fija o desfija una nota arriba de la lista.',
+      'description': 'Fija o desfija una nota arriba de la lista. Úsala '
+          'cuando el usuario quiera destacar una nota o dejar de destacarla.',
       'parameters': _obj({
         'id': _s('Id de la nota.'),
         'pinned': {'type': 'BOOLEAN', 'description': 'Fijada o no.'},
@@ -1019,14 +1100,50 @@ class AiTools {
       ]),
     },
     {
+      'name': 'set_color',
+      'description': 'Cambia el color de una nota (también el de su barra de '
+          'tiempo). Úsala cuando el usuario pida pintar, colorear o marcar '
+          'una nota con un color.',
+      'parameters': _obj({
+        'id': _s('Id de la nota.'),
+        'color': _s('Color, o "ninguno" para quitarlo.', enumValues: [
+          for (final (name, _) in noteColors) name.toLowerCase(),
+          'ninguno',
+        ]),
+      }, [
+        'id',
+        'color'
+      ]),
+    },
+    {
+      'name': 'link_notes',
+      'description': 'Enlaza una nota con otras (aparecen conectadas en la '
+          'red de notas). Úsala cuando el usuario quiera relacionar o conectar '
+          'notas.',
+      'parameters': _obj({
+        'id': _s('Id de la nota de origen.'),
+        'targets': {
+          'type': 'ARRAY',
+          'description': 'Ids de las notas a enlazar.',
+          'items': {'type': 'STRING'},
+        },
+      }, [
+        'id',
+        'targets'
+      ]),
+    },
+    {
       'name': 'archive_note',
-      'description': 'Archiva una nota (el usuario debe confirmarlo).',
+      'description': 'Archiva una nota (sale de la lista, se puede '
+          'recuperar). Úsala solo si el usuario pide archivar; la app le pide '
+          'confirmación.',
       'parameters': _obj({'id': _s('Id de la nota.')}, ['id']),
     },
     {
       'name': 'delete_note',
-      'description': 'Mueve una nota a la papelera (el usuario debe '
-          'confirmarlo; se puede recuperar 3 días).',
+      'description': 'Mueve una nota a la papelera (se puede recuperar 3 '
+          'días). Úsala solo si el usuario pide borrar o eliminar; la app le '
+          'pide confirmación.',
       'parameters': _obj({'id': _s('Id de la nota.')}, ['id']),
     },
   ];
@@ -1057,6 +1174,19 @@ class AiTools {
       if (f.name.toLowerCase() == n.toLowerCase()) return f.id;
     }
     return create ? repo.createFolder(n).id : null;
+  }
+
+  /// Trozo del texto alrededor de la búsqueda (o el principio de la nota).
+  static String _snippet(Note n, String q) {
+    final text =
+        n.content.replaceAll('\uFFFC', '[imagen]').replaceAll('\n', ' ');
+    if (q.isEmpty)
+      return text.length > 140 ? '${text.substring(0, 140)}…' : text;
+    final i = text.toLowerCase().indexOf(q);
+    if (i < 0) return text.length > 140 ? '${text.substring(0, 140)}…' : text;
+    final a = (i - 50).clamp(0, text.length);
+    final b = (i + q.length + 80).clamp(0, text.length);
+    return '${a > 0 ? '…' : ''}${text.substring(a, b)}${b < text.length ? '…' : ''}';
   }
 
   Map<String, dynamic> _summary(Note n) => {
@@ -1129,7 +1259,7 @@ class AiTools {
             .where((n) => q.isEmpty || n.content.toLowerCase().contains(q))
             .where((n) => fid == null || n.folderId == fid)
             .take(limit)
-            .map(_summary)
+            .map((n) => {..._summary(n), 'snippet': _snippet(n, q)})
             .toList();
         return {'count': list.length, 'notes': list};
 
@@ -1292,6 +1422,39 @@ class AiTools {
         }
         return {'ok': true};
 
+      case 'set_color':
+        final n = _note(a['id']);
+        if (n == null) return {'error': 'No existe esa nota.'};
+        final name = '${a['color'] ?? ''}'.toLowerCase().trim();
+        int? color;
+        if (name != 'ninguno' && name.isNotEmpty) {
+          final m = noteColors.where((c) => c.$1.toLowerCase() == name);
+          if (m.isEmpty) return {'error': 'Color desconocido: $name'};
+          color = m.first.$2;
+        }
+        _record(
+            'palette',
+            trf('Color de «{0}»: {1}', [n.title, name.isEmpty ? '—' : name]),
+            n);
+        repo.setColor(n.id, color);
+        return {'ok': true};
+
+      case 'link_notes':
+        final n = _note(a['id']);
+        if (n == null) return {'error': 'No existe esa nota.'};
+        final targets = [
+          for (final t in (a['targets'] as List?) ?? const [])
+            if (_note(t) != null && '$t' != n.id) '$t'
+        ];
+        if (targets.isEmpty)
+          return {'error': 'No hay notas válidas que enlazar.'};
+        _record(
+            'link',
+            trf('«{0}» enlazada con {1} nota(s)', [n.title, targets.length]),
+            n);
+        repo.addLinks(n.id, targets);
+        return {'ok': true, 'linked': targets.length};
+
       case 'archive_note':
       case 'delete_note':
         final n = _note(a['id']);
@@ -1329,11 +1492,36 @@ class AiMessage {
   final AiRole role;
   final String text;
   final List<AiAction> actions;
+
+  Map<String, dynamic> toJson() => {
+        'role': role.name,
+        'text': text,
+        'actions': [
+          for (final a in actions)
+            {'icon': a.icon, 'label': a.label, 'noteId': a.noteId}
+        ],
+      };
+
+  /// Mensaje guardado (sin Deshacer: eso solo vale en la sesión en que se
+  /// hizo el cambio).
+  static AiMessage? fromJson(Object? j) {
+    if (j is! Map) return null;
+    final role = AiRole.values.where((r) => r.name == j['role']).firstOrNull;
+    if (role == null) return null;
+    return AiMessage(role, '${j['text'] ?? ''}', actions: [
+      for (final a in (j['actions'] as List?) ?? const [])
+        if (a is Map)
+          AiAction(
+              icon: '${a['icon']}',
+              label: '${a['label']}',
+              noteId: a['noteId'] as String?),
+    ]);
+  }
 }
 
-/// Conversación con el asistente (se mantiene mientras la app está abierta).
-/// Funciona igual con Gemini, ChatGPT o Claude: cada cliente traduce el
-/// historial y las funciones al formato de su API.
+/// Conversación con el asistente. Funciona igual con Gemini, ChatGPT o
+/// Claude (cada cliente traduce el historial y las funciones a su API) y se
+/// guarda en el dispositivo para seguir al volver a abrir la app.
 class AiSession extends ChangeNotifier {
   AiSession(this.repo, {AiTransport? transport, AiSettings? settings})
       : _transport = transport,
@@ -1357,21 +1545,122 @@ class AiSession extends ChangeNotifier {
   /// La pone el panel para pedir confirmaciones.
   AiConfirm confirm = (_) async => false;
 
-  static const _maxSteps = 8;
+  /// Espera antes de reintentar un error pasajero (se acorta en los tests).
+  @visibleForTesting
+  Duration Function(AiException e, int attempt) retryDelay =
+      (e, attempt) => e.retryAfter ?? Duration(seconds: attempt == 0 ? 2 : 5);
 
-  void clear() {
-    messages.clear();
-    _history.clear();
-    notifyListeners();
+  static const _maxSteps = 8;
+  static const _maxRetries = 2;
+  static const _maxSavedMessages = 40;
+  static const _maxSavedHistory = 80;
+
+  int _run = 0; // cada envío tiene su número: detener invalida el actual
+  String? _lastQuestion;
+  bool _loaded = false;
+
+  String get _prefsKey => 'asistente_chat_${repo.userId}';
+
+  // ----------------------------------------------------- guardar / cargar
+
+  /// Carga la conversación guardada (una vez).
+  Future<void> load() async {
+    if (_loaded) return;
+    _loaded = true;
+    try {
+      final raw = (await SharedPreferences.getInstance()).getString(_prefsKey);
+      if (raw == null) return;
+      final j = jsonDecode(raw) as Map<String, dynamic>;
+      messages
+        ..clear()
+        ..addAll([
+          for (final m in (j['messages'] as List?) ?? const [])
+            if (AiMessage.fromJson(m) case final msg?) msg
+        ]);
+      _historyProvider =
+          AiProvider.values.where((p) => p.name == j['provider']).firstOrNull;
+      _history
+        ..clear()
+        ..addAll([
+          for (final h in (j['history'] as List?) ?? const [])
+            if (h is Map) Map<String, dynamic>.from(h)
+        ]);
+      notifyListeners();
+    } catch (e) {
+      debugPrint('IA: no se pudo cargar la conversación ($e)');
+    }
   }
 
+  Future<void> _save() async {
+    try {
+      // El historial solo se recorta por un mensaje del usuario, para no
+      // dejar una llamada a función sin su respuesta.
+      var start = 0;
+      if (_history.length > _maxSavedHistory && _historyProvider != null) {
+        final c = AiClient.forProvider(_historyProvider!);
+        start = _history.length - _maxSavedHistory;
+        while (start < _history.length && !c.isUserText(_history[start])) {
+          start++;
+        }
+      }
+      final msgs = messages.length > _maxSavedMessages
+          ? messages.sublist(messages.length - _maxSavedMessages)
+          : messages;
+      await (await SharedPreferences.getInstance()).setString(
+          _prefsKey,
+          jsonEncode({
+            'provider': _historyProvider?.name,
+            'history': _history.sublist(start),
+            'messages': [for (final m in msgs) m.toJson()],
+          }));
+    } catch (e) {
+      debugPrint('IA: no se pudo guardar la conversación ($e)');
+    }
+  }
+
+  void clear() {
+    _run++;
+    messages.clear();
+    _history.clear();
+    busy = false;
+    activity = null;
+    notifyListeners();
+    _save();
+  }
+
+  // ------------------------------------------------------ instrucciones
+
+  /// Instrucciones FIJAS (sin fecha ni nada que cambie en cada pregunta),
+  /// para que la parte inicial de cada petición sea siempre igual y los
+  /// proveedores puedan reutilizarla de su caché.
   String _system() {
+    final english = appLanguage.code == 'en';
+    return '''
+Eres el asistente de Oganesson TakeNotes, una app de notas y tareas. Ayudas al usuario a consultar, crear y organizar sus notas y tareas usando las funciones.
+
+Cómo trabajar:
+- Usa las funciones para mirar y cambiar notas; no supongas su contenido. Los ids salen de list_notes o list_tasks: nunca los inventes.
+- Cada mensaje del usuario lleva al final un bloque <contexto> con la fecha y hora actuales y sus carpetas. Úsalo para entender "hoy", "mañana", "el viernes"… Las fechas que envíes van en ISO 8601 en hora local, sin zona.
+- Una tarea es una nota con fecha límite ("due"); "start" es el inicio de su periodo.
+- Si la petición es ambigua (varias notas encajan, falta la fecha…), pregunta antes de cambiar nada.
+- Archivar o borrar: la app pide confirmación al usuario; si dice que no, no insistas.
+- Las notas del Vault son privadas: no puedes verlas ni cambiarlas. Si te preguntan por ellas, dilo.
+
+Cómo responder:
+- SIEMPRE en ${english ? 'inglés' : 'español'}, breve, claro y amable.
+- No enseñes ids ni fechas ISO: escribe las fechas de forma natural ("el viernes 28 a las 10:00").
+- Cuando cambies algo, dilo en una frase (la app muestra además una ficha con Abrir y Deshacer).
+- Usa listas cortas con guiones cuando ayuden y **negrita** para los títulos de las notas.
+''';
+  }
+
+  /// Lo que cambia en cada pregunta: va al final del mensaje del usuario.
+  String _context() {
     final now = DateTime.now();
     final off = now.timeZoneOffset;
     final sign = off.isNegative ? '-' : '+';
     final hh = off.inHours.abs().toString().padLeft(2, '0');
     final mm = (off.inMinutes.abs() % 60).toString().padLeft(2, '0');
-    final english = appLanguage.code == 'en';
     const days = [
       'lunes',
       'martes',
@@ -1381,23 +1670,64 @@ class AiSession extends ChangeNotifier {
       'sábado',
       'domingo'
     ];
-    return '''
-Eres el asistente de Oganesson TakeNotes, una app de notas y tareas.
-Ahora es ${now.toIso8601String().substring(0, 16)} (${days[now.weekday - 1]}), zona horaria UTC$sign$hh:$mm.
-Responde SIEMPRE en ${english ? 'inglés' : 'español'}, de forma breve, clara y amable.
-- Usa las funciones para consultar y cambiar notas y tareas. No inventes ids: búscalos con list_notes o list_tasks.
-- Las fechas que envíes van en ISO 8601 en hora local (sin zona). Calcula "mañana", "el viernes"… a partir de la fecha de arriba.
-- Una tarea es una nota con fecha límite ("due"); "start" es el inicio de su periodo.
-- Las notas del Vault son privadas: no puedes verlas ni cambiarlas. Si te preguntan por ellas, dilo.
-- Para archivar o borrar, la app pide confirmación al usuario.
-- Cuando cambies algo, dilo en una frase. Usa listas cortas con guiones cuando ayuden.
-''';
+    final folders = repo.folders.map((f) => f.name).join(', ');
+    return '<contexto>Ahora: ${now.toIso8601String().substring(0, 16)} '
+        '(${days[now.weekday - 1]}), UTC$sign$hh:$mm. '
+        'Carpetas: ${folders.isEmpty ? 'ninguna' : folders}.</contexto>';
+  }
+
+  // ------------------------------------------------------------ enviar
+
+  /// Detiene la respuesta en curso (lo que llegue después se ignora).
+  void cancel() {
+    if (!busy) return;
+    _run++;
+    busy = false;
+    activity = null;
+    messages.add(AiMessage(AiRole.error, tr('Respuesta detenida.')));
+    notifyListeners();
+  }
+
+  /// Vuelve a enviar la última pregunta (tras un error).
+  Future<void> retryLast() async {
+    final q = _lastQuestion;
+    if (q == null || busy) return;
+    if (messages.isNotEmpty && messages.last.role == AiRole.error) {
+      messages.removeLast();
+    }
+    if (messages.isNotEmpty &&
+        messages.last.role == AiRole.user &&
+        messages.last.text == q) {
+      messages.removeLast();
+    }
+    await send(q);
+  }
+
+  Future<AiTurn> _complete(AiClient client, int run) async {
+    for (var attempt = 0;; attempt++) {
+      try {
+        return await client.complete(
+          apiKey: settings.apiKey!,
+          model: settings.model,
+          system: _system(),
+          history: _history,
+          tools: AiTools.declarations,
+        );
+      } on AiException catch (e) {
+        if (!e.retryable || attempt >= _maxRetries || run != _run) rethrow;
+        activity = tr('El servicio está ocupado, reintentando…');
+        notifyListeners();
+        await Future<void>.delayed(retryDelay(e, attempt));
+        if (run != _run) rethrow;
+      }
+    }
   }
 
   Future<void> send(String text) async {
     final t = text.trim();
     if (t.isEmpty || busy) return;
     await settings.load();
+    await load();
     if (!settings.configured) {
       messages.add(AiMessage(AiRole.error, tr('Primero pon tu clave de IA.')));
       notifyListeners();
@@ -1409,10 +1739,12 @@ Responde SIEMPRE en ${english ? 'inglés' : 'español'}, de forma breve, clara y
       _historyProvider = provider;
     }
     final client = AiClient.forProvider(provider, transport: _transport);
+    final run = ++_run;
+    _lastQuestion = t;
 
     messages.add(AiMessage(AiRole.user, t));
     final start = _history.length;
-    _history.add(client.userMessage(t));
+    _history.add(client.userMessage('$t\n\n${_context()}'));
     busy = true;
     activity = tr('Pensando…');
     notifyListeners();
@@ -1421,13 +1753,8 @@ Responde SIEMPRE en ${english ? 'inglés' : 'español'}, de forma breve, clara y
     final reply = StringBuffer();
     try {
       for (var step = 0; step < _maxSteps; step++) {
-        final turn = await client.complete(
-          apiKey: settings.apiKey!,
-          model: settings.model,
-          system: _system(),
-          history: _history,
-          tools: AiTools.declarations,
-        );
+        final turn = await _complete(client, run);
+        if (run != _run) return; // detenida
         _history.add(turn.raw);
         if (turn.text.trim().isNotEmpty) {
           if (reply.isNotEmpty) reply.write('\n\n');
@@ -1440,25 +1767,30 @@ Responde SIEMPRE en ${english ? 'inglés' : 'español'}, de forma breve, clara y
           notifyListeners();
           results.add((c, await tools.run(c.name, c.args)));
         }
+        if (run != _run) return;
         _history.addAll(client.toolResults(results));
         activity = tr('Pensando…');
         notifyListeners();
       }
-      final text = reply.toString().trim();
+      final out = reply.toString().trim();
       messages.add(AiMessage(
         AiRole.assistant,
-        text.isEmpty && tools.actions.isNotEmpty ? tr('Hecho.') : text,
+        out.isEmpty && tools.actions.isNotEmpty ? tr('Hecho.') : out,
         actions: List.of(tools.actions),
       ));
     } on AiException catch (e) {
+      if (run != _run) return;
       // La pregunta que ha fallado no se queda en el historial.
       _history.removeRange(start, _history.length);
       messages.add(
           AiMessage(AiRole.error, e.message, actions: List.of(tools.actions)));
     } finally {
-      busy = false;
-      activity = null;
-      notifyListeners();
+      if (run == _run) {
+        busy = false;
+        activity = null;
+        notifyListeners();
+        unawaited(_save());
+      }
     }
   }
 

@@ -75,17 +75,18 @@ class NotasColors extends ThemeExtension<NotasColors> {
           hover: shift(hover, -0.07, maxL: 0.93),
         );
       case SoftStyle.neutral:
-        // Igual de apagado que el estándar, pero en gris blanco neutro.
+        // Casi blanco y neutro (sin el tono azulado del original), solo un
+        // poco más oscuro para que no deslumbre.
         return NotasColors(
-          accent: shift(accent, -0.06, ds: 0.04),
+          accent: shift(accent, -0.04, ds: 0.04),
           onAccent: onAccent,
-          background: grey(background, -0.10, maxL: 0.865),
-          card: grey(card, -0.09, maxL: 0.905),
-          secondary: grey(secondary, -0.10),
-          separator: grey(separator, -0.11),
-          selected: shift(selected, -0.09, ds: 0.05),
-          searchFill: grey(searchFill, -0.11, maxL: 0.84),
-          hover: grey(hover, -0.12, maxL: 0.875),
+          background: grey(background, -0.035, maxL: 0.925),
+          card: grey(card, -0.04, maxL: 0.955),
+          secondary: grey(secondary, -0.08),
+          separator: grey(separator, -0.06),
+          selected: shift(selected, -0.05, ds: 0.05),
+          searchFill: grey(searchFill, -0.045, maxL: 0.885),
+          hover: grey(hover, -0.06, maxL: 0.935),
         );
       case SoftStyle.standard:
         break;
@@ -163,7 +164,7 @@ enum SoftStyle {
   /// Como en la 1.x, más claro.
   legacy,
 
-  /// Más oscuro y en gris neutro, sin tinte de color.
+  /// Casi blanco y neutro (sin tinte de color), apenas más oscuro.
   neutral,
 }
 

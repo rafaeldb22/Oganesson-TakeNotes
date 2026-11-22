@@ -600,4 +600,14 @@ const enStrings = <String, String>{
   'El más capaz para el día a día': 'The most capable for everyday use',
   'Muy capaz y más barato': 'Very capable and cheaper',
   'El más rápido y barato': 'The fastest and cheapest',
+
+  // --- Asistente: detener, reintentar, color y enlaces
+  'El servicio de la IA está saturado ahora mismo. Vuelve a probar en un rato.':
+      'The AI service is overloaded right now. Try again in a while.',
+  'Color de «{0}»: {1}': 'Colour of “{0}”: {1}',
+  '«{0}» enlazada con {1} nota(s)': '“{0}” linked to {1} note(s)',
+  'Respuesta detenida.': 'Response stopped.',
+  'El servicio está ocupado, reintentando…': 'The service is busy, retrying…',
+  'Detener': 'Stop',
+  'Respuesta copiada': 'Answer copied',
 };

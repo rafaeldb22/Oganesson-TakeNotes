@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -324,6 +325,164 @@ void main() {
       expect(e.message, contains('no tiene saldo'));
     }
     expect(api.sent.length, 1);
+  });
+
+  group('mejoras del asistente', () {
+    Map<String, dynamic> text(String t) => _model([
+          {'text': t}
+        ]);
+
+    test('instrucciones fijas (caché) y contexto en cada pregunta', () async {
+      final repo = _repo();
+      await AiSettings.instance
+          .save(provider: AiProvider.gemini, apiKey: 'k', model: 'm');
+      final api = _FakeApi([(200, text('a')), (200, text('b'))]);
+      final s = AiSession(repo, transport: api.call);
+      await s.send('hola');
+      await s.send('¿y mañana?');
+      // El inicio de la petición es idéntico: los proveedores lo cachean.
+      expect(jsonEncode(api.sent[0]['systemInstruction']),
+          jsonEncode(api.sent[1]['systemInstruction']));
+      // Ni fecha ni hora en las instrucciones (cambiarían en cada pregunta).
+      expect(jsonEncode(api.sent[0]['systemInstruction']),
+          isNot(contains('Ahora:')));
+      // La fecha y las carpetas van con cada pregunta.
+      final last = (api.sent[1]['contents'] as List).last;
+      expect(jsonEncode(last), contains('<contexto>'));
+      expect(jsonEncode(last), contains('Clase'));
+      // El chat solo enseña lo que escribió el usuario.
+      expect(s.messages[2].text, '¿y mañana?');
+      repo.dispose();
+    });
+
+    test('Claude: caché automática y esfuerzo bajo', () async {
+      final repo = _repo();
+      await AiSettings.instance.save(
+          provider: AiProvider.claude, apiKey: 'k', model: 'claude-opus-5-5');
+      final api = _FakeApi([
+        (
+          200,
+          {
+            'stop_reason': 'end_turn',
+            'content': [
+              {'type': 'text', 'text': 'Hola'}
+            ]
+          }
+        )
+      ]);
+      await AiSession(repo, transport: api.call).send('hola');
+      expect(api.sent.single['cache_control'], {'type': 'ephemeral'});
+      expect(api.sent.single['output_config'], {'effort': 'low'});
+      repo.dispose();
+    });
+
+    test('servicio saturado: reintenta solo y responde', () async {
+      final repo = _repo();
+      await AiSettings.instance.save(
+          provider: AiProvider.claude, apiKey: 'k', model: 'claude-opus-5-5');
+      final api = _FakeApi([
+        (
+          529,
+          {
+            'type': 'error',
+            'error': {'type': 'overloaded_error', 'message': 'Overloaded'}
+          }
+        ),
+        (
+          200,
+          {
+            'stop_reason': 'end_turn',
+            'content': [
+              {'type': 'text', 'text': 'Ya está'}
+            ]
+          }
+        ),
+      ]);
+      final s = AiSession(repo, transport: api.call)
+        ..retryDelay = (_, __) => Duration.zero;
+      await s.send('hola');
+      expect(s.messages.last.text, 'Ya está');
+      expect(api.sent.length, 2);
+      repo.dispose();
+    });
+
+    test('detener: la respuesta que llega tarde se ignora', () async {
+      final repo = _repo();
+      await AiSettings.instance
+          .save(provider: AiProvider.gemini, apiKey: 'k', model: 'm');
+      final gate = Completer<void>();
+      Future<(int, Map<String, dynamic>)> slow(String m, Uri u,
+          Map<String, String> h, Map<String, dynamic>? b) async {
+        await gate.future;
+        return (200, text('tarde'));
+      }
+
+      final s = AiSession(repo, transport: slow);
+      final pending = s.send('hola');
+      await Future<void>.delayed(Duration.zero);
+      expect(s.busy, isTrue);
+      s.cancel();
+      expect(s.busy, isFalse);
+      gate.complete();
+      await pending;
+      expect(s.messages.map((m) => m.text), isNot(contains('tarde')));
+      expect(s.messages.last.text, 'Respuesta detenida.');
+      repo.dispose();
+    });
+
+    test('la conversación se guarda y vuelve al abrir la app', () async {
+      final repo = _repo();
+      await AiSettings.instance
+          .save(provider: AiProvider.gemini, apiKey: 'k', model: 'm');
+      final api = _FakeApi([(200, text('Respuesta guardada'))]);
+      await AiSession(repo, transport: api.call).send('hola');
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+
+      final again = AiSession(repo);
+      await again.load();
+      expect(again.messages.map((m) => m.text), ['hola', 'Respuesta guardada']);
+      repo.dispose();
+    });
+
+    test('reintentar la última pregunta tras un error', () async {
+      final repo = _repo();
+      await AiSettings.instance
+          .save(provider: AiProvider.gemini, apiKey: 'k', model: 'm');
+      final api = _FakeApi([
+        (
+          400,
+          {
+            'error': {'code': 400, 'message': 'algo raro'}
+          }
+        ),
+        (200, text('Ahora sí')),
+      ]);
+      final s = AiSession(repo, transport: api.call);
+      await s.send('hola');
+      expect(s.messages.last.role, AiRole.error);
+      await s.retryLast();
+      expect(s.messages.map((m) => m.text).toList(), ['hola', 'Ahora sí']);
+      repo.dispose();
+    });
+
+    test('color y enlaces', () async {
+      final repo = _repo();
+      final tools = AiTools(repo, confirm: (_) async => true);
+      final ids = repo.notes.where((n) => !n.isEmpty).map((n) => n.id).toList();
+      await tools.run('set_color', {'id': ids[0], 'color': 'azul'});
+      expect(repo.byId(ids[0])!.color, isNotNull);
+      tools.actions.last.undo!();
+      expect(repo.byId(ids[0])!.color, isNull);
+      final r = await tools.run('link_notes', {
+        'id': ids[0],
+        'targets': [ids[1], 'no-existe'],
+      });
+      expect(r['linked'], 1);
+      expect(repo.byId(ids[0])!.links, contains(ids[1]));
+      final listed = await tools.run('list_notes', {'query': 'huevos'});
+      expect(jsonEncode(listed), contains('snippet'));
+      repo.dispose();
+    });
   });
 
   group('errores 429 y elección de modelo', () {
