@@ -2,6 +2,12 @@
 
 All notable changes to Oganesson TakeNotes (formerly *Notas* / *BabuNotes*).
 
+## [2.1.1] — 2026-11-22
+
+### Changed
+- The highlight of the selected note is softer, especially in light themes (a gentle tint
+  instead of a block of colour).
+
 ## [2.1.0] — 2026-11-22
 
 ### Added

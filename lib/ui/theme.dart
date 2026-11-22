@@ -43,6 +43,13 @@ class NotasColors extends ThemeExtension<NotasColors> {
   /// las tarjetas (que dejan de ser blanco puro) y oscurece un poco los
   /// textos secundarios y separadores para que se lean mejor.
   NotasColors softened([SoftStyle style = SoftStyle.standard]) {
+    final r = _softenedBase(style);
+    // La nota seleccionada: un tinte suave sobre la tarjeta, no un bloque de
+    // color (en claro se notaba demasiado).
+    return r.copyWith(selected: Color.lerp(r.card, r.selected, 0.5));
+  }
+
+  NotasColors _softenedBase(SoftStyle style) {
     Color shift(Color c, double dl, {double maxL = 1, double ds = 0}) {
       final h = HSLColor.fromColor(c);
       return h
@@ -641,7 +648,16 @@ class Palette {
   static Color card(BuildContext c) => of(c).card;
   static Color secondary(BuildContext c) => of(c).secondary;
   static Color separator(BuildContext c) => of(c).separator;
-  static Color selected(BuildContext c) => of(c).selected;
+
+  /// Fondo de la nota seleccionada. En oscuro también se suaviza un poco
+  /// (mezclado con la tarjeta); en claro ya viene suave de [softened].
+  static Color selected(BuildContext c) {
+    final p = of(c);
+    return Theme.of(c).brightness == Brightness.dark
+        ? Color.lerp(p.card, p.selected, 0.8)!
+        : p.selected;
+  }
+
   static Color searchFill(BuildContext c) => of(c).searchFill;
   static Color hover(BuildContext c) => of(c).hover;
 

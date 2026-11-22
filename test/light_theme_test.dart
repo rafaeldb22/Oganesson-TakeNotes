@@ -65,6 +65,16 @@ void main() {
     expect(o.titleBarColor, isNot(o.card));
   });
 
+  test('nota seleccionada: tinte suave, cerca de la tarjeta', () {
+    for (final t in appThemes) {
+      final c = t.lightSoft;
+      final sel = HSLColor.fromColor(c.selected).lightness;
+      final card = HSLColor.fromColor(c.card).lightness;
+      expect((sel - card).abs(), lessThan(0.07), reason: t.id);
+      expect(c.selected, isNot(c.card), reason: t.id); // pero se nota
+    }
+  });
+
   test('ids de tema únicos', () {
     final ids = appThemes.map((t) => t.id).toList();
     expect(ids.toSet().length, ids.length);
