@@ -9,6 +9,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:image/image.dart' as img;
 import 'package:notas/ui/logo.dart';
 
 // Trazo y colores compartidos con la animación de inicio.
@@ -177,8 +178,17 @@ void main() {
         1024,
         'assets/icon/foreground.png');
     await _save(tester, _Background(), 1024, 'assets/icon/background.png');
-    // Icono de la bandeja del sistema en Windows (app en segundo plano).
-    await _save(tester, LogoPainter(), 64, 'assets/icon/tray.png');
+    // Icono de la bandeja del sistema en Windows (app en segundo plano):
+    // un .ico con varios tamaños, nítido en cualquier escala de pantalla.
+    final frames = <img.Image>[];
+    for (final px in [16, 24, 32, 48, 64]) {
+      final tmp = '${Directory.systemTemp.path}/tray_$px.png';
+      await _save(tester, LogoPainter(), px, tmp);
+      frames.add(img.decodePng(File(tmp).readAsBytesSync())!);
+      File(tmp).deleteSync();
+    }
+    File('assets/icon/tray.ico')
+        .writeAsBytesSync(img.IcoEncoder().encodeImages(frames));
   });
 }
 

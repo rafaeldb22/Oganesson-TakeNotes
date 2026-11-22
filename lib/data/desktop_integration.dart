@@ -18,7 +18,7 @@ import '../ui/i18n.dart';
 /// - Cerrar la ventana la oculta; "Salir" (bandeja o ⋯) la cierra de verdad.
 /// - **Ctrl+Alt+N** en cualquier sitio de Windows abre una nota nueva.
 /// - Una sola instancia: abrirla otra vez muestra la que ya está en marcha.
-class DesktopIntegration with WindowListener {
+class DesktopIntegration with WindowListener, TrayListener {
   DesktopIntegration._();
   static final instance = DesktopIntegration._();
 
@@ -44,7 +44,6 @@ class DesktopIntegration with WindowListener {
   /// Peticiones de "nota nueva" (Ctrl+Alt+N o la bandeja).
   Stream<void> get newNoteRequests => _newNote.stream;
 
-  TrayIcon? _tray;
   bool _quitting = false;
 
   /// Antes de nada: si ya hay otra Oganesson abierta, le pasa los
@@ -83,37 +82,37 @@ class DesktopIntegration with WindowListener {
 
   Future<void> _setupTray() async {
     try {
-      final tray = TrayIcon.create();
-      if (tray == null) return;
-      tray.icon = ImageAsset.fromAsset('assets/icon/tray.png');
-      tray.setTooltip('Oganesson');
-      final menu = Menu.create();
-      if (menu != null) {
-        MenuItem? item(String label, VoidCallback onTap) {
-          final it =
-              MenuItem.createWithLabelAndType(label, MenuItemType.normal);
-          it?.addListener((e) {
-            if (e is MenuItemClickedEvent) onTap();
-          });
-          return it;
-        }
-
-        menu.addItem(item(tr('Abrir Oganesson'), showWindow));
-        menu.addItem(item(tr('Nueva nota  (Ctrl+Alt+N)'), requestNewNote));
-        menu.addSeparator();
-        menu.addItem(item(tr('Salir'), quit));
-        tray.setContextMenu(menu);
-        tray.setContextMenuTrigger(ContextMenuTrigger.rightClicked);
-      }
-      tray.addListener((e) {
-        if (e is TrayIconClickedEvent || e is TrayIconDoubleClickedEvent) {
-          showWindow();
-        }
-      });
-      tray.setVisible(true);
-      _tray = tray;
+      // En Windows el icono de la bandeja tiene que ser un .ico.
+      await trayManager.setIcon('assets/icon/tray.ico');
+      await trayManager.setToolTip('Oganesson');
+      await trayManager.setContextMenu(Menu(items: [
+        MenuItem(key: 'abrir', label: tr('Abrir Oganesson')),
+        MenuItem(key: 'nueva', label: tr('Nueva nota  (Ctrl+Alt+N)')),
+        MenuItem.separator(),
+        MenuItem(key: 'salir', label: tr('Salir')),
+      ]));
+      trayManager.addListener(this);
     } catch (e) {
       debugPrint('Escritorio: no se pudo crear el icono de la bandeja ($e)');
+    }
+  }
+
+  // Clic en el icono: abrir la ventana. Clic derecho: el menú.
+  @override
+  void onTrayIconMouseDown() => showWindow();
+
+  @override
+  void onTrayIconRightMouseDown() => trayManager.popUpContextMenu();
+
+  @override
+  void onTrayMenuItemClick(MenuItem menuItem) {
+    switch (menuItem.key) {
+      case 'abrir':
+        showWindow();
+      case 'nueva':
+        requestNewNote();
+      case 'salir':
+        quit();
     }
   }
 
@@ -202,8 +201,9 @@ class DesktopIntegration with WindowListener {
     try {
       await hotKeyManager.unregisterAll();
     } catch (_) {}
-    _tray?.setVisible(false);
-    _tray?.dispose();
+    try {
+      await trayManager.destroy();
+    } catch (_) {}
     await windowManager.setPreventClose(false);
     await windowManager.destroy();
     exit(0);
