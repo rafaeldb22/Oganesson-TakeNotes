@@ -177,6 +177,8 @@ void main() {
         1024,
         'assets/icon/foreground.png');
     await _save(tester, _Background(), 1024, 'assets/icon/background.png');
+    // Icono de la bandeja del sistema en Windows (app en segundo plano).
+    await _save(tester, LogoPainter(), 64, 'assets/icon/tray.png');
   });
 }
 

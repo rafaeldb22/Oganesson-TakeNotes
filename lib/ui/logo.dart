@@ -6,6 +6,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:window_manager/window_manager.dart';
 
+import '../data/desktop_integration.dart';
+
 /// Logo de Oganesson: una línea dorada continua con dos bucles sobre azul
 /// marino. Lo usan la animación de inicio y el generador del icono
 /// (tool/generate_icon_test.dart), así que siempre tienen la misma forma.
@@ -156,6 +158,11 @@ class _StartupSplashState extends State<StartupSplash>
   /// En Windows la ventana aparece un poco después del primer dibujo:
   /// se espera a que sea visible y opaca para que la animación se vea entera.
   Future<void> _start() async {
+    // Abierta en segundo plano: sin animación (nadie la vería).
+    if (DesktopIntegration.instance.startedHidden) {
+      if (mounted) setState(() => _done = true);
+      return;
+    }
     if (!kIsWeb && Platform.isWindows) {
       final until = DateTime.now().add(const Duration(seconds: 4));
       while (mounted && DateTime.now().isBefore(until)) {

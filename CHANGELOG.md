@@ -2,6 +2,41 @@
 
 All notable changes to Oganesson TakeNotes (formerly *Notas* / *BabuNotes*).
 
+## [2.0.0] — 2026-11-22
+
+### Added
+- **AI assistant: ChatGPT and Claude too.** Besides the free Gemini key, each user can paste an
+  OpenAI (ChatGPT) or Anthropic (Claude) API key; one key per provider, stored encrypted on the
+  device. Same tools and safety for all three (Vault notes never visible, confirmation to archive
+  or delete, Undo on every change). Claude uses Claude Opus 5.5 by default (Sonnet 5.5 and
+  Haiku 5.5 to choose), with the server-side fallback on refusals; clear messages for no balance,
+  invalid key, rate limits or overload on each provider.
+- **Windows: background app with a global shortcut.** Oganesson starts with Windows hidden in the
+  system tray (with Open / New note / Quit), closing the window keeps it running (the first time
+  it asks), and **Ctrl+Alt+N** anywhere in Windows shows it and opens a new note. Only one copy
+  runs: opening it again brings back the running one. *Open when Windows starts* and *Quit
+  Oganesson* are in ⋯.
+
+### Changed
+- Bottom bar: the AI assistant sits on its own at the far left; *New folder* moved next to
+  *New note*.
+- Light themes are darker and less glaring.
+- README media re-recorded with the new bar and themes.
+
+## [1.8.1] — 2026-11-22
+
+### Fixed
+- **AI assistant: misleading "daily limit reached" message right after adding a key.** Google
+  answers with the same 429 error when a model has no free quota for the key's project
+  ("limit: 0"), when the per-minute limit is hit, or when the daily one is. The app now tells
+  them apart, says how many seconds to wait when Google says so, and shows Google's exact reason.
+- A key from a Google project with **prepaid billing and no credits left** (HTTP 402) is now
+  explained as such (with billing on, the free plan does not apply) instead of looking like a
+  rate limit, and the app no longer tries every model in vain.
+- *Test and save* now makes a real minimal request (looking up the model did not check quota)
+  and, if the chosen model has no free quota, tries the other Gemini models and keeps the first
+  one that works.
+
 ## [1.8.0] — 2026-11-22
 
 ### Added

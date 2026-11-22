@@ -39,16 +39,18 @@ class NotasColors extends ThemeExtension<NotasColors> {
           .toColor();
     }
 
+    // Modo claro apagado: nada de blanco brillante (2.0: un poco más oscuro
+    // que antes, que se veía demasiado claro).
     return NotasColors(
-      accent: shift(accent, -0.04, ds: 0.04),
+      accent: shift(accent, -0.06, ds: 0.04),
       onAccent: onAccent,
-      background: shift(background, -0.055, ds: 0.03),
-      card: shift(card, -0.045, maxL: 0.955),
-      secondary: shift(secondary, -0.08),
-      separator: shift(separator, -0.07),
-      selected: shift(selected, -0.05, ds: 0.05),
-      searchFill: shift(searchFill, -0.06),
-      hover: shift(hover, -0.07, maxL: 0.93),
+      background: shift(background, -0.10, maxL: 0.865, ds: 0.03),
+      card: shift(card, -0.09, maxL: 0.905),
+      secondary: shift(secondary, -0.10),
+      separator: shift(separator, -0.11),
+      selected: shift(selected, -0.09, ds: 0.05),
+      searchFill: shift(searchFill, -0.11, maxL: 0.84),
+      hover: shift(hover, -0.12, maxL: 0.875),
     );
   }
 

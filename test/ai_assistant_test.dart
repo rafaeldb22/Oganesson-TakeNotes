@@ -24,9 +24,13 @@ class _FakeApi {
   _FakeApi(this.replies);
   final List<(int, Map<String, dynamic>)> replies;
   final sent = <Map<String, dynamic>>[];
+  final urls = <Uri>[];
+  final headers = <Map<String, String>>[];
 
-  Future<(int, Map<String, dynamic>)> call(
-      String method, Uri url, String key, Map<String, dynamic>? body) async {
+  Future<(int, Map<String, dynamic>)> call(String method, Uri url,
+      Map<String, String> h, Map<String, dynamic>? body) async {
+    urls.add(url);
+    headers.add(h);
     if (body != null) sent.add(jsonDecode(jsonEncode(body)));
     return replies.removeAt(0);
   }
@@ -119,7 +123,8 @@ void main() {
 
   test('conversación: la IA llama a una función y luego responde', () async {
     final repo = _repo();
-    await AiSettings.instance.save(apiKey: 'AIza-prueba', model: 'm');
+    await AiSettings.instance
+        .save(provider: AiProvider.gemini, apiKey: 'AIza-prueba', model: 'm');
     final api = _FakeApi([
       (
         200,
@@ -140,7 +145,7 @@ void main() {
         ])
       ),
     ]);
-    final s = AiSession(repo, client: GeminiClient(transport: api.call));
+    final s = AiSession(repo, transport: api.call);
     await s.send('¿Qué tengo pendiente?');
 
     expect(s.messages.last.role, AiRole.assistant);
@@ -157,7 +162,8 @@ void main() {
   test('límite de peticiones: mensaje claro y el historial no se rompe',
       () async {
     final repo = _repo();
-    await AiSettings.instance.save(apiKey: 'AIza-prueba', model: 'm');
+    await AiSettings.instance
+        .save(provider: AiProvider.gemini, apiKey: 'AIza-prueba', model: 'm');
     final api = _FakeApi([
       (
         429,
@@ -172,7 +178,7 @@ void main() {
         ])
       ),
     ]);
-    final s = AiSession(repo, client: GeminiClient(transport: api.call));
+    final s = AiSession(repo, transport: api.call);
     await s.send('hola');
     expect(s.messages.last.role, AiRole.error);
     expect(s.messages.last.text, contains('límite'));
@@ -183,12 +189,273 @@ void main() {
     repo.dispose();
   });
 
+  test('ChatGPT: llama a una función y responde (formato de OpenAI)', () async {
+    final repo = _repo();
+    await AiSettings.instance.save(
+        provider: AiProvider.openai, apiKey: 'sk-prueba', model: 'gpt-5-mini');
+    final api = _FakeApi([
+      (
+        200,
+        {
+          'choices': [
+            {
+              'message': {
+                'role': 'assistant',
+                'content': null,
+                'tool_calls': [
+                  {
+                    'id': 'call_1',
+                    'type': 'function',
+                    'function': {
+                      'name': 'list_tasks',
+                      'arguments': '{"status":"pending"}'
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ),
+      (
+        200,
+        {
+          'choices': [
+            {
+              'message': {'role': 'assistant', 'content': 'Nada pendiente.'}
+            }
+          ]
+        }
+      ),
+    ]);
+    final s = AiSession(repo, transport: api.call);
+    await s.send('¿Qué tengo pendiente?');
+    expect(s.messages.last.text, 'Nada pendiente.');
+    expect(api.urls.first.host, 'api.openai.com');
+    expect(api.headers.first['Authorization'], 'Bearer sk-prueba');
+    final second = api.sent[1];
+    final msgs = second['messages'] as List;
+    expect(msgs.first['role'], 'system');
+    expect(msgs.last['role'], 'tool');
+    expect(msgs.last['tool_call_id'], 'call_1');
+    // Esquema JSON estándar (tipos en minúsculas).
+    expect(jsonEncode(second['tools']), contains('"type":"object"'));
+    repo.dispose();
+  });
+
+  test('Claude: bloques sin cambios y respuestas de funciones juntas',
+      () async {
+    final repo = _repo();
+    await AiSettings.instance.save(
+        provider: AiProvider.claude,
+        apiKey: 'sk-ant-prueba',
+        model: 'claude-opus-5-5');
+    final api = _FakeApi([
+      (
+        200,
+        {
+          'stop_reason': 'tool_use',
+          'content': [
+            {'type': 'thinking', 'thinking': '', 'signature': 'sig-1'},
+            {
+              'type': 'tool_use',
+              'id': 'toolu_1',
+              'name': 'list_tasks',
+              'input': {'status': 'pending'}
+            },
+            {
+              'type': 'tool_use',
+              'id': 'toolu_2',
+              'name': 'list_folders',
+              'input': {}
+            },
+          ]
+        }
+      ),
+      (
+        200,
+        {
+          'stop_reason': 'end_turn',
+          'content': [
+            {'type': 'text', 'text': 'Tienes 2 carpetas.'}
+          ]
+        }
+      ),
+    ]);
+    final s = AiSession(repo, transport: api.call);
+    await s.send('¿Qué carpetas tengo?');
+    expect(s.messages.last.text, 'Tienes 2 carpetas.');
+    expect(api.urls.first.toString(), 'https://api.anthropic.com/v1/messages');
+    expect(api.headers.first['x-api-key'], 'sk-ant-prueba');
+    expect(api.headers.first['anthropic-version'], '2026-10-21');
+    final first = api.sent[0];
+    expect(first['model'], 'claude-opus-5-5');
+    expect(first['fallbacks'], 'default');
+    expect(first.containsKey('temperature'), isFalse);
+    final msgs = api.sent[1]['messages'] as List;
+    // El turno del asistente vuelve tal cual (con su bloque de razonamiento).
+    expect(jsonEncode(msgs[1]), contains('sig-1'));
+    // Las dos respuestas, en UN solo mensaje del usuario.
+    final results = (msgs[2]['content'] as List);
+    expect(results.length, 2);
+    expect(results.every((b) => b['type'] == 'tool_result'), isTrue);
+    repo.dispose();
+  });
+
+  test('Claude: sin saldo lo explica y no prueba otros modelos', () async {
+    final api = _FakeApi([
+      (
+        400,
+        {
+          'type': 'error',
+          'error': {
+            'type': 'invalid_request_error',
+            'message': 'Your credit balance is too low to access the '
+                'Anthropic API.'
+          }
+        }
+      ),
+    ]);
+    try {
+      await ClaudeClient(transport: api.call)
+          .findWorkingModel('k', 'claude-opus-5-5');
+      fail('debía fallar');
+    } on AiException catch (e) {
+      expect(e.message, contains('no tiene saldo'));
+    }
+    expect(api.sent.length, 1);
+  });
+
+  group('errores 429 y elección de modelo', () {
+    Map<String, dynamic> quota(String message, {String? retry}) => {
+          'error': {
+            'code': 429,
+            'status': 'RESOURCE_EXHAUSTED',
+            'message': message,
+            if (retry != null)
+              'details': [
+                {
+                  '@type': 'type.googleapis.com/google.rpc.RetryInfo',
+                  'retryDelay': retry,
+                }
+              ],
+          }
+        };
+
+    test('modelo sin cuota gratis (limit: 0): lo dice y nombra el modelo',
+        () async {
+      final api = _FakeApi([
+        (
+          429,
+          quota('You exceeded your current quota. Quota exceeded for metric: '
+              'generate_content_free_tier_requests, limit: 0, model: x')
+        )
+      ]);
+      final c = GeminiClient(transport: api.call);
+      try {
+        await c.check('k', 'gemini-x');
+        fail('debía fallar');
+      } on AiException catch (e) {
+        expect(e.message, contains('gemini-x'));
+        expect(e.message, contains('Google dice'));
+        expect(e.modelSpecific, isTrue);
+      }
+    });
+
+    test('límite por minuto: dice cuántos segundos esperar', () async {
+      final api = _FakeApi(
+          [(429, quota('Resource has been exhausted.', retry: '33.4s'))]);
+      try {
+        await GeminiClient(transport: api.call).check('k', 'm');
+        fail('debía fallar');
+      } on AiException catch (e) {
+        expect(e.message, contains('34 s'));
+      }
+    });
+
+    test('si el modelo elegido no tiene cuota, se usa otro que funcione',
+        () async {
+      final api = _FakeApi([
+        (429, quota('Quota exceeded, limit: 0, model: a')),
+        (
+          404,
+          {
+            'error': {'code': 404, 'message': 'not found'}
+          }
+        ),
+        (
+          200,
+          _model([
+            {'text': 'ok'}
+          ])
+        ),
+      ]);
+      final m = await GeminiClient(transport: api.call)
+          .findWorkingModel('k', 'elegido');
+      expect(m, AiSettings.fallbackModels[1]);
+      expect(api.sent.length, 3);
+    });
+
+    test(
+        'proyecto de prepago sin créditos (402): lo explica y no prueba '
+        'otros modelos', () async {
+      // Respuesta real de Google para una clave de un proyecto con
+      // facturación de prepago agotada.
+      final api = _FakeApi([
+        (
+          402,
+          {
+            'error': {
+              'code': 402,
+              'status': 'RESOURCE_EXHAUSTED',
+              'message': 'Your prepayment credits are depleted. Please go to '
+                  'AI Studio at https://ai.studio/projects to manage your '
+                  'project and billing.'
+            }
+          }
+        ),
+      ]);
+      try {
+        await GeminiClient(transport: api.call).findWorkingModel('k', 'm');
+        fail('debía fallar');
+      } on AiException catch (e) {
+        expect(e.message, contains('prepago'));
+        expect(e.message, contains('SIN facturación'));
+        expect(e.modelSpecific, isFalse);
+      }
+      expect(api.sent.length, 1);
+    });
+
+    test('clave inválida: no sigue probando modelos', () async {
+      final api = _FakeApi([
+        (
+          400,
+          {
+            'error': {
+              'code': 400,
+              'status': 'INVALID_ARGUMENT',
+              'message': 'API key not valid. Please pass a valid API key.'
+            }
+          }
+        ),
+      ]);
+      try {
+        await GeminiClient(transport: api.call).findWorkingModel('k', 'm');
+        fail('debía fallar');
+      } on AiException catch (e) {
+        expect(e.message, contains('clave no es válida'));
+      }
+      expect(api.sent.length, 1);
+    });
+  });
+
   testWidgets('el panel pide la clave y, con clave, propone ideas',
       (tester) async {
     tester.view.physicalSize = const Size(430, 1300);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     final repo = _repo();
+    AiSettings.instance.provider = AiProvider.gemini;
     await AiSettings.instance.forget();
     final session = AiSession(repo);
     Widget app() => MaterialApp(
@@ -203,7 +470,8 @@ void main() {
     expect(find.text('Abrir Google AI Studio'), findsOneWidget);
     expect(find.text('Probar y guardar', skipOffstage: false), findsOneWidget);
 
-    await AiSettings.instance.save(apiKey: 'AIza-prueba', model: 'm');
+    await AiSettings.instance
+        .save(provider: AiProvider.gemini, apiKey: 'AIza-prueba', model: 'm');
     await tester.pumpWidget(const SizedBox());
     await tester.pumpWidget(app());
     await tester.pump(const Duration(milliseconds: 800));

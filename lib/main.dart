@@ -12,6 +12,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'config.dart';
+import 'data/desktop_integration.dart';
 import 'data/reminders.dart';
 import 'data/widget_bridge.dart';
 import 'ui/auth_gate.dart';
@@ -20,8 +21,11 @@ import 'ui/logo.dart';
 import 'ui/theme.dart';
 import 'ui/title_bar.dart';
 
-Future<void> main() async {
+Future<void> main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Windows: si ya hay una Oganesson abierta (p. ej. en segundo plano), se
+  // le pasa el aviso y esta se cierra.
+  await DesktopIntegration.instance.ensureSingleInstance(args);
 
   // Ventana de Windows: tamaño inicial, centrada y con tamaño mínimo
   // para que el contenido nunca se desborde al hacerla pequeña.
@@ -45,6 +49,10 @@ Future<void> main() async {
 
   await themeSettings.load();
   await appLanguage.load();
+  // Bandeja del sistema, Ctrl+Alt+N y cerrar = ocultar.
+  if (!kIsWeb && Platform.isWindows) {
+    unawaited(DesktopIntegration.instance.init());
+  }
   unawaited(Reminders.instance.init());
   if (const bool.fromEnvironment('TEST_TOAST')) {
     unawaited(Reminders.instance.scheduleTest(const Duration(minutes: 1)));
@@ -58,7 +66,10 @@ Future<void> main() async {
     );
   }
   runApp(const NotasApp());
-  if (!kIsWeb && Platform.isWindows) {
+  // Abierta con Windows (--background): se queda oculta en la bandeja.
+  if (!kIsWeb &&
+      Platform.isWindows &&
+      !DesktopIntegration.instance.startedHidden) {
     // Se enseña transparente y se hace opaca cuando la superficie de dibujo
     // ya tiene imagen: si no, Windows enseña la ventana en blanco un instante.
     WidgetsBinding.instance.addPostFrameCallback((_) async {

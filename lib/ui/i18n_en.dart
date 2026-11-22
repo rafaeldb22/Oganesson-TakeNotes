@@ -463,16 +463,12 @@ const enStrings = <String, String>{
       'No connection. Check your internet and try again.',
   'La IA ha tardado demasiado. Vuelve a probar.':
       'The AI took too long. Try again.',
-  'Has llegado al límite de peticiones gratis de tu clave. El límite diario se reinicia a medianoche (hora del Pacífico, las 9:00 en España). Prueba más tarde o cambia al modelo Flash-Lite en los ajustes.':
-      'You have reached the free request limit of your key. The daily limit resets at midnight Pacific time (9:00 in Spain). Try later or switch to the Flash-Lite model in the settings.',
   'La clave no es válida. Revísala en los ajustes.':
       'The key is not valid. Check it in the settings.',
   'Ese modelo no existe o tu clave no tiene acceso. Elige otro en los ajustes.':
       'That model does not exist or your key has no access to it. Choose another one in the settings.',
   'Tu clave no tiene permiso para usar la API de Gemini.':
       'Your key is not allowed to use the Gemini API.',
-  'La IA respondió con un error ({0}). {1}':
-      'The AI replied with an error ({0}). {1}',
   'Nota creada: {0}': 'Note created: {0}',
   'Texto añadido a «{0}»': 'Text added to “{0}”',
   'Fechas quitadas de «{0}»': 'Dates removed from “{0}”',
@@ -546,4 +542,62 @@ const enStrings = <String, String>{
       'Fast, with more free requests per day',
   'Más listo, pero con pocas peticiones gratis al día':
       'Smarter, but with few free requests per day',
+  'Tu clave no tiene peticiones gratis para el modelo {0}. Elige otro modelo en los ajustes.':
+      'Your key has no free requests for the model {0}. Choose another model in the settings.',
+  'Has gastado las peticiones gratis de hoy para este modelo. Se reinician a medianoche, hora del Pacífico (las 9:00 en España). Mientras, puedes elegir otro modelo en los ajustes.':
+      'You have used today\'s free requests for this model. They reset at midnight Pacific time (9:00 in Spain). Meanwhile, you can choose another model in the settings.',
+  'Demasiadas peticiones seguidas. Espera un minuto y vuelve a probar.':
+      'Too many requests in a row. Wait a minute and try again.',
+  'Demasiadas peticiones seguidas. Espera {0} s y vuelve a probar.':
+      'Too many requests in a row. Wait {0} s and try again.',
+  'Google ha limitado tu clave por ahora (límite del plan gratis). Espera un poco y vuelve a probar, o elige otro modelo.':
+      'Google has limited your key for now (free plan limit). Wait a little and try again, or choose another model.',
+  'La IA respondió con un error ({0}).': 'The AI replied with an error ({0}).',
+  'Clave guardada. {0} no tiene cuota gratis en tu clave: uso {1}.':
+      'Key saved. {0} has no free quota on your key: using {1}.',
+  'El proyecto de Google de tu clave tiene la facturación de prepago activada y se ha quedado sin créditos, así que Google rechaza todas las peticiones (con facturación no se usa el plan gratis). Para usarlo gratis, crea una clave nueva en Google AI Studio en un proyecto SIN facturación, o añade créditos a ese proyecto.':
+      "Your key's Google project has prepaid billing turned on and has run out of credits, so Google rejects every request (with billing on, the free plan is not used). To use it for free, create a new key in Google AI Studio in a project WITHOUT billing, or add credits to that project.",
+
+  // --- 2.0: ChatGPT y Claude, segundo plano en Windows
+  'Abrir Oganesson': 'Open Oganesson',
+  'Nueva nota  (Ctrl+Alt+N)': 'New note  (Ctrl+Alt+N)',
+  'Salir': 'Quit',
+  '{0} dice: {1}': '{0} says: {1}',
+  'Tu cuenta de OpenAI no tiene saldo. La API de OpenAI es de pago: añade saldo en platform.openai.com (Billing) y vuelve a probar.':
+      'Your OpenAI account has no balance. The OpenAI API is paid: add credit at platform.openai.com (Billing) and try again.',
+  'Tu cuenta de Anthropic no tiene saldo. La API de Claude es de pago: añade saldo en la Claude Console (Billing) y vuelve a probar.':
+      'Your Anthropic account has no balance. The Claude API is paid: add credit in the Claude Console (Billing) and try again.',
+  'Claude está saturado ahora mismo. Vuelve a probar en un rato.':
+      'Claude is overloaded right now. Try again in a while.',
+  'Primero pon tu clave de IA.': 'First add your AI key.',
+  'Con tu propia clave de IA': 'With your own AI key',
+  'Pega tu clave de {0}.': 'Paste your {0} key.',
+  'Clave guardada. {0} no funciona con tu clave: uso {1}.':
+      'Key saved. {0} does not work with your key: using {1}.',
+  'El asistente usa tu propia clave de la API de {0}. Es de pago: necesitas saldo en tu cuenta (cada pregunta cuesta muy poco). Se guarda cifrada solo en este dispositivo.':
+      'The assistant uses your own {0} API key. It is paid: you need credit in your account (each question costs very little). It is stored encrypted on this device only.',
+  'Crea tu clave en {0}': 'Create your key in {0}',
+  'Abrir {0}': 'Open {0}',
+  'Escribe su nombre (p. ej. {0})': 'Type its name (e.g. {0})',
+  'Para responder, la IA recibe el texto de las notas que consulta (nunca las del Vault), y {0} cobra a tu cuenta según lo que se use.':
+      'To answer, the AI receives the text of the notes it looks at (never the Vault ones), and {0} charges your account for what is used.',
+  '¿Dejar Oganesson en segundo plano?': 'Keep Oganesson in the background?',
+  'Seguirá en la bandeja del sistema (junto al reloj) y podrás crear una nota desde cualquier sitio con Ctrl+Alt+N. Puedes cambiarlo en ⋯.':
+      'It will stay in the system tray (next to the clock) and you can create a note from anywhere with Ctrl+Alt+N. You can change this in ⋯.',
+  'Salir del todo': 'Quit completely',
+  'Segundo plano': 'Background',
+  'Abrir al iniciar Windows': 'Open when Windows starts',
+  'En segundo plano · Ctrl+Alt+N crea una nota':
+      'In the background · Ctrl+Alt+N creates a note',
+  'Salir de Oganesson': 'Quit Oganesson',
+  'Cerrar la ventana solo la oculta': 'Closing the window only hides it',
+  'Oganesson se abrirá al iniciar Windows':
+      'Oganesson will open when Windows starts',
+  'Oganesson ya no se abrirá al iniciar Windows':
+      'Oganesson will no longer open when Windows starts',
+  'Rápido y barato': 'Fast and cheap',
+  'El más listo de OpenAI (más caro)': 'OpenAI\'s smartest (more expensive)',
+  'El más capaz para el día a día': 'The most capable for everyday use',
+  'Muy capaz y más barato': 'Very capable and cheaper',
+  'El más rápido y barato': 'The fastest and cheapest',
 };

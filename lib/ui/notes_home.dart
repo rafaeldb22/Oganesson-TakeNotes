@@ -11,6 +11,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../config.dart';
 import '../data/ai_assistant.dart';
+import '../data/desktop_integration.dart';
 import '../data/note_images.dart';
 import '../data/note_links.dart';
 import '../data/notes_repository.dart';
@@ -107,6 +108,7 @@ class _NotesHomeState extends State<NotesHome> {
   Timer? _titleTimer;
 
   StreamSubscription<Uri?>? _widgetSub;
+  StreamSubscription<void>? _newNoteSub;
 
   /// 'todas' | 'calendario' | id de carpeta
   String _filter = 'todas';
@@ -147,6 +149,11 @@ class _NotesHomeState extends State<NotesHome> {
   void initState() {
     super.initState();
     _widgetSub = WidgetBridge.clicks.listen(_onWidgetUri);
+    // Windows: Ctrl+Alt+N (desde cualquier sitio) o la bandeja.
+    _newNoteSub = DesktopIntegration.instance.newNoteRequests.listen((_) {
+      if (mounted) _newNote();
+    });
+    DesktopIntegration.instance.askOnFirstClose = _askOnFirstClose;
     vault.addListener(_onVault);
     repo.onLocalEdit = vault.touch;
     WidgetBridge.initialUri().then(_onWidgetUri);
@@ -171,6 +178,7 @@ class _NotesHomeState extends State<NotesHome> {
   @override
   void dispose() {
     _widgetSub?.cancel();
+    _newNoteSub?.cancel();
     _entranceTimer?.cancel();
     _titleTimer?.cancel();
     vault.removeListener(_onVault);
@@ -247,6 +255,27 @@ class _NotesHomeState extends State<NotesHome> {
       });
     }
   }
+
+  /// Primera vez que se cierra la ventana en Windows: ¿segundo plano o salir?
+  Future<bool?> _askOnFirstClose() => showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          icon: Icon(Icons.keyboard_command_key_rounded,
+              color: Palette.accent(ctx)),
+          title: Text(tr('¿Dejar Oganesson en segundo plano?')),
+          content: Text(tr('Seguirá en la bandeja del sistema (junto al '
+              'reloj) y podrás crear una nota desde cualquier sitio con '
+              'Ctrl+Alt+N. Puedes cambiarlo en ⋯.')),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: Text(tr('Salir del todo'))),
+            FilledButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: Text(tr('Segundo plano'))),
+          ],
+        ),
+      );
 
   void _newNote({String? folderId}) {
     final n = repo.createNote(folderId: folderId);
@@ -877,7 +906,8 @@ class _NotesHomeState extends State<NotesHome> {
           ),
         ],
       ),
-      // Barra inferior: nueva carpeta · nº de notas · calendario · nueva nota.
+      // Barra inferior: asistente (aparte, a la izquierda) · nº de notas ·
+      // notas · red · calendario · nueva carpeta · nueva nota.
       bottomNavigationBar: SafeArea(
         child: SizedBox(
           height: 58,
@@ -885,14 +915,18 @@ class _NotesHomeState extends State<NotesHome> {
             children: [
               const SizedBox(width: 8),
               _BarButton(
-                tooltip: tr('Nueva carpeta'),
-                icon: Icons.create_new_folder_outlined,
-                onTap: () async {
-                  final f = await editFolderDialog(context, repo);
-                  if (f != null && !_openFolders.contains(f.id)) {
-                    _toggleFolder(f.id);
-                  }
-                },
+                tooltip: isDesktopWindows
+                    ? '${tr('Asistente IA')} (Ctrl+J)'
+                    : tr('Asistente IA'),
+                icon: Icons.auto_awesome_outlined,
+                onTap: _openAssistant,
+              ),
+              // Separado del resto de botones.
+              Container(
+                width: 1,
+                height: 26,
+                margin: const EdgeInsets.symmetric(horizontal: 8),
+                color: Palette.separator(context),
               ),
               // Contador: en pantalla ancha va abajo a la derecha de la
               // ventana; en el móvil, aquí.
@@ -919,14 +953,6 @@ class _NotesHomeState extends State<NotesHome> {
                 ),
                 const SizedBox(width: 4),
               ],
-              _BarButton(
-                tooltip: isDesktopWindows
-                    ? '${tr('Asistente IA')} (Ctrl+J)'
-                    : tr('Asistente IA'),
-                icon: Icons.auto_awesome_outlined,
-                onTap: _openAssistant,
-              ),
-              const SizedBox(width: 4),
               for (final (view, tip, on, off) in [
                 ('red', tr('Red de notas'), Icons.hub, Icons.hub_outlined),
                 (
@@ -965,6 +991,17 @@ class _NotesHomeState extends State<NotesHome> {
                 const SizedBox(width: 4),
               ],
               _BarButton(
+                tooltip: tr('Nueva carpeta'),
+                icon: Icons.create_new_folder_outlined,
+                onTap: () async {
+                  final f = await editFolderDialog(context, repo);
+                  if (f != null && !_openFolders.contains(f.id)) {
+                    _toggleFolder(f.id);
+                  }
+                },
+              ),
+              const SizedBox(width: 4),
+              _BarButton(
                 tooltip: tr('Nueva nota (Ctrl+N)'),
                 icon: Icons.edit_note,
                 big: true,
@@ -998,6 +1035,8 @@ class _NotesHomeState extends State<NotesHome> {
     final trash = repo.trash.length;
     final email = Supabase.instance.client.auth.currentUser?.email;
     final v = await Updater.instance.currentVersion().catchError((_) => '');
+    final desktop = DesktopIntegration.instance;
+    final withWindows = desktop.supported && await desktop.startsWithWindows();
     if (!mounted) return;
     final choice = await showContextMenu(
       context,
@@ -1039,6 +1078,19 @@ class _NotesHomeState extends State<NotesHome> {
         MenuEntry('coffee', Icons.coffee_outlined, tr('Invítame a un café'),
             subtitle: tr('Apoya el proyecto (open source)')),
         MenuEntry('github', Icons.code_rounded, tr('Código en GitHub')),
+        if (desktop.supported) ...[
+          null,
+          MenuEntry(
+              'arranque',
+              withWindows
+                  ? Icons.check_box_rounded
+                  : Icons.check_box_outline_blank_rounded,
+              tr('Abrir al iniciar Windows'),
+              subtitle: tr('En segundo plano · Ctrl+Alt+N crea una nota')),
+          MenuEntry('salir', Icons.power_settings_new_rounded,
+              tr('Salir de Oganesson'),
+              subtitle: tr('Cerrar la ventana solo la oculta')),
+        ],
         null,
         MenuEntry('logout', Icons.logout, tr('Cerrar sesión'), danger: true),
       ],
@@ -1073,6 +1125,18 @@ class _NotesHomeState extends State<NotesHome> {
         openLink(context, AppConfig.coffeeUrl);
       case 'github':
         openLink(context, AppConfig.githubUrl);
+      case 'arranque':
+        await desktop.setStartsWithWindows(!withWindows);
+        if (mounted) {
+          showToast(
+              context,
+              !withWindows
+                  ? tr('Oganesson se abrirá al iniciar Windows')
+                  : tr('Oganesson ya no se abrirá al iniciar Windows'),
+              icon: Icons.power_settings_new_rounded);
+        }
+      case 'salir':
+        await desktop.quit();
       case 'logout':
         _signOut();
     }

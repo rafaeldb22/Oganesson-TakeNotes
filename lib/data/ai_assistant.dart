@@ -12,10 +12,11 @@ import '../ui/i18n.dart';
 import 'notes_repository.dart';
 
 // ===================================================================
-// Ajustes: cada usuario usa SU clave de la API de Gemini.
+// Proveedores y ajustes: cada usuario usa SU clave (Gemini, ChatGPT o
+// Claude).
 // ===================================================================
 
-/// Modelo de Gemini que se puede elegir en los ajustes.
+/// Modelo que se puede elegir en los ajustes.
 class AiModel {
   const AiModel(this.id, this.label, this.hint);
   final String id;
@@ -23,91 +24,203 @@ class AiModel {
   final String hint;
 }
 
-/// Ajustes del asistente. La clave se guarda cifrada y SOLO en este
-/// dispositivo (nunca se sube a Supabase).
+enum AiProvider { gemini, openai, claude }
+
+extension AiProviderInfo on AiProvider {
+  String get label => switch (this) {
+        AiProvider.gemini => 'Gemini',
+        AiProvider.openai => 'ChatGPT',
+        AiProvider.claude => 'Claude',
+      };
+
+  /// Dónde se crea la clave.
+  String get keyUrl => switch (this) {
+        AiProvider.gemini => 'https://aistudio.google.com/apikey',
+        AiProvider.openai => 'https://platform.openai.com/api-keys',
+        AiProvider.claude => 'https://console.anthropic.com/settings/keys',
+      };
+
+  String get keySite => switch (this) {
+        AiProvider.gemini => 'Google AI Studio',
+        AiProvider.openai => 'OpenAI Platform',
+        AiProvider.claude => 'Claude Console',
+      };
+
+  String get keyHint => switch (this) {
+        AiProvider.gemini => 'AIza…',
+        AiProvider.openai => 'sk-…',
+        AiProvider.claude => 'sk-ant-…',
+      };
+
+  /// ¿Tiene plan gratuito? (OpenAI y Anthropic cobran por uso.)
+  bool get free => this == AiProvider.gemini;
+
+  List<AiModel> get models => switch (this) {
+        AiProvider.gemini => const [
+            AiModel('gemini-3.5-flash-lite', 'Gemini Flash-Lite',
+                'Rápido y con más peticiones gratis al día'),
+            AiModel('gemini-3.8-flash', 'Gemini Flash',
+                'Más listo, pero con pocas peticiones gratis al día'),
+          ],
+        AiProvider.openai => const [
+            AiModel('gpt-5-mini', 'GPT-5 mini', 'Rápido y barato'),
+            AiModel('gpt-5', 'GPT-5', 'El más listo de OpenAI (más caro)'),
+          ],
+        AiProvider.claude => const [
+            AiModel('claude-opus-5-5', 'Claude Opus 5.5',
+                'El más capaz para el día a día'),
+            AiModel('claude-sonnet-5-5', 'Claude Sonnet 5.5',
+                'Muy capaz y más barato'),
+            AiModel('claude-haiku-5-5', 'Claude Haiku 5.5',
+                'El más rápido y barato'),
+          ],
+      };
+
+  /// Modelos que se prueban, en orden, si el elegido no funciona con la
+  /// clave.
+  List<String> get fallbackModels => switch (this) {
+        AiProvider.gemini => const [
+            'gemini-3.5-flash-lite',
+            'gemini-3.1-flash-lite',
+            'gemini-2.5-flash-lite',
+            'gemini-3.6-flash',
+            'gemini-3.8-flash',
+          ],
+        AiProvider.openai => const [
+            'gpt-5-mini',
+            'gpt-5',
+            'gpt-4.1-mini',
+            'gpt-4o-mini',
+          ],
+        AiProvider.claude => const [
+            'claude-opus-5-5',
+            'claude-sonnet-5-5',
+            'claude-haiku-5-5',
+          ],
+      };
+}
+
+/// Ajustes del asistente. Las claves se guardan cifradas y SOLO en este
+/// dispositivo (nunca se suben a Supabase), una por proveedor.
 class AiSettings extends ChangeNotifier {
   AiSettings._();
   static final instance = AiSettings._();
 
-  static const models = [
-    AiModel('gemini-3.5-flash-lite', 'Gemini Flash-Lite',
-        'Rápido y con más peticiones gratis al día'),
-    AiModel('gemini-3.8-flash', 'Gemini Flash',
-        'Más listo, pero con pocas peticiones gratis al día'),
-  ];
+  /// Compatibilidad: modelos de Gemini (versiones anteriores).
+  static List<AiModel> get models => AiProvider.gemini.models;
+  static List<String> get fallbackModels => AiProvider.gemini.fallbackModels;
 
-  static const _kKey = 'gemini_api_key';
-  static const _kModel = 'gemini_model';
   static const _storage = FlutterSecureStorage();
+  static const _kProvider = 'ai_provider';
+  static String _kKey(AiProvider p) => 'ai_key_${p.name}';
+  static String _kModel(AiProvider p) => 'ai_model_${p.name}';
 
-  String? _apiKey;
-  String model = models.first.id;
+  AiProvider provider = AiProvider.gemini;
+  final Map<AiProvider, String> _keys = {};
+  final Map<AiProvider, String> _models = {};
   bool loaded = false;
 
-  String? get apiKey => _apiKey;
-  bool get configured => (_apiKey ?? '').isNotEmpty;
+  String? keyFor(AiProvider p) => _keys[p];
+  String modelFor(AiProvider p) => _models[p] ?? p.models.first.id;
+
+  String? get apiKey => _keys[provider];
+  String get model => modelFor(provider);
+  bool get configured => (apiKey ?? '').isNotEmpty;
 
   Future<void> load() async {
     if (loaded) return;
     try {
-      _apiKey = await _storage.read(key: _kKey);
+      for (final p in AiProvider.values) {
+        final k = await _storage.read(key: _kKey(p));
+        if (k != null && k.isNotEmpty) _keys[p] = k;
+      }
+      // Clave de Gemini de la versión 1.8.
+      if (!_keys.containsKey(AiProvider.gemini)) {
+        final old = await _storage.read(key: 'gemini_api_key');
+        if (old != null && old.isNotEmpty) _keys[AiProvider.gemini] = old;
+      }
     } catch (e) {
       debugPrint('IA: no se pudo leer la clave ($e)');
     }
     try {
-      final p = await SharedPreferences.getInstance();
-      model = p.getString(_kModel) ?? model;
+      final prefs = await SharedPreferences.getInstance();
+      provider = AiProvider.values.firstWhere(
+          (p) => p.name == prefs.getString(_kProvider),
+          orElse: () => AiProvider.gemini);
+      for (final p in AiProvider.values) {
+        final m = prefs.getString(_kModel(p));
+        if (m != null) _models[p] = m;
+      }
+      final oldModel = prefs.getString('gemini_model');
+      if (oldModel != null)
+        _models.putIfAbsent(AiProvider.gemini, () => oldModel);
     } catch (_) {}
     loaded = true;
     notifyListeners();
   }
 
-  Future<void> save({required String apiKey, required String model}) async {
-    _apiKey = apiKey.trim();
-    this.model = model.trim();
-    await _storage.write(key: _kKey, value: _apiKey);
-    final p = await SharedPreferences.getInstance();
-    await p.setString(_kModel, this.model);
+  Future<void> save({
+    AiProvider? provider,
+    required String apiKey,
+    required String model,
+  }) async {
+    final p = provider ?? this.provider;
+    this.provider = p;
+    _keys[p] = apiKey.trim();
+    _models[p] = model.trim();
+    await _storage.write(key: _kKey(p), value: _keys[p]);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_kProvider, p.name);
+    await prefs.setString(_kModel(p), _models[p]!);
+    loaded = true;
     notifyListeners();
   }
 
-  Future<void> forget() async {
-    _apiKey = null;
+  Future<void> forget([AiProvider? provider]) async {
+    final p = provider ?? this.provider;
+    _keys.remove(p);
     try {
-      await _storage.delete(key: _kKey);
+      await _storage.delete(key: _kKey(p));
+      if (p == AiProvider.gemini) await _storage.delete(key: 'gemini_api_key');
     } catch (_) {}
     notifyListeners();
   }
 }
 
 // ===================================================================
-// Cliente de la API de Gemini (REST, con llamada a funciones).
+// Clientes de las API (REST, con llamada a funciones).
 // ===================================================================
 
 /// Error de la API explicado para el usuario.
 class AiException implements Exception {
-  AiException(this.message, {this.code});
+  AiException(this.message, {this.code, this.modelSpecific = false});
   final String message;
   final int? code;
+
+  /// El problema es del modelo (no existe, o sin cuota para él): puede que
+  /// otro modelo sí funcione con la misma clave.
+  final bool modelSpecific;
   @override
   String toString() => message;
 }
 
-/// Envía una petición POST/GET y devuelve (código, cuerpo JSON). Se puede
-/// sustituir en los tests.
+/// Envía una petición y devuelve (código, cuerpo JSON). Se puede sustituir
+/// en los tests.
 typedef AiTransport = Future<(int, Map<String, dynamic>)> Function(
-    String method, Uri url, String apiKey, Map<String, dynamic>? body);
+    String method,
+    Uri url,
+    Map<String, String> headers,
+    Map<String, dynamic>? body);
 
-Future<(int, Map<String, dynamic>)> _httpTransport(
-    String method, Uri url, String apiKey, Map<String, dynamic>? body) async {
+Future<(int, Map<String, dynamic>)> _httpTransport(String method, Uri url,
+    Map<String, String> headers, Map<String, dynamic>? body) async {
   final client = HttpClient()..connectionTimeout = const Duration(seconds: 20);
   try {
     final req = await client.openUrl(method, url);
-    req.headers
-      ..set('x-goog-api-key', apiKey)
-      ..contentType = ContentType.json;
+    headers.forEach(req.headers.set);
+    req.headers.contentType = ContentType.json;
     if (body != null) req.add(utf8.encode(jsonEncode(body)));
-    final res = await req.close().timeout(const Duration(seconds: 90));
+    final res = await req.close().timeout(const Duration(seconds: 120));
     final text = await res.transform(utf8.decoder).join();
     Map<String, dynamic> json = {};
     try {
@@ -120,53 +233,78 @@ Future<(int, Map<String, dynamic>)> _httpTransport(
   }
 }
 
-class GeminiClient {
-  GeminiClient({AiTransport? transport})
-      : _transport = transport ?? _httpTransport;
+/// Una llamada a función pedida por la IA.
+class AiToolCall {
+  AiToolCall(this.id, this.name, this.args);
+  final String? id;
+  final String name;
+  final Map<String, dynamic> args;
+}
+
+/// Respuesta de un paso: texto, funciones pedidas y el mensaje tal cual
+/// (para devolverlo en el historial: Gemini y Claude necesitan recibir de
+/// vuelta sus bloques de razonamiento sin cambios).
+class AiTurn {
+  AiTurn({required this.text, required this.calls, required this.raw});
+  final String text;
+  final List<AiToolCall> calls;
+  final Map<String, dynamic> raw;
+}
+
+/// Base común de los tres proveedores.
+abstract class AiClient {
+  AiClient({AiTransport? transport}) : _transport = transport ?? _httpTransport;
   final AiTransport _transport;
 
-  static final _base =
-      Uri.parse('https://generativelanguage.googleapis.com/v1beta/');
+  AiProvider get provider;
 
-  /// Comprueba que la clave y el modelo existen (sin gastar una petición de
-  /// generación).
-  Future<void> check(String apiKey, String model) async {
-    final (code, json) =
-        await _call('GET', _base.resolve('models/$model'), apiKey, null);
-    if (code != 200) throw _error(code, json);
-  }
+  static AiClient forProvider(AiProvider p, {AiTransport? transport}) =>
+      switch (p) {
+        AiProvider.gemini => GeminiClient(transport: transport),
+        AiProvider.openai => OpenAiClient(transport: transport),
+        AiProvider.claude => ClaudeClient(transport: transport),
+      };
 
-  Future<Map<String, dynamic>> generate({
+  /// Mensaje del usuario en el formato de la API.
+  Map<String, dynamic> userMessage(String text);
+
+  /// Respuestas de las funciones, en el formato de la API.
+  List<Map<String, dynamic>> toolResults(
+      List<(AiToolCall, Map<String, dynamic>)> results);
+
+  /// Un paso de la conversación.
+  Future<AiTurn> complete({
     required String apiKey,
     required String model,
-    required List<Map<String, dynamic>> contents,
     required String system,
-    required List<Map<String, dynamic>> functions,
-  }) async {
-    final (code, json) = await _call(
-      'POST',
-      _base.resolve('models/$model:generateContent'),
-      apiKey,
-      {
-        'systemInstruction': {
-          'parts': [
-            {'text': system}
-          ]
-        },
-        'contents': contents,
-        'tools': [
-          {'functionDeclarations': functions}
-        ],
-      },
-    );
-    if (code != 200) throw _error(code, json);
-    return json;
+    required List<Map<String, dynamic>> history,
+    required List<Map<String, dynamic>> tools,
+  });
+
+  /// Petición mínima real: comprueba la clave, el modelo y el saldo/cuota.
+  Future<void> check(String apiKey, String model);
+
+  /// Busca un modelo que funcione: primero [preferred] y luego los de
+  /// [AiProviderInfo.fallbackModels].
+  Future<String> findWorkingModel(String apiKey, String preferred) async {
+    AiException? first;
+    for (final m in {preferred, ...provider.fallbackModels}) {
+      try {
+        await check(apiKey, m);
+        return m;
+      } on AiException catch (e) {
+        first ??= e;
+        // Clave mala, sin conexión, sin saldo…: probar otros no sirve.
+        if (!e.modelSpecific) rethrow;
+      }
+    }
+    throw first!;
   }
 
-  Future<(int, Map<String, dynamic>)> _call(
-      String method, Uri url, String apiKey, Map<String, dynamic>? body) async {
+  Future<(int, Map<String, dynamic>)> call(String method, Uri url,
+      Map<String, String> headers, Map<String, dynamic>? body) async {
     try {
-      return await _transport(method, url, apiKey, body);
+      return await _transport(method, url, headers, body);
     } on SocketException {
       throw AiException(tr('Sin conexión. Revisa internet y vuelve a probar.'));
     } on TimeoutException {
@@ -176,17 +314,212 @@ class GeminiClient {
     }
   }
 
-  static AiException _error(int code, Map<String, dynamic> json) {
+  /// "Google dice: …" / "OpenAI dice: …": el motivo exacto, primera frase.
+  static String detail(String who, String msg) {
+    final first = msg.split(RegExp(r'(?<=\.)\s')).first.trim();
+    if (first.isEmpty) return '';
+    final cut = first.length > 180 ? '${first.substring(0, 180)}…' : first;
+    return '\n\n${trf('{0} dice: {1}', [who, cut])}';
+  }
+
+  /// Esquema JSON estándar (OpenAI y Claude) a partir de las declaraciones
+  /// de Gemini (tipos en mayúsculas).
+  static Map<String, dynamic> jsonSchema(Map<String, dynamic>? s) {
+    if (s == null) return {'type': 'object', 'properties': <String, dynamic>{}};
+    Object? conv(Object? v) {
+      if (v is Map) {
+        return {
+          for (final e in v.entries)
+            '${e.key}':
+                e.key == 'type' ? '${e.value}'.toLowerCase() : conv(e.value)
+        };
+      }
+      if (v is List) return v.map(conv).toList();
+      return v;
+    }
+
+    return Map<String, dynamic>.from(conv(s) as Map);
+  }
+
+  static Map<String, dynamic> parseArgs(Object? a) {
+    if (a is Map) return Map<String, dynamic>.from(a);
+    if (a is String && a.trim().isNotEmpty) {
+      try {
+        final d = jsonDecode(a);
+        if (d is Map) return Map<String, dynamic>.from(d);
+      } catch (_) {}
+    }
+    return {};
+  }
+}
+
+// ------------------------------------------------------------- Gemini
+
+class GeminiClient extends AiClient {
+  GeminiClient({super.transport});
+
+  @override
+  AiProvider get provider => AiProvider.gemini;
+
+  static final _base =
+      Uri.parse('https://generativelanguage.googleapis.com/v1beta/');
+
+  Map<String, String> _h(String key) => {'x-goog-api-key': key};
+
+  @override
+  Map<String, dynamic> userMessage(String text) => {
+        'role': 'user',
+        'parts': [
+          {'text': text}
+        ],
+      };
+
+  @override
+  List<Map<String, dynamic>> toolResults(
+          List<(AiToolCall, Map<String, dynamic>)> results) =>
+      [
+        {
+          'role': 'user',
+          'parts': [
+            for (final (c, r) in results)
+              {
+                'functionResponse': {
+                  'name': c.name,
+                  if (c.id != null) 'id': c.id,
+                  'response': r,
+                }
+              }
+          ],
+        }
+      ];
+
+  @override
+  Future<void> check(String apiKey, String model) async {
+    final (code, json) = await call(
+      'POST',
+      _base.resolve('models/$model:generateContent'),
+      _h(apiKey),
+      {
+        'contents': [userMessage('ok')],
+        'generationConfig': {'maxOutputTokens': 8},
+      },
+    );
+    if (code != 200) throw _error(code, json, model: model);
+  }
+
+  @override
+  Future<AiTurn> complete({
+    required String apiKey,
+    required String model,
+    required String system,
+    required List<Map<String, dynamic>> history,
+    required List<Map<String, dynamic>> tools,
+  }) async {
+    final (code, res) = await call(
+      'POST',
+      _base.resolve('models/$model:generateContent'),
+      _h(apiKey),
+      {
+        'systemInstruction': {
+          'parts': [
+            {'text': system}
+          ]
+        },
+        'contents': history,
+        'tools': [
+          {'functionDeclarations': tools}
+        ],
+      },
+    );
+    if (code != 200) throw _error(code, res, model: model);
+    final cands = res['candidates'];
+    final content = cands is List && cands.isNotEmpty
+        ? (cands.first as Map)['content']
+        : null;
+    if (content is! Map) {
+      final reason = res['promptFeedback'] is Map
+          ? '${(res['promptFeedback'] as Map)['blockReason'] ?? ''}'
+          : '';
+      throw AiException(reason.isEmpty
+          ? tr('La IA no ha devuelto respuesta. Vuelve a probar.')
+          : tr('La IA no ha querido responder a eso.'));
+    }
+    final raw = Map<String, dynamic>.from(content)..['role'] = 'model';
+    final text = StringBuffer();
+    final calls = <AiToolCall>[];
+    for (final p in (raw['parts'] as List?) ?? const []) {
+      if (p is! Map) continue;
+      final fc = p['functionCall'];
+      if (fc is Map) {
+        calls.add(AiToolCall(fc['id'] as String?, '${fc['name']}',
+            AiClient.parseArgs(fc['args'])));
+      } else if (p['text'] is String && p['thought'] != true) {
+        text.write(p['text']);
+      }
+    }
+    return AiTurn(text: text.toString(), calls: calls, raw: raw);
+  }
+
+  /// Segundos que Google pide esperar (RetryInfo.retryDelay, p. ej. "34s").
+  static int? _retrySeconds(Object? err) {
+    if (err is! Map || err['details'] is! List) return null;
+    for (final d in err['details'] as List) {
+      if (d is Map && '${d['@type']}'.endsWith('RetryInfo')) {
+        final v = double.tryParse('${d['retryDelay']}'.replaceAll('s', ''));
+        if (v != null) return v.ceil();
+      }
+    }
+    return null;
+  }
+
+  static AiException _error(int code, Map<String, dynamic> json,
+      {String? model}) {
     final err = json['error'];
     final msg = err is Map ? '${err['message'] ?? ''}' : '';
     final status = err is Map ? '${err['status'] ?? ''}' : '';
-    if (code == 429 || status == 'RESOURCE_EXHAUSTED') {
+    final google = AiClient.detail('Google', msg);
+    final lower = msg.toLowerCase();
+    // Proyecto con facturación de prepago y sin créditos (HTTP 402): llega
+    // con el mismo estado que los límites, pero ningún modelo funcionará.
+    if (code == 402 ||
+        lower.contains('prepayment') ||
+        lower.contains('credits are depleted')) {
       return AiException(
-          tr('Has llegado al límite de peticiones gratis de tu clave. '
-              'El límite diario se reinicia a medianoche (hora del Pacífico, '
-              'las 9:00 en España). Prueba más tarde o cambia al modelo '
-              'Flash-Lite en los ajustes.'),
-          code: 429);
+          '${tr('El proyecto de Google de tu clave tiene la facturación de '
+              'prepago activada y se ha quedado sin créditos, así que Google '
+              'rechaza todas las peticiones (con facturación no se usa el plan '
+              'gratis). Para usarlo gratis, crea una clave nueva en Google AI '
+              'Studio en un proyecto SIN facturación, o añade créditos a ese '
+              'proyecto.')}$google',
+          code: 402);
+    }
+    if (code == 429 || status == 'RESOURCE_EXHAUSTED') {
+      final wait = _retrySeconds(err);
+      final String text;
+      if (lower.contains('limit: 0')) {
+        text = trf(
+            'Tu clave no tiene peticiones gratis para el modelo {0}. '
+            'Elige otro modelo en los ajustes.',
+            [model ?? '']);
+      } else if (lower.contains('perday') || lower.contains('per day')) {
+        text = tr('Has gastado las peticiones gratis de hoy para este modelo. '
+            'Se reinician a medianoche, hora del Pacífico (las 9:00 en '
+            'España). Mientras, puedes elegir otro modelo en los ajustes.');
+      } else if (wait != null ||
+          lower.contains('perminute') ||
+          lower.contains('per minute')) {
+        text = wait == null
+            ? tr('Demasiadas peticiones seguidas. Espera un minuto y vuelve '
+                'a probar.')
+            : trf(
+                'Demasiadas peticiones seguidas. Espera {0} s y vuelve a '
+                'probar.',
+                [wait]);
+      } else {
+        text = tr('Google ha limitado tu clave por ahora (límite del plan '
+            'gratis). Espera un poco y vuelve a probar, o elige otro modelo.');
+      }
+      return AiException('$text$google', code: 429, modelSpecific: true);
     }
     if (msg.contains('API key not valid') ||
         msg.contains('API_KEY_INVALID') ||
@@ -198,7 +531,8 @@ class GeminiClient {
       return AiException(
           tr('Ese modelo no existe o tu clave no tiene acceso. Elige otro en '
               'los ajustes.'),
-          code: code);
+          code: code,
+          modelSpecific: true);
     }
     if (code == 403) {
       return AiException(
@@ -206,7 +540,326 @@ class GeminiClient {
           code: code);
     }
     return AiException(
-        trf('La IA respondió con un error ({0}). {1}', [code, msg]).trim(),
+        '${trf('La IA respondió con un error ({0}).', [code])}$google',
+        code: code);
+  }
+}
+
+// ------------------------------------------------------- OpenAI (ChatGPT)
+
+class OpenAiClient extends AiClient {
+  OpenAiClient({super.transport});
+
+  @override
+  AiProvider get provider => AiProvider.openai;
+
+  static final _base = Uri.parse('https://api.openai.com/v1/');
+
+  Map<String, String> _h(String key) => {'Authorization': 'Bearer $key'};
+
+  @override
+  Map<String, dynamic> userMessage(String text) =>
+      {'role': 'user', 'content': text};
+
+  @override
+  List<Map<String, dynamic>> toolResults(
+          List<(AiToolCall, Map<String, dynamic>)> results) =>
+      [
+        for (final (c, r) in results)
+          {
+            'role': 'tool',
+            'tool_call_id': c.id,
+            'content': jsonEncode(r),
+          }
+      ];
+
+  @override
+  Future<void> check(String apiKey, String model) async {
+    final (code, json) = await call(
+      'POST',
+      _base.resolve('chat/completions'),
+      _h(apiKey),
+      {
+        'model': model,
+        'messages': [userMessage('ok')],
+        'max_completion_tokens': 16,
+      },
+    );
+    if (code != 200) throw _error(code, json, model: model);
+  }
+
+  @override
+  Future<String> findWorkingModel(String apiKey, String preferred) async {
+    try {
+      return await super.findWorkingModel(apiKey, preferred);
+    } on AiException catch (e) {
+      if (!e.modelSpecific) rethrow;
+      // Ninguno de la lista: el primer modelo "gpt" que tenga la cuenta.
+      final (code, json) =
+          await call('GET', _base.resolve('models'), _h(apiKey), null);
+      if (code != 200) rethrow;
+      final ids = [
+        for (final m in (json['data'] as List?) ?? const [])
+          if (m is Map && '${m['id']}'.startsWith('gpt-')) '${m['id']}'
+      ]..sort();
+      for (final id in ids) {
+        try {
+          await check(apiKey, id);
+          return id;
+        } on AiException catch (_) {}
+      }
+      rethrow;
+    }
+  }
+
+  @override
+  Future<AiTurn> complete({
+    required String apiKey,
+    required String model,
+    required String system,
+    required List<Map<String, dynamic>> history,
+    required List<Map<String, dynamic>> tools,
+  }) async {
+    final (code, res) = await call(
+      'POST',
+      _base.resolve('chat/completions'),
+      _h(apiKey),
+      {
+        'model': model,
+        'messages': [
+          {'role': 'system', 'content': system},
+          ...history,
+        ],
+        'tools': [
+          for (final t in tools)
+            {
+              'type': 'function',
+              'function': {
+                'name': t['name'],
+                'description': t['description'],
+                'parameters': AiClient.jsonSchema(
+                    t['parameters'] as Map<String, dynamic>?),
+              }
+            }
+        ],
+      },
+    );
+    if (code != 200) throw _error(code, res, model: model);
+    final choices = res['choices'];
+    final msg = choices is List && choices.isNotEmpty
+        ? (choices.first as Map)['message']
+        : null;
+    if (msg is! Map) {
+      throw AiException(tr('La IA no ha devuelto respuesta. Vuelve a probar.'));
+    }
+    if (msg['refusal'] is String && '${msg['refusal']}'.isNotEmpty) {
+      throw AiException(tr('La IA no ha querido responder a eso.'));
+    }
+    final toolCalls = (msg['tool_calls'] as List?) ?? const [];
+    final raw = <String, dynamic>{
+      'role': 'assistant',
+      'content': msg['content'],
+      if (toolCalls.isNotEmpty) 'tool_calls': toolCalls,
+    };
+    return AiTurn(
+      text: msg['content'] is String ? msg['content'] as String : '',
+      calls: [
+        for (final c in toolCalls)
+          if (c is Map && c['function'] is Map)
+            AiToolCall('${c['id']}', '${(c['function'] as Map)['name']}',
+                AiClient.parseArgs((c['function'] as Map)['arguments']))
+      ],
+      raw: raw,
+    );
+  }
+
+  static AiException _error(int code, Map<String, dynamic> json,
+      {String? model}) {
+    final err = json['error'];
+    final msg = err is Map ? '${err['message'] ?? ''}' : '';
+    final type = err is Map ? '${err['code'] ?? err['type'] ?? ''}' : '';
+    final openai = AiClient.detail('OpenAI', msg);
+    if (code == 401) {
+      return AiException(tr('La clave no es válida. Revísala en los ajustes.'),
+          code: code);
+    }
+    if (type == 'insufficient_quota') {
+      return AiException(
+          '${tr('Tu cuenta de OpenAI no tiene saldo. La API de OpenAI es de '
+              'pago: añade saldo en platform.openai.com (Billing) y vuelve a '
+              'probar.')}$openai',
+          code: code);
+    }
+    if (code == 429) {
+      return AiException(
+          '${tr('Demasiadas peticiones seguidas. Espera un minuto y vuelve a '
+              'probar.')}$openai',
+          code: code);
+    }
+    if (code == 404 || type == 'model_not_found') {
+      return AiException(
+          '${tr('Ese modelo no existe o tu clave no tiene acceso. Elige otro '
+              'en los ajustes.')}$openai',
+          code: code,
+          modelSpecific: true);
+    }
+    if (code == 400 && msg.toLowerCase().contains('model')) {
+      return AiException(
+          '${trf('La IA respondió con un error ({0}).', [code])}$openai',
+          code: code,
+          modelSpecific: true);
+    }
+    return AiException(
+        '${trf('La IA respondió con un error ({0}).', [code])}$openai',
+        code: code);
+  }
+}
+
+// ---------------------------------------------------- Claude (Anthropic)
+
+class ClaudeClient extends AiClient {
+  ClaudeClient({super.transport});
+
+  @override
+  AiProvider get provider => AiProvider.claude;
+
+  static final _url = Uri.parse('https://api.anthropic.com/v1/messages');
+
+  /// Modelos con reintento automático en otro modelo si Claude rechaza la
+  /// petición por seguridad (`fallbacks: "default"`).
+  static const _withFallbacks = {'claude-opus-5-5', 'claude-sonnet-5-5'};
+
+  Map<String, String> _h(String key, String model) => {
+        'x-api-key': key,
+        'anthropic-version': '2026-10-21',
+        if (_withFallbacks.contains(model))
+          'anthropic-beta': 'server-side-fallback-2026-07-01',
+      };
+
+  @override
+  Map<String, dynamic> userMessage(String text) => {
+        'role': 'user',
+        'content': [
+          {'type': 'text', 'text': text}
+        ],
+      };
+
+  @override
+  List<Map<String, dynamic>> toolResults(
+          List<(AiToolCall, Map<String, dynamic>)> results) =>
+      [
+        {
+          'role': 'user',
+          // Todas las respuestas juntas, en un solo mensaje.
+          'content': [
+            for (final (c, r) in results)
+              {
+                'type': 'tool_result',
+                'tool_use_id': c.id,
+                'content': jsonEncode(r),
+                if (r.containsKey('error')) 'is_error': true,
+              }
+          ],
+        }
+      ];
+
+  @override
+  Future<void> check(String apiKey, String model) async {
+    final (code, json) = await call('POST', _url, _h(apiKey, model), {
+      'model': model,
+      'max_tokens': 64,
+      'messages': [userMessage('ok')],
+    });
+    if (code != 200) throw _error(code, json, model: model);
+  }
+
+  @override
+  Future<AiTurn> complete({
+    required String apiKey,
+    required String model,
+    required String system,
+    required List<Map<String, dynamic>> history,
+    required List<Map<String, dynamic>> tools,
+  }) async {
+    final (code, res) = await call('POST', _url, _h(apiKey, model), {
+      'model': model,
+      'max_tokens': 16000,
+      'system': system,
+      'messages': history,
+      'tools': [
+        for (final t in tools)
+          {
+            'name': t['name'],
+            'description': t['description'],
+            'input_schema':
+                AiClient.jsonSchema(t['parameters'] as Map<String, dynamic>?),
+          }
+      ],
+      if (_withFallbacks.contains(model)) 'fallbacks': 'default',
+    });
+    if (code != 200) throw _error(code, res, model: model);
+    if (res['stop_reason'] == 'refusal') {
+      throw AiException(tr('La IA no ha querido responder a eso.'));
+    }
+    final content = (res['content'] as List?) ?? const [];
+    final text = StringBuffer();
+    final calls = <AiToolCall>[];
+    for (final b in content) {
+      if (b is! Map) continue;
+      if (b['type'] == 'text') {
+        text.write(b['text']);
+      } else if (b['type'] == 'tool_use') {
+        calls.add(AiToolCall(
+            '${b['id']}', '${b['name']}', AiClient.parseArgs(b['input'])));
+      }
+    }
+    // El contenido se devuelve completo y sin cambios (incluidos los
+    // bloques de razonamiento).
+    return AiTurn(
+      text: text.toString(),
+      calls: calls,
+      raw: {'role': 'assistant', 'content': content},
+    );
+  }
+
+  static AiException _error(int code, Map<String, dynamic> json,
+      {String? model}) {
+    final err = json['error'];
+    final msg = err is Map ? '${err['message'] ?? ''}' : '';
+    final type = err is Map ? '${err['type'] ?? ''}' : '';
+    final claude = AiClient.detail('Anthropic', msg);
+    final lower = msg.toLowerCase();
+    if (code == 401 || type == 'authentication_error') {
+      return AiException(tr('La clave no es válida. Revísala en los ajustes.'),
+          code: code);
+    }
+    if (lower.contains('credit balance')) {
+      return AiException(
+          '${tr('Tu cuenta de Anthropic no tiene saldo. La API de Claude es de '
+              'pago: añade saldo en la Claude Console (Billing) y vuelve a '
+              'probar.')}$claude',
+          code: code);
+    }
+    if (code == 404 || type == 'not_found_error') {
+      return AiException(
+          '${tr('Ese modelo no existe o tu clave no tiene acceso. Elige otro '
+              'en los ajustes.')}$claude',
+          code: code,
+          modelSpecific: true);
+    }
+    if (code == 429 || type == 'rate_limit_error') {
+      return AiException(
+          '${tr('Demasiadas peticiones seguidas. Espera un minuto y vuelve a '
+              'probar.')}$claude',
+          code: code);
+    }
+    if (code == 529 || type == 'overloaded_error') {
+      return AiException(
+          tr('Claude está saturado ahora mismo. Vuelve a probar en un rato.'),
+          code: code);
+    }
+    return AiException(
+        '${trf('La IA respondió con un error ({0}).', [code])}$claude',
         code: code);
   }
 }
@@ -679,20 +1332,23 @@ class AiMessage {
 }
 
 /// Conversación con el asistente (se mantiene mientras la app está abierta).
+/// Funciona igual con Gemini, ChatGPT o Claude: cada cliente traduce el
+/// historial y las funciones al formato de su API.
 class AiSession extends ChangeNotifier {
-  AiSession(this.repo, {GeminiClient? client, AiSettings? settings})
-      : client = client ?? GeminiClient(),
+  AiSession(this.repo, {AiTransport? transport, AiSettings? settings})
+      : _transport = transport,
         settings = settings ?? AiSettings.instance;
 
   final NotesRepository repo;
-  final GeminiClient client;
   final AiSettings settings;
+  final AiTransport? _transport;
 
   final List<AiMessage> messages = [];
 
-  /// Historial en el formato de la API (las respuestas del modelo se guardan
-  /// tal cual: Gemini necesita recibir de vuelta sus firmas de razonamiento).
-  final List<Map<String, dynamic>> _contents = [];
+  /// Historial en el formato de la API del proveedor con el que se empezó
+  /// (si se cambia de proveedor, el historial empieza de cero).
+  final List<Map<String, dynamic>> _history = [];
+  AiProvider? _historyProvider;
   bool busy = false;
 
   /// Qué está haciendo ahora (p. ej. "Buscando tareas…").
@@ -705,7 +1361,7 @@ class AiSession extends ChangeNotifier {
 
   void clear() {
     messages.clear();
-    _contents.clear();
+    _history.clear();
     notifyListeners();
   }
 
@@ -743,19 +1399,20 @@ Responde SIEMPRE en ${english ? 'inglés' : 'español'}, de forma breve, clara y
     if (t.isEmpty || busy) return;
     await settings.load();
     if (!settings.configured) {
-      messages
-          .add(AiMessage(AiRole.error, tr('Primero pon tu clave de Gemini.')));
+      messages.add(AiMessage(AiRole.error, tr('Primero pon tu clave de IA.')));
       notifyListeners();
       return;
     }
+    final provider = settings.provider;
+    if (_historyProvider != provider) {
+      _history.clear();
+      _historyProvider = provider;
+    }
+    final client = AiClient.forProvider(provider, transport: _transport);
+
     messages.add(AiMessage(AiRole.user, t));
-    final start = _contents.length;
-    _contents.add({
-      'role': 'user',
-      'parts': [
-        {'text': t}
-      ],
-    });
+    final start = _history.length;
+    _history.add(client.userMessage(t));
     busy = true;
     activity = tr('Pensando…');
     notifyListeners();
@@ -764,57 +1421,26 @@ Responde SIEMPRE en ${english ? 'inglés' : 'español'}, de forma breve, clara y
     final reply = StringBuffer();
     try {
       for (var step = 0; step < _maxSteps; step++) {
-        final res = await client.generate(
+        final turn = await client.complete(
           apiKey: settings.apiKey!,
           model: settings.model,
-          contents: _contents,
           system: _system(),
-          functions: AiTools.declarations,
+          history: _history,
+          tools: AiTools.declarations,
         );
-        final cands = res['candidates'];
-        final content = cands is List && cands.isNotEmpty
-            ? (cands.first as Map)['content']
-            : null;
-        if (content is! Map) {
-          final reason = res['promptFeedback'] is Map
-              ? '${(res['promptFeedback'] as Map)['blockReason'] ?? ''}'
-              : '';
-          throw AiException(reason.isEmpty
-              ? tr('La IA no ha devuelto respuesta. Vuelve a probar.')
-              : tr('La IA no ha querido responder a eso.'));
+        _history.add(turn.raw);
+        if (turn.text.trim().isNotEmpty) {
+          if (reply.isNotEmpty) reply.write('\n\n');
+          reply.write(turn.text.trim());
         }
-        final modelContent = Map<String, dynamic>.from(content)
-          ..['role'] = 'model';
-        _contents.add(modelContent);
-        final parts = (modelContent['parts'] as List?) ?? const [];
-        final calls = <Map>[];
-        for (final p in parts) {
-          if (p is! Map) continue;
-          if (p['functionCall'] is Map) {
-            calls.add(p['functionCall'] as Map);
-          } else if (p['text'] is String && p['thought'] != true) {
-            reply.write(p['text']);
-          }
-        }
-        if (calls.isEmpty) break;
-        final responses = <Map<String, dynamic>>[];
-        for (final c in calls) {
-          final name = '${c['name']}';
-          activity = _activityFor(name);
+        if (turn.calls.isEmpty) break;
+        final results = <(AiToolCall, Map<String, dynamic>)>[];
+        for (final c in turn.calls) {
+          activity = _activityFor(c.name);
           notifyListeners();
-          final args = c['args'] is Map
-              ? Map<String, dynamic>.from(c['args'] as Map)
-              : <String, dynamic>{};
-          final result = await tools.run(name, args);
-          responses.add({
-            'functionResponse': {
-              'name': name,
-              if (c['id'] != null) 'id': c['id'],
-              'response': result,
-            }
-          });
+          results.add((c, await tools.run(c.name, c.args)));
         }
-        _contents.add({'role': 'user', 'parts': responses});
+        _history.addAll(client.toolResults(results));
         activity = tr('Pensando…');
         notifyListeners();
       }
@@ -826,7 +1452,7 @@ Responde SIEMPRE en ${english ? 'inglés' : 'español'}, de forma breve, clara y
       ));
     } on AiException catch (e) {
       // La pregunta que ha fallado no se queda en el historial.
-      _contents.removeRange(start, _contents.length);
+      _history.removeRange(start, _history.length);
       messages.add(
           AiMessage(AiRole.error, e.message, actions: List.of(tools.actions)));
     } finally {

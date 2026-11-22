@@ -66,7 +66,7 @@
 | 🕸️ **Note network** | Link notes or create linked sub-notes, then explore them as a live graph. |
 | 🔒 **Vault** | Notes behind a master password that locks itself after 5 minutes; reset it with your account password. |
 | 🔄 **Sync** | Same account on every device, real-time sync through Supabase, works offline (images too) and uploads when back online. |
-| ✨ **AI assistant** | Bring your own free Gemini API key: ask *"what's pending this week?"*, have it create notes, set deadlines, move notes to folders, mark tasks done… Every change can be undone, deleting needs your OK, and it **never sees Vault notes**. |
+| ✨ **AI assistant** | Bring your own key — free **Gemini**, or **ChatGPT** / **Claude**: ask *"what's pending this week?"*, have it create notes, set deadlines, move notes to folders, mark tasks done… Every change can be undone, deleting needs your OK, and it **never sees Vault notes**. |
 | 📱 **Widgets** | Android home-screen widgets: calendar, tasks, next task with countdown, pinned notes and quick actions. |
 
 ---
@@ -105,7 +105,7 @@ Sign in with the **same account** on every device and your notes sync automatica
 - Every note shows its links and backlinks.
 
 **AI assistant (bring your own key)**
-- Open it with the ✨ button, ⋯ → *AI assistant* or **Ctrl+J**. Paste your own **Gemini API key** (free from [Google AI Studio](https://aistudio.google.com/apikey)); it is stored encrypted on that device only, never uploaded.
+- Open it with the ✨ button (bottom left), ⋯ → *AI assistant* or **Ctrl+J**. Pick **Gemini** (free key from [Google AI Studio](https://aistudio.google.com/apikey)), **ChatGPT** ([OpenAI API key](https://platform.openai.com/api-keys), paid) or **Claude** ([Anthropic API key](https://console.anthropic.com/settings/keys), paid). Each key is stored encrypted on that device only, never uploaded.
 - It can list and read your notes and tasks, create notes (with folder and deadline), add text, set or clear dates, mark tasks done, pin and move notes. Archiving or deleting asks you first, and every change has an *Undo* button.
 - **Vault notes are never sent to the AI.** Choose Gemini Flash-Lite (more free requests per day) or Gemini Flash (smarter, fewer free requests); the free plan's limits are shown in Google AI Studio and the app tells you clearly when you hit them.
 
@@ -134,8 +134,12 @@ Sign in with the **same account** on every device and your notes sync automatica
 - Windows: clean custom title bar tinted with the theme colour, resizable panels that remember their width, minimum window size for a stable layout.
 - Android widgets: quick note, calendar (2×2 / 4×2 / 4×4), tasks, next task with countdown, pinned notes and quick actions.
 
+**Windows: always one shortcut away**
+- Oganesson starts with Windows in the background and lives in the system tray; closing the window keeps it there (the first time it asks).
+- **Ctrl+Alt+N** anywhere in Windows opens a new note. Turn *Open when Windows starts* on or off, or quit completely, from ⋯.
+
 **Keyboard (Windows)**
-- Ctrl+N new note · Ctrl+F search · Ctrl+1 / 2 / 3 notes, calendar, network · Ctrl+, theme · Esc close the note.
+- Ctrl+Alt+N new note from anywhere · Ctrl+N new note · Ctrl+J AI assistant · Ctrl+F search · Ctrl+1 / 2 / 3 notes, calendar, network · Ctrl+, theme · Esc close the note.
 - Ctrl+V pastes a screenshot or copied image into the note · in the image viewer: Ctrl+C copy, Ctrl+S save, Esc close.
 
 **Updates & support**

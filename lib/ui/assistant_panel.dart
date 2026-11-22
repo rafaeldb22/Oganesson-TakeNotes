@@ -201,10 +201,10 @@ class _AssistantPanelState extends State<AssistantPanel> {
   }
 
   String get _modelLabel {
-    for (final m in AiSettings.models) {
+    for (final m in settings.provider.models) {
       if (m.id == settings.model) return m.label;
     }
-    return settings.model;
+    return '${settings.provider.label} · ${settings.model}';
   }
 
   @override
@@ -229,7 +229,7 @@ class _AssistantPanelState extends State<AssistantPanel> {
                     Text(
                         settings.configured
                             ? trf('{0} · tu clave', [_modelLabel])
-                            : tr('Con tu propia clave de Gemini'),
+                            : tr('Con tu propia clave de IA'),
                         style: TextStyle(fontSize: 12, color: p.secondary)),
                   ],
                 ),
@@ -739,17 +739,28 @@ class _KeySetup extends StatefulWidget {
 
 class _KeySetupState extends State<_KeySetup> {
   final settings = AiSettings.instance;
+  late AiProvider _provider = settings.provider;
   late final _key = TextEditingController(text: settings.apiKey ?? '');
   late String _model = settings.model;
   late final _custom = TextEditingController(
-      text: AiSettings.models.any((m) => m.id == settings.model)
-          ? ''
-          : settings.model);
+      text: _provider.models.any((m) => m.id == _model) ? '' : _model);
   bool _show = false;
   bool _busy = false;
   String? _error;
 
-  bool get _isCustom => !AiSettings.models.any((m) => m.id == _model);
+  bool get _isCustom => !_provider.models.any((m) => m.id == _model);
+
+  /// Cambiar de proveedor: cada uno guarda su propia clave y su modelo.
+  void _pick(AiProvider p) {
+    if (p == _provider || _busy) return;
+    setState(() {
+      _provider = p;
+      _key.text = settings.keyFor(p) ?? '';
+      _model = settings.modelFor(p);
+      _custom.text = p.models.any((m) => m.id == _model) ? '' : _model;
+      _error = null;
+    });
+  }
 
   @override
   void dispose() {
@@ -762,7 +773,7 @@ class _KeySetupState extends State<_KeySetup> {
     final key = _key.text.trim();
     final model = _isCustom ? _custom.text.trim() : _model;
     if (key.isEmpty) {
-      setState(() => _error = tr('Pega tu clave de Gemini.'));
+      setState(() => _error = trf('Pega tu clave de {0}.', [_provider.label]));
       return;
     }
     if (model.isEmpty) {
@@ -774,11 +785,20 @@ class _KeySetupState extends State<_KeySetup> {
       _error = null;
     });
     try {
-      await GeminiClient().check(key, model);
-      await settings.save(apiKey: key, model: model);
+      // Si el modelo elegido no tiene cuota gratis en el proyecto de la
+      // clave, se prueban los demás y se usa el primero que funcione.
+      final working =
+          await AiClient.forProvider(_provider).findWorkingModel(key, model);
+      await settings.save(provider: _provider, apiKey: key, model: working);
       if (!mounted) return;
-      showToast(context, tr('Clave guardada. ¡Listo!'),
-          icon: Icons.check_circle_outline_rounded);
+      showToast(
+          context,
+          working == model
+              ? tr('Clave guardada. ¡Listo!')
+              : trf('Clave guardada. {0} no funciona con tu clave: uso {1}.',
+                  [model, working]),
+          icon: Icons.check_circle_outline_rounded,
+          duration: Duration(seconds: working == model ? 3 : 6));
       widget.onSaved();
     } on AiException catch (e) {
       if (mounted) setState(() => _error = e.message);
@@ -788,7 +808,7 @@ class _KeySetupState extends State<_KeySetup> {
   }
 
   Future<void> _forget() async {
-    await settings.forget();
+    await settings.forget(_provider);
     _key.clear();
     if (mounted) {
       setState(() {});
@@ -837,22 +857,43 @@ class _KeySetupState extends State<_KeySetup> {
     return ListView(
       padding: const EdgeInsets.fromLTRB(18, 18, 18, 18),
       children: [
-        Text(
-            tr('El asistente usa tu propia clave de la API de Gemini (gratis '
-                'con una cuenta de Google). Se guarda cifrada solo en este '
-                'dispositivo.'),
-            style: TextStyle(color: p.secondary, height: 1.4)),
+        // Proveedor: Gemini (gratis), ChatGPT o Claude (de pago).
+        SegmentedButton<AiProvider>(
+          segments: [
+            for (final pr in AiProvider.values)
+              ButtonSegment(value: pr, label: Text(pr.label)),
+          ],
+          selected: {_provider},
+          showSelectedIcon: false,
+          onSelectionChanged: (v) => _pick(v.first),
+        ),
+        const SizedBox(height: 14),
+        AnimatedSwitcher(
+          duration: Anim.medium,
+          child: Text(
+            _provider.free
+                ? tr('El asistente usa tu propia clave de la API de Gemini '
+                    '(gratis con una cuenta de Google). Se guarda cifrada solo '
+                    'en este dispositivo.')
+                : trf(
+                    'El asistente usa tu propia clave de la API de {0}. Es de '
+                    'pago: necesitas saldo en tu cuenta (cada pregunta cuesta '
+                    'muy poco). Se guarda cifrada solo en este dispositivo.',
+                    [_provider.label]),
+            key: ValueKey(_provider),
+            style: TextStyle(color: p.secondary, height: 1.4),
+          ),
+        ),
         const SizedBox(height: 18),
         step(
           1,
-          tr('Crea tu clave en Google AI Studio'),
+          trf('Crea tu clave en {0}', [_provider.keySite]),
           Align(
             alignment: Alignment.centerLeft,
             child: OutlinedButton.icon(
-              onPressed: () =>
-                  openLink(context, 'https://aistudio.google.com/apikey'),
+              onPressed: () => openLink(context, _provider.keyUrl),
               icon: const Icon(Icons.open_in_new_rounded, size: 18),
-              label: Text(tr('Abrir Google AI Studio')),
+              label: Text(trf('Abrir {0}', [_provider.keySite])),
             ),
           ),
         ),
@@ -865,7 +906,7 @@ class _KeySetupState extends State<_KeySetup> {
             enabled: !_busy,
             contextMenuBuilder: textFieldMenu,
             decoration: InputDecoration(
-              hintText: 'AIza…',
+              hintText: _provider.keyHint,
               prefixIcon: const Icon(Icons.key_rounded),
               suffixIcon: IconButton(
                 tooltip: _show ? tr('Ocultar') : tr('Mostrar'),
@@ -882,7 +923,7 @@ class _KeySetupState extends State<_KeySetup> {
           tr('Elige el modelo'),
           Column(
             children: [
-              for (final m in AiSettings.models)
+              for (final m in _provider.models)
                 _ModelTile(
                   title: m.label,
                   subtitle: tr(m.hint),
@@ -891,7 +932,8 @@ class _KeySetupState extends State<_KeySetup> {
                 ),
               _ModelTile(
                 title: tr('Otro modelo'),
-                subtitle: tr('Escribe su nombre (p. ej. gemini-3.6-flash)'),
+                subtitle: trf('Escribe su nombre (p. ej. {0})',
+                    [_provider.fallbackModels.last]),
                 selected: _isCustom,
                 onTap: () => setState(() => _model =
                     _custom.text.trim().isEmpty ? '_' : _custom.text.trim()),
@@ -907,8 +949,9 @@ class _KeySetupState extends State<_KeySetup> {
                           contextMenuBuilder: textFieldMenu,
                           onChanged: (v) => setState(
                               () => _model = v.trim().isEmpty ? '_' : v.trim()),
-                          decoration: const InputDecoration(
-                              hintText: 'gemini-…', isDense: true),
+                          decoration: InputDecoration(
+                              hintText: _provider.fallbackModels.first,
+                              isDense: true),
                         ),
                       )
                     : const SizedBox(width: double.infinity),
@@ -930,11 +973,18 @@ class _KeySetupState extends State<_KeySetup> {
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
-                  tr('Para responder, la IA recibe el texto de las notas que '
-                      'consulta (nunca las del Vault). En el plan gratuito, '
-                      'Google puede usar esos datos para mejorar sus '
-                      'productos. El plan gratis tiene un límite de peticiones '
-                      'por minuto y por día (se ve en Google AI Studio).'),
+                  _provider.free
+                      ? tr('Para responder, la IA recibe el texto de las notas '
+                          'que consulta (nunca las del Vault). En el plan '
+                          'gratuito, Google puede usar esos datos para mejorar '
+                          'sus productos. El plan gratis tiene un límite de '
+                          'peticiones por minuto y por día (se ve en Google AI '
+                          'Studio).')
+                      : trf(
+                          'Para responder, la IA recibe el texto de las notas '
+                          'que consulta (nunca las del Vault), y {0} cobra a tu '
+                          'cuenta según lo que se use.',
+                          [_provider.label]),
                   style: TextStyle(
                       fontSize: 12.5, color: p.secondary, height: 1.4),
                 ),

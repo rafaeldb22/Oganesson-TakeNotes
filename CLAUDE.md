@@ -98,15 +98,26 @@ that it still arrives. On Windows, check toasts are enabled first:
   all of them during `_entranceOpen` (first 900 ms after the list is shown / the view changes),
   afterwards only ids that were not in the previous build (`_knownIds`). Regression tests:
   `test/discard_animation_test.dart` (checks that no `State` of the list is recreated).
-- AI assistant (bring your own key): `lib/data/ai_assistant.dart` — `AiSettings` (Gemini key in
-  flutter_secure_storage, never in Supabase; model in SharedPreferences), `GeminiClient` (REST
-  `generateContent` with function calling, injectable `AiTransport` for tests, friendly errors
-  incl. 429 quota), `AiTools` (function declarations + execution on `NotesRepository`; Vault notes
+- AI assistant (bring your own key): `lib/data/ai_assistant.dart` — `AiProvider` (gemini /
+  openai / claude: key URL, models, fallbacks), `AiSettings` (one key per provider in
+  flutter_secure_storage, never in Supabase; models in SharedPreferences), `AiClient` with
+  `GeminiClient` / `OpenAiClient` (Chat Completions) / `ClaudeClient` (Messages API, raw HTTP —
+  Dart has no official SDK; `anthropic-version: 2026-10-21`, default `claude-opus-5-5`,
+  `fallbacks: "default"` + beta header on Opus/Sonnet 5.5, assistant content replayed unchanged,
+  all tool_results in one user message). Injectable `AiTransport(method, url, headers, body)` for
+  tests; friendly per-provider errors (quota, no balance, 402 prepay, invalid key), `AiTools` (function declarations + execution on `NotesRepository`; Vault notes
   are invisible: `repo.notes` excludes them and `_note()` rejects them; destructive actions go
   through `confirm`; every change records an `AiAction` with undo via `repo.restoreState`) and
   `AiSession` (keeps the raw model `content` so Gemini's thought signatures are sent back).
   UI: `lib/ui/assistant_panel.dart` (`openAssistant`: right panel on wide, bottom sheet on phone).
   Free-tier limits are per Google project and only shown in AI Studio (reset at midnight PT).
+- Windows background mode: `lib/data/desktop_integration.dart` — single instance
+  (windows_single_instance, `--new-note` / show on second launch), tray icon (tray_manager 0.9's
+  `TrayIcon`/`Menu` API, icon `assets/icon/tray.png` from `tool/generate_icon_test.dart`), global
+  **Ctrl+Alt+N** (hotkey_manager) feeding `newNoteRequests`, close = hide (`setPreventClose`, first
+  close asks), start with Windows via `reg add HKCU\…\Run` with `--background` (launch_at_startup
+  conflicts with win32 6 used by package_info_plus). `main.dart` doesn't show the window and the
+  splash is skipped when started with `--background`.
 - Smooth wheel scrolling: use `SmoothScrollController` (`lib/ui/smooth_scroll.dart`) for new
   scroll views on desktop.
 - Completed tasks: `Note.doneAt` (column `notes.done_at`); done > 3 days → hidden from lists and

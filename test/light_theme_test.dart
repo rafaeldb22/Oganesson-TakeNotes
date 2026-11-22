@@ -8,9 +8,12 @@ void main() {
       final c = t.lightSoft;
       final bg = HSLColor.fromColor(c.background).lightness;
       final card = HSLColor.fromColor(c.card).lightness;
-      expect(card, lessThanOrEqualTo(0.96), reason: t.id);
-      expect(bg, lessThan(0.93), reason: t.id);
+      // Apagado: ni el fondo ni las tarjetas brillan.
+      expect(card, lessThanOrEqualTo(0.91), reason: t.id);
+      expect(bg, lessThanOrEqualTo(0.87), reason: t.id);
       expect(card, greaterThan(bg - 0.02), reason: t.id);
+      // El texto (casi negro) sigue leyéndose bien sobre las tarjetas.
+      expect(card, greaterThan(0.75), reason: t.id);
     }
   });
 
