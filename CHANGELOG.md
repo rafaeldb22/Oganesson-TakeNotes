@@ -2,6 +2,15 @@
 
 All notable changes to Oganesson TakeNotes (formerly *Notas* / *BabuNotes*).
 
+## [1.7.2] — 2026-11-22
+
+### Changed
+- **Bigger Android app icon**: the logo stroke is now as large as the launcher mask allows (it
+  is fitted to the visible circle, so no tip is cut on round or squircle icons) and noticeably
+  bolder.
+- **Folder hover**: a soft tint of the folder's own colour instead of the heavy grey, fading in
+  (220 ms) and out (420 ms) smoothly; the "+" button slides and fades in.
+
 ## [1.7.1] — 2026-11-22
 
 ### Added

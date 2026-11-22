@@ -69,15 +69,20 @@ class _FolderGroupState extends State<FolderGroup> {
         onTap: widget.onToggle,
         onLongPress: () => widget.onOptions(null),
         onSecondaryTapUp: (d) => widget.onOptions(d.globalPosition),
+        // Resaltado al pasar el ratón: un velo muy suave del color de la
+        // carpeta (no el gris de las tarjetas, que sobre el fondo se veía
+        // oscuro), que entra rápido y se va despacio.
         child: AnimatedContainer(
-          duration: Anim.fast,
-          curve: Anim.curve,
+          duration: _hover ? const Duration(milliseconds: 220) : Anim.slow,
+          curve: Curves.easeOutCubic,
           height: 40,
           padding: const EdgeInsets.only(left: 4, right: 4),
           decoration: BoxDecoration(
             color: _dropOver
                 ? color.withValues(alpha: 0.16)
-                : (_hover ? p.hover : Colors.transparent),
+                : (_hover
+                    ? color.withValues(alpha: 0.07)
+                    : color.withValues(alpha: 0)),
             borderRadius: BorderRadius.circular(10),
             border: Border.all(
                 color: _dropOver
@@ -115,17 +120,23 @@ class _FolderGroupState extends State<FolderGroup> {
                         fontSize: 15, fontWeight: FontWeight.w600)),
               ),
               // Al pasar el ratón: crear una nota dentro.
-              AnimatedOpacity(
-                duration: Anim.fast,
-                opacity: _hover ? 1 : 0,
-                child: IgnorePointer(
-                  ignoring: !_hover,
-                  child: IconButton(
-                    tooltip: tr('Nueva nota aquí'),
-                    visualDensity: VisualDensity.compact,
-                    iconSize: 18,
-                    icon: Icon(Icons.add_rounded, color: p.secondary),
-                    onPressed: widget.onNewNote,
+              AnimatedSlide(
+                duration: Anim.medium,
+                curve: Curves.easeOutCubic,
+                offset: _hover ? Offset.zero : const Offset(0.3, 0),
+                child: AnimatedOpacity(
+                  duration: Anim.medium,
+                  curve: Curves.easeOutCubic,
+                  opacity: _hover ? 1 : 0,
+                  child: IgnorePointer(
+                    ignoring: !_hover,
+                    child: IconButton(
+                      tooltip: tr('Nueva nota aquí'),
+                      visualDensity: VisualDensity.compact,
+                      iconSize: 18,
+                      icon: Icon(Icons.add_rounded, color: p.secondary),
+                      onPressed: widget.onNewNote,
+                    ),
                   ),
                 ),
               ),
