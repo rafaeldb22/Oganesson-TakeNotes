@@ -2,6 +2,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
 import '../data/notes_repository.dart';
+import '../data/recurrence.dart';
 import '../data/reminders.dart';
 import 'anim.dart';
 import 'format.dart';
@@ -60,11 +61,13 @@ class _ScheduleSheetState extends State<_ScheduleSheet> {
   late DateTime _end; // local
   _Edge _editing = _Edge.end;
   late DateTime _month;
+  String? _repeat;
 
   @override
   void initState() {
     super.initState();
     final n = widget.repo.byId(widget.noteId);
+    _repeat = n?.repeat;
     final now = DateTime.now();
     _start = _round5(n?.remindAt?.toLocal() ?? now);
     _end = _round5(n?.dueAt?.toLocal() ??
@@ -97,12 +100,14 @@ class _ScheduleSheetState extends State<_ScheduleSheet> {
 
   void _save() {
     widget.repo.setSchedule(widget.noteId, remindAt: _start, dueAt: _end);
+    widget.repo.setRepeat(widget.noteId, _repeat);
     Reminders.instance.askPermission();
     Navigator.pop(context);
   }
 
   void _clear() {
     widget.repo.setSchedule(widget.noteId, remindAt: null, dueAt: null);
+    widget.repo.setRepeat(widget.noteId, null);
     Navigator.pop(context);
   }
 
@@ -184,6 +189,33 @@ class _ScheduleSheetState extends State<_ScheduleSheet> {
             ),
             const SizedBox(height: 14),
             _Preview(start: _start, end: _end),
+            const SizedBox(height: 12),
+            Text(tr('Repetir'),
+                style: TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w700,
+                    color: Palette.secondary(context))),
+            const SizedBox(height: 6),
+            Wrap(
+              spacing: 6,
+              runSpacing: 4,
+              children: [
+                for (final (id, label) in <(String?, String)>[
+                  (null, tr('Nunca')),
+                  (RepeatRule.daily.id, tr('Cada día')),
+                  (RepeatRule.weekdays.id, tr('Laborables')),
+                  (RepeatRule.weekly.id, tr('Cada semana')),
+                  (RepeatRule.monthly.id, tr('Cada mes')),
+                  (RepeatRule.yearly.id, tr('Cada año')),
+                ])
+                  ChoiceChip(
+                    label: Text(label),
+                    selected: _repeat == id,
+                    showCheckmark: false,
+                    onSelected: (_) => setState(() => _repeat = id),
+                  ),
+              ],
+            ),
             const SizedBox(height: 14),
             Row(
               children: [

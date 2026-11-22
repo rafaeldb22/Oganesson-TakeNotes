@@ -5,6 +5,24 @@ import '../ui/i18n.dart';
 DateTime? _parseDate(Object? v) =>
     v is String && v.isNotEmpty ? DateTime.parse(v).toUtc() : null;
 
+/// Un paso de una nota con subtareas.
+class Subtask {
+  Subtask({required this.id, required this.text, this.done = false});
+  final String id;
+  String text;
+  bool done;
+
+  Map<String, dynamic> toJson() => {'id': id, 'text': text, 'done': done};
+
+  static Subtask? fromJson(Object? v) {
+    if (v is! Map || v['id'] is! String) return null;
+    return Subtask(
+        id: v['id'] as String,
+        text: (v['text'] as String?) ?? '',
+        done: v['done'] == true);
+  }
+}
+
 class Note {
   Note({
     required this.id,
@@ -24,7 +42,21 @@ class Note {
     this.archived = false,
     this.position,
     List<String>? links,
-  }) : links = links ?? [];
+    this.repeat,
+    List<Subtask>? subtasks,
+  })  : links = links ?? [],
+        subtasks = subtasks ?? [];
+
+  /// Repetición de la tarea (ver `RepeatRule`). null = no se repite.
+  String? repeat;
+
+  /// Pasos de la tarea, con su barra de progreso.
+  List<Subtask> subtasks;
+
+  /// Fracción de subtareas hechas (0 si no hay).
+  double get subtaskProgress => subtasks.isEmpty
+      ? 0
+      : subtasks.where((t) => t.done).length / subtasks.length;
 
   /// Nota archivada: sale de las listas y se ve en ⋯ → Archivadas.
   bool archived;
@@ -124,8 +156,12 @@ class Note {
   /// [withVault] = false cuando Supabase aún no tiene las columnas de la
   /// migración 005 (`vault`, `links`, `done_at`): el resto se sigue subiendo.
   /// [withArchive] = false si falta la migración 006 (`archived`, `position`).
+  /// [withTasks] = false si falta la migración 008 (`repeat`, `subtasks`).
   Map<String, dynamic> toRow(
-          {String? userId, bool withVault = true, bool withArchive = true}) =>
+          {String? userId,
+          bool withVault = true,
+          bool withArchive = true,
+          bool withTasks = true}) =>
       {
         'id': id,
         if (userId != null) 'user_id': userId,
@@ -137,6 +173,8 @@ class Note {
         if (withVault) 'done_at': doneAt?.toUtc().toIso8601String(),
         if (withArchive) 'archived': archived,
         if (withArchive) 'position': position,
+        if (withTasks) 'repeat': repeat,
+        if (withTasks) 'subtasks': [for (final t in subtasks) t.toJson()],
         'remind_at': remindAt?.toUtc().toIso8601String(),
         'due_at': dueAt?.toUtc().toIso8601String(),
         'done': done,
@@ -166,6 +204,13 @@ class Note {
       position: (r['position'] as num?)?.toDouble(),
       links: r['links'] is List
           ? (r['links'] as List).whereType<String>().toList()
+          : null,
+      repeat: r['repeat'] as String?,
+      subtasks: r['subtasks'] is List
+          ? (r['subtasks'] as List)
+              .map(Subtask.fromJson)
+              .whereType<Subtask>()
+              .toList()
           : null,
       createdAt: _parseDate(r['created_at']) ?? updated,
       updatedAt: updated,

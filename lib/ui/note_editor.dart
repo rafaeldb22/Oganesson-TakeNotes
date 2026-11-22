@@ -15,6 +15,7 @@ import 'folders.dart';
 import 'note_color_sheet.dart';
 import 'image_tools.dart';
 import 'note_image.dart';
+import 'note_tools.dart';
 import 'format.dart';
 import 'link_picker.dart';
 import 'schedule_sheet.dart';
@@ -251,6 +252,23 @@ class _NoteEditorState extends State<NoteEditor> {
     );
   }
 
+  bool _subtasksOpen = false;
+
+  void _toolAction(String v) {
+    final n = repo.byId(widget.noteId);
+    if (n == null) return;
+    switch (v) {
+      case 'subtareas':
+        setState(() => _subtasksOpen = !_subtasksOpen);
+      case 'historial':
+        showHistorySheet(context, repo, n.id);
+      case 'plantilla':
+        saveAsTemplate(context, n);
+      case 'exportar':
+        showExportNote(context, n);
+    }
+  }
+
   Widget _iconAction({
     required String tooltip,
     required Widget icon,
@@ -354,6 +372,41 @@ class _NoteEditorState extends State<NoteEditor> {
               icon: Icon(_toolbarOpen ? Icons.text_format : Icons.text_fields),
               onPressed: () => setState(() => _toolbarOpen = !_toolbarOpen),
             ),
+            PopupMenuButton<String>(
+              tooltip: tr('Más'),
+              icon: const Icon(Icons.more_horiz_rounded),
+              onSelected: _toolAction,
+              itemBuilder: (_) => [
+                PopupMenuItem(
+                    value: 'subtareas',
+                    child: ListTile(
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        leading: const Icon(Icons.checklist_rounded),
+                        title: Text(tr('Subtareas')))),
+                PopupMenuItem(
+                    value: 'historial',
+                    child: ListTile(
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        leading: const Icon(Icons.history_rounded),
+                        title: Text(tr('Historial de versiones')))),
+                PopupMenuItem(
+                    value: 'plantilla',
+                    child: ListTile(
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        leading: const Icon(Icons.bookmark_add_outlined),
+                        title: Text(tr('Guardar como plantilla')))),
+                PopupMenuItem(
+                    value: 'exportar',
+                    child: ListTile(
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        leading: const Icon(Icons.ios_share_rounded),
+                        title: Text(tr('Exportar')))),
+              ],
+            ),
             _iconAction(
               tooltip: tr('Eliminar nota'),
               icon: const Icon(Icons.delete_outline),
@@ -383,6 +436,8 @@ class _NoteEditorState extends State<NoteEditor> {
                   case 'borrar':
                     _closing = true;
                     widget.onDelete(widget.noteId);
+                  default:
+                    _toolAction(v);
                 }
               },
               itemBuilder: (_) => [
@@ -420,6 +475,34 @@ class _NoteEditorState extends State<NoteEditor> {
                         contentPadding: EdgeInsets.zero,
                         leading: const Icon(Icons.add_photo_alternate_outlined),
                         title: Text(tr('Añadir imagen')))),
+                PopupMenuItem(
+                    value: 'subtareas',
+                    child: ListTile(
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        leading: const Icon(Icons.checklist_rounded),
+                        title: Text(tr('Subtareas')))),
+                PopupMenuItem(
+                    value: 'historial',
+                    child: ListTile(
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        leading: const Icon(Icons.history_rounded),
+                        title: Text(tr('Historial de versiones')))),
+                PopupMenuItem(
+                    value: 'plantilla',
+                    child: ListTile(
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        leading: const Icon(Icons.bookmark_add_outlined),
+                        title: Text(tr('Guardar como plantilla')))),
+                PopupMenuItem(
+                    value: 'exportar',
+                    child: ListTile(
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        leading: const Icon(Icons.ios_share_rounded),
+                        title: Text(tr('Exportar')))),
                 PopupMenuItem(
                     value: 'borrar',
                     child: ListTile(
@@ -498,6 +581,9 @@ class _NoteEditorState extends State<NoteEditor> {
                                   fontSize: 13),
                             ),
                           ),
+                        if (n != null &&
+                            (_subtasksOpen || n.subtasks.isNotEmpty))
+                          SubtasksPanel(repo: repo, note: n),
                         Expanded(
                           child: ImageDropZone(
                             onImages: (images) =>

@@ -1,3 +1,6 @@
+import 'note_export.dart';
+import 'note_history.dart';
+import 'recurrence.dart';
 import 'dart:async';
 import 'dart:convert';
 
@@ -66,6 +69,13 @@ class NotesRepository extends ChangeNotifier {
   /// false si Supabase aún no tiene las columnas de la migración 006
   /// (`archived`, `position`): se suben las notas sin esos campos.
   bool serverHasArchive = true;
+
+  /// false si Supabase aún no tiene la migración 008 (`repeat`, `subtasks`):
+  /// esos datos se quedan en este dispositivo y no se pierden.
+  bool serverHasTasks = true;
+
+  /// Versiones anteriores de las notas (solo en este dispositivo).
+  late final NoteHistory history = NoteHistory(scope: userId);
 
   /// Notas archivadas (deslizar a la izquierda), más recientes primero.
   List<Note> get archivedNotes => _notes.values
@@ -205,6 +215,7 @@ class NotesRepository extends ChangeNotifier {
     final n = _notes.remove(id)!;
     _dirty.remove(id);
     _purge.add(id);
+    history.forget(id);
     _releaseImages([n]);
     _changed();
   }
@@ -215,6 +226,7 @@ class NotesRepository extends ChangeNotifier {
       _notes.remove(n.id);
       _dirty.remove(n.id);
       _purge.add(n.id);
+      history.forget(n.id);
     }
     _releaseImages(gone);
     _changed();
@@ -233,6 +245,7 @@ class NotesRepository extends ChangeNotifier {
       gone.add(_notes.remove(id)!);
       _dirty.remove(id);
       _purge.add(id);
+      history.forget(id);
     }
     _releaseImages(gone);
   }
@@ -263,6 +276,8 @@ class NotesRepository extends ChangeNotifier {
 
   Future<void> start() async {
     _prefs = await SharedPreferences.getInstance();
+    if (_disposed) return;
+    await history.load(_prefs);
     if (_disposed) return;
     _loadLocal();
     loaded = true;
@@ -309,6 +324,7 @@ class NotesRepository extends ChangeNotifier {
     final n = _notes[id];
     if (_disposed || n == null) return;
     if (n.content == content && n.rich == rich) return;
+    if (!n.vault) history.record(n);
     n.content = content;
     n.rich = rich;
     n.updatedAt = DateTime.now().toUtc();
@@ -317,10 +333,78 @@ class NotesRepository extends ChangeNotifier {
 
   void togglePin(String id) => _edit(id, (n) => n.pinned = !n.pinned);
 
+  /// Completar una tarea repetitiva la pasa a la siguiente fecha.
   void toggleDone(String id) => _edit(id, (n) {
+        final rule = RepeatRule.parse(n.repeat);
+        if (!n.done && rule != null && n.dueAt != null) {
+          final due = n.dueAt!;
+          final next = rule.next(due.toLocal(), after: DateTime.now());
+          final shift = next.toUtc().difference(due);
+          n.dueAt = next.toUtc();
+          n.remindAt = n.remindAt?.add(shift);
+          for (final t in n.subtasks) {
+            t.done = false;
+          }
+          return;
+        }
         n.done = !n.done;
         n.doneAt = n.done ? DateTime.now().toUtc() : null;
       });
+
+  void setRepeat(String id, String? rule) => _edit(id, (n) => n.repeat = rule);
+
+  void addSubtask(String id, String text) => _edit(id, (n) {
+        n.subtasks.add(Subtask(id: newNoteId(), text: text.trim()));
+      });
+
+  void toggleSubtask(String id, String taskId) => _edit(id, (n) {
+        for (final t in n.subtasks) {
+          if (t.id == taskId) t.done = !t.done;
+        }
+      });
+
+  void renameSubtask(String id, String taskId, String text) => _edit(id, (n) {
+        for (final t in n.subtasks) {
+          if (t.id == taskId) t.text = text.trim();
+        }
+      });
+
+  void removeSubtask(String id, String taskId) =>
+      _edit(id, (n) => n.subtasks.removeWhere((t) => t.id == taskId));
+
+  /// Vuelve a una versión guardada; la actual queda también en el historial.
+  void restoreVersion(String id, NoteVersion v) =>
+      updateContent(id, v.content, rich: v.rich);
+
+  /// Mezcla una copia: añade lo que falta y actualiza lo que sea más nuevo.
+  /// Nunca borra nada ni importa notas del Vault.
+  ({int notes, int folders}) importBackup(Backup b) {
+    var notes = 0, folders = 0;
+    for (final f in b.folders) {
+      final local = _folders[f.id];
+      if (local != null && !f.updatedAt.isAfter(local.updatedAt)) continue;
+      _folders[f.id] = f;
+      _dirtyFolders.add(f.id);
+      folders++;
+    }
+    for (final n in b.notes) {
+      if (n.vault) continue;
+      final local = _notes[n.id];
+      if (local != null &&
+          (local.vault || !n.updatedAt.isAfter(local.updatedAt))) {
+        continue;
+      }
+      _notes[n.id] = n;
+      _dirty.add(n.id);
+      notes++;
+    }
+    if (notes + folders > 0) {
+      _notify();
+      _schedulePersist();
+      unawaited(sync());
+    }
+    return (notes: notes, folders: folders);
+  }
 
   /// Enlaza dos notas (enlace manual, se ve en la red y en el panel).
   void addLinks(String id, Iterable<String> targets) => _edit(id, (n) {
@@ -385,6 +469,11 @@ class NotesRepository extends ChangeNotifier {
           ..pinned = s.pinned
           ..deleted = s.deleted
           ..archived = s.archived
+          ..repeat = s.repeat
+          ..subtasks = [
+            for (final t in s.subtasks)
+              Subtask(id: t.id, text: t.text, done: t.done)
+          ]
           ..links = List.of(s.links);
       });
 
@@ -506,6 +595,7 @@ class NotesRepository extends ChangeNotifier {
         final had = serverHasVault;
         serverHasVault = rows.first.containsKey('vault');
         serverHasArchive = rows.first.containsKey('archived');
+        serverHasTasks = rows.first.containsKey('subtasks');
         if (had != serverHasVault) changed = true;
       }
       for (final r in rows) {
@@ -606,7 +696,8 @@ class NotesRepository extends ChangeNotifier {
       rows.add(n.toRow(
           userId: userId,
           withVault: serverHasVault,
-          withArchive: serverHasArchive));
+          withArchive: serverHasArchive,
+          withTasks: serverHasTasks));
     }
     if (rows.isEmpty) return;
     try {
@@ -628,6 +719,13 @@ class NotesRepository extends ChangeNotifier {
         _notify();
         return _pushDirty();
       }
+      // Igual con las columnas de la migración 008.
+      if (serverHasTasks &&
+          (e.message.contains('subtasks') || e.message.contains('repeat'))) {
+        serverHasTasks = false;
+        _notify();
+        return _pushDirty();
+      }
       rethrow;
     }
     // Solo se marca como subido si no se ha vuelto a editar mientras tanto.
@@ -642,6 +740,17 @@ class NotesRepository extends ChangeNotifier {
     final local = _notes[remote.id];
     if (local != null && !remote.updatedAt.isAfter(local.updatedAt)) {
       return false;
+    }
+    // Sin la migración 008 el servidor no trae estos datos: no se pierden.
+    if (!serverHasTasks && local != null) {
+      remote
+        ..repeat = local.repeat
+        ..subtasks = local.subtasks;
+    }
+    if (!remote.vault) {
+      if (local != null && local.content != remote.content) {
+        history.record(local);
+      }
     }
     _notes[remote.id] = remote;
     _dirty.remove(remote.id);

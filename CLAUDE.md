@@ -130,6 +130,10 @@ that it still arrives. On Windows, check toasts are enabled first:
   Android share via receive_sharing_intent (`_onShared`), multi-select `_picked` in
   `notes_home.dart`. AI streaming: each client rebuilds SSE events into the normal response shape
   (`_GeminiStream`, `_OpenAiStream`, `_ClaudeStream`); tests inject `AiStreamTransport`.
+- Notes tools (2.3): `lib/data/recurrence.dart`, `note_history.dart` (local, per account, never
+  Vault), `note_filters.dart`, `note_export.dart` (Markdown, PDF, `Backup`), UI in
+  `lib/ui/note_tools.dart`. Migration 008 is optional at runtime (`serverHasTasks`). The note list
+  is memoized: anything that changes it must be part of its hash in `notes_home.dart`.
 - Smooth wheel scrolling: use `SmoothScrollController` (`lib/ui/smooth_scroll.dart`) for new
   scroll views on desktop.
 - Completed tasks: `Note.doneAt` (column `notes.done_at`); done > 3 days → hidden from lists and

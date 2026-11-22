@@ -2,6 +2,22 @@
 
 All notable changes to Oganesson TakeNotes (formerly *Notas* / *BabuNotes*).
 
+## [2.3.0] — 2026-11-22
+
+### Added
+- **Repeating tasks**: daily, weekdays, weekly, monthly or yearly. Completing one moves it to its
+  next date and resets its steps.
+- **Subtasks** with a progress bar.
+- **Templates**: meeting, shopping, journal, project and trip, plus your own.
+- **Search filters**: date, folder, color, images and tasks.
+- **Version history** per note, stored on the device. Vault notes are never included.
+- **Export and import**: Markdown and PDF, plus a full backup that can be imported again without
+  overwriting newer notes. Backups never contain the Vault.
+
+### Setup
+- Run `supabase/migrations/008_tasks.sql` so repeats and subtasks sync between devices. Without
+  it they keep working, but stay on the device where they were created.
+
 ## [2.2.0] — 2026-11-22
 
 ### Added

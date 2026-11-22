@@ -14,6 +14,7 @@ import '../config.dart';
 import '../data/ai_assistant.dart';
 import '../data/desktop_integration.dart';
 import '../data/note_factory.dart';
+import '../data/note_filters.dart';
 import '../data/note_images.dart';
 import '../data/note_links.dart';
 import '../data/notes_repository.dart';
@@ -40,6 +41,7 @@ import 'link_picker.dart';
 import 'note_color_sheet.dart';
 import 'note_editor.dart';
 import 'note_image.dart' show NoteThumb;
+import 'note_tools.dart';
 import 'quick_capture.dart';
 import 'schedule_sheet.dart';
 import 'sort_menu.dart';
@@ -74,6 +76,7 @@ class _NotesHomeState extends State<NotesHome> {
   final _search = TextEditingController();
   final _searchFocus = FocusNode();
   String _query = '';
+  NoteFilters _filters = const NoteFilters();
   String? _openId;
   final Set<String> _removing = {}; // filas que se están plegando
   bool _openAutofocus = false;
@@ -356,6 +359,12 @@ class _NotesHomeState extends State<NotesHome> {
       commands: [
         PaletteCommand(Icons.edit_note, tr('Nueva nota'), _newNote,
             shortcut: 'Ctrl+N'),
+        PaletteCommand(Icons.dashboard_customize_outlined,
+            tr('Nueva desde plantilla'), _fromTemplate),
+        PaletteCommand(Icons.ios_share_rounded, tr('Exportar notas'),
+            () => showExportAll(context, repo)),
+        PaletteCommand(Icons.download_rounded, tr('Importar copia'),
+            () => importBackupFile(context, repo)),
         PaletteCommand(Icons.create_new_folder_outlined, tr('Nueva carpeta'),
             () async {
           final f = await editFolderDialog(context, repo);
@@ -537,6 +546,11 @@ class _NotesHomeState extends State<NotesHome> {
         if (mounted) showScheduleSheet(context, repo, n.id);
       });
     }
+  }
+
+  Future<void> _fromTemplate() async {
+    final n = await pickTemplate(context, repo);
+    if (n != null && mounted) _open(n.id);
   }
 
   /// Nueva nota temporal que vence el día elegido en el calendario.
@@ -778,6 +792,7 @@ class _NotesHomeState extends State<NotesHome> {
       wide,
       _removing.length,
       Object.hashAllUnordered(_picked),
+      _filters.signature,
       Theme.of(context)
     );
     if (_listCache != null && _listKey == key) return _listCache!;
@@ -983,6 +998,7 @@ class _NotesHomeState extends State<NotesHome> {
     final all = repo.notes
         .where((n) => !n.isEmpty || n.id == _openId)
         .where((n) => q.isEmpty || n.content.toLowerCase().contains(q))
+        .where((n) => !_filters.isActive || _filters.matches(n))
         .toList();
     switch (_sort) {
       case 'creada':
@@ -1012,9 +1028,11 @@ class _NotesHomeState extends State<NotesHome> {
       body = _calendar();
     } else if (_filter == 'red' && !wide) {
       body = _graph();
-    } else if (all.isEmpty && (q.isNotEmpty || repo.folders.isEmpty)) {
+    } else if (all.isEmpty &&
+        (q.isNotEmpty || _filters.isActive || repo.folders.isEmpty)) {
       body = _EmptyList(
-          searching: q.isNotEmpty, timeView: _filter == 'calendario');
+          searching: q.isNotEmpty || _filters.isActive,
+          timeView: _filter == 'calendario');
     } else {
       var index = 0;
       final folders = repo.folders;
@@ -1129,20 +1147,44 @@ class _NotesHomeState extends State<NotesHome> {
               decoration: InputDecoration(
                 hintText: tr('Buscar'),
                 prefixIcon: const Icon(Icons.search),
-                suffixIcon: AnimatedSwitcher(
-                  duration: Anim.fast,
-                  transitionBuilder: (c, a) =>
-                      ScaleTransition(scale: a, child: c),
-                  child: _query.isEmpty
-                      ? const SizedBox(key: ValueKey('sin'))
-                      : IconButton(
-                          key: const ValueKey('con'),
-                          icon: const Icon(Icons.close),
-                          onPressed: () {
-                            _search.clear();
-                            setState(() => _query = '');
-                          },
-                        ),
+                suffixIcon: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    AnimatedSwitcher(
+                      duration: Anim.fast,
+                      transitionBuilder: (c, a) =>
+                          ScaleTransition(scale: a, child: c),
+                      child: _query.isEmpty
+                          ? const SizedBox(key: ValueKey('sin'))
+                          : IconButton(
+                              key: const ValueKey('con'),
+                              icon: const Icon(Icons.close),
+                              onPressed: () {
+                                _search.clear();
+                                setState(() => _query = '');
+                              },
+                            ),
+                    ),
+                    IconButton(
+                      tooltip: tr('Filtros'),
+                      onPressed: () async {
+                        final f =
+                            await showFiltersSheet(context, repo, _filters);
+                        if (f != null && mounted) {
+                          setState(() => _filters = f);
+                        }
+                      },
+                      icon: Badge(
+                        isLabelVisible: _filters.isActive,
+                        label: Text('${_filters.count}'),
+                        backgroundColor: Palette.accent(context),
+                        child: Icon(Icons.tune_rounded,
+                            color: _filters.isActive
+                                ? Palette.accent(context)
+                                : null),
+                      ),
+                    ),
+                  ],
                 ),
                 isDense: true,
                 filled: true,
@@ -1166,7 +1208,7 @@ class _NotesHomeState extends State<NotesHome> {
                           'red',
                           'calendario'
                         }.contains(_filter) ? 'todas' : _filter}'
-                    '-${all.isEmpty}-${q.isEmpty}'),
+                    '-${all.isEmpty}-${q.isEmpty && !_filters.isActive}'),
                 child: body,
               ),
             ),
@@ -1333,6 +1375,8 @@ class _NotesHomeState extends State<NotesHome> {
       header: _MenuHeader(email: email, version: v),
       entries: [
         MenuEntry.section(tr('Notas')),
+        MenuEntry('plantillas', Icons.dashboard_customize_outlined,
+            tr('Nueva desde plantilla')),
         MenuEntry('archivadas', Icons.archive_outlined, tr('Archivadas'),
             badge: archived == 0 ? null : '$archived'),
         MenuEntry('completadas', Icons.task_alt_rounded, tr('Completadas'),
@@ -1352,6 +1396,10 @@ class _NotesHomeState extends State<NotesHome> {
         MenuEntry('tema', Icons.palette_outlined, tr('Tema y colores')),
         MenuEntry('idioma', Icons.translate_rounded, tr('Idioma'),
             hint: AppLanguage.supported[appLanguage.code]),
+        MenuEntry.section(tr('Datos')),
+        MenuEntry('exportar', Icons.ios_share_rounded, tr('Exportar notas'),
+            subtitle: tr('Copia, Markdown o PDF')),
+        MenuEntry('importar', Icons.download_rounded, tr('Importar copia')),
         MenuEntry.section(tr('Cuenta')),
         MenuEntry('sync', Icons.sync, tr('Sincronizar ahora')),
         MenuEntry('update', Icons.system_update_alt_rounded,
@@ -1384,6 +1432,12 @@ class _NotesHomeState extends State<NotesHome> {
     );
     if (!mounted || choice == null) return;
     switch (choice) {
+      case 'plantillas':
+        await _fromTemplate();
+      case 'exportar':
+        await showExportAll(context, repo);
+      case 'importar':
+        await importBackupFile(context, repo);
       case 'tema':
         showThemePicker(context);
       case 'idioma':
