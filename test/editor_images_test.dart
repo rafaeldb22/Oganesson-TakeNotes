@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_quill/flutter_quill.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
 import 'package:notas/data/note_images.dart';
@@ -79,6 +80,21 @@ void main() {
     expect(tester.takeException(), isNull);
 
     expect(repo.byId(n.id)!.title, 'Captura');
+
+    // El cursor no se dibuja al lado de la imagen (sería gigante), sí en
+    // el texto.
+    bool showCursor() =>
+        tester.widget<QuillEditor>(find.byType(QuillEditor)).config.showCursor!;
+    final ctrl =
+        tester.widget<QuillEditor>(find.byType(QuillEditor)).controller;
+    ctrl.updateSelection(
+        const TextSelection.collapsed(offset: 8), ChangeSource.local);
+    await tester.pump();
+    expect(showCursor(), isFalse);
+    ctrl.updateSelection(
+        const TextSelection.collapsed(offset: 3), ChangeSource.local);
+    await tester.pump();
+    expect(showCursor(), isTrue);
 
     await tester.pumpWidget(const SizedBox());
     repo.dispose();

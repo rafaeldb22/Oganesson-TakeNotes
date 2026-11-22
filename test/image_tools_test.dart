@@ -28,6 +28,24 @@ void main() {
     expect(_text(_doc()), 'Uno\nDos\n[IMG]\nTres\n');
   });
 
+  test('el cursor se oculta solo al lado de una imagen', () {
+    final c = _doc(); // "Uno", "Dos", imagen, "Tres"
+    void at(int o) => c.updateSelection(
+        TextSelection.collapsed(offset: o), ChangeSource.local);
+    final img = _imageAt(c);
+    at(img);
+    expect(caretNextToImage(c), isTrue); // a la izquierda
+    at(img + 1);
+    expect(caretNextToImage(c), isTrue); // a la derecha
+    at(1);
+    expect(caretNextToImage(c), isFalse); // entre letras
+    at(img + 3);
+    expect(caretNextToImage(c), isFalse); // en "Tres"
+    c.updateSelection(TextSelection(baseOffset: img, extentOffset: img + 1),
+        ChangeSource.local);
+    expect(caretNextToImage(c), isFalse); // imagen seleccionada: sin cursor
+  });
+
   test('subir y bajar una imagen línea a línea', () {
     final c = _doc();
     expect(moveImageUp(c, _imageAt(c), _src), isTrue);

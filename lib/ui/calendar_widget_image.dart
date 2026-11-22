@@ -291,7 +291,7 @@ class CalendarWidgetImage extends StatelessWidget {
 
 class WidgetTaskRow extends StatelessWidget {
   const WidgetTaskRow(
-      {required this.note, required this.fg, required this.colors});
+      {super.key, required this.note, required this.fg, required this.colors});
   final Note note;
   final Color fg;
   final NotasColors colors;

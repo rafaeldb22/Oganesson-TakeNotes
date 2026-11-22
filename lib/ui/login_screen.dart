@@ -32,13 +32,15 @@ class _LoginScreenState extends State<LoginScreen> {
 
   String _traducir(String m) {
     final l = m.toLowerCase();
-    if (l.contains('invalid login'))
+    if (l.contains('invalid login')) {
       return tr('Correo o contraseña incorrectos.');
+    }
     if (l.contains('not confirmed')) {
       return tr('Tienes que confirmar el correo antes de entrar.');
     }
-    if (l.contains('already registered'))
+    if (l.contains('already registered')) {
       return tr('Ese correo ya tiene cuenta.');
+    }
     if (l.contains('password')) {
       return tr('La contraseña no es válida (mínimo 6 caracteres).');
     }

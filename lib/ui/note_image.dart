@@ -1044,6 +1044,11 @@ class _ImageViewerState extends State<_ImageViewer>
     return CallbackShortcuts(
       bindings: {
         const SingleActivator(LogicalKeyboardKey.escape): _close,
+        // Ctrl+C copia la imagen y Ctrl+S la guarda.
+        const SingleActivator(LogicalKeyboardKey.keyC, control: true): () =>
+            _act('copiar'),
+        const SingleActivator(LogicalKeyboardKey.keyS, control: true): () =>
+            _act('guardar'),
       },
       child: Focus(
         autofocus: true,
@@ -1141,13 +1146,17 @@ class _ImageViewerState extends State<_ImageViewer>
                           if (widget.onCropped != null)
                             _HoverBtn(Icons.crop_rounded, tr('Recortar'),
                                 () => _act('recortar')),
-                          _HoverBtn(Icons.content_copy_rounded,
-                              tr('Copiar imagen'), () => _act('copiar')),
+                          _HoverBtn(
+                              Icons.content_copy_rounded,
+                              isDesktopWindows
+                                  ? '${tr('Copiar imagen')}  (Ctrl+C)'
+                                  : tr('Copiar imagen'),
+                              () => _act('copiar')),
                           _HoverBtn(
                               Icons.download_rounded,
                               Platform.isAndroid
                                   ? tr('Guardar en la galería')
-                                  : tr('Guardar como…'),
+                                  : '${tr('Guardar como…')}  (Ctrl+S)',
                               () => _act('guardar')),
                           if (widget.onDelete != null)
                             _HoverBtn(Icons.delete_outline_rounded,

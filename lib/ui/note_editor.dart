@@ -66,6 +66,10 @@ class _NoteEditorState extends State<NoteEditor> {
   bool _closing = false;
   bool _applyingRemote = false;
   bool _toolbarOpen = true;
+
+  /// El cursor está justo al lado de una imagen: ahí se oculta, porque
+  /// tomaría la altura de la imagen y se vería gigante.
+  bool _caretByImage = false;
   String _lastSaved = '';
 
   NotesRepository get repo => widget.repo;
@@ -120,6 +124,7 @@ class _NoteEditorState extends State<NoteEditor> {
     }
     _lastSaved = _richJson();
     _ctrl.addListener(_onEdit);
+    _ctrl.addListener(_onCaret);
     repo.addListener(_onRepo);
     _focus.addListener(_onFocus);
   }
@@ -135,6 +140,11 @@ class _NoteEditorState extends State<NoteEditor> {
     _lastSaved = rich;
     _lastTyped = DateTime.now();
     repo.updateContent(widget.noteId, _plain(), rich: rich);
+  }
+
+  void _onCaret() {
+    final by = caretNextToImage(_ctrl);
+    if (by != _caretByImage && mounted) setState(() => _caretByImage = by);
   }
 
   /// Crea la nota de un enlace que aún no existe y la abre.
@@ -174,6 +184,7 @@ class _NoteEditorState extends State<NoteEditor> {
   void dispose() {
     repo.removeListener(_onRepo);
     _ctrl.removeListener(_onEdit);
+    _ctrl.removeListener(_onCaret);
     _focus.removeListener(_onFocus);
     _ctrl.dispose();
     _focus.dispose();
@@ -488,6 +499,7 @@ class _NoteEditorState extends State<NoteEditor> {
                                 scrollController: _scroll,
                                 config: QuillEditorConfig(
                                   editorKey: _editorKey,
+                                  showCursor: !_caretByImage,
                                   placeholder: tr('Escribe algo…'),
                                   autoFocus: widget.autofocus,
                                   expands: true,

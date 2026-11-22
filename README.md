@@ -128,6 +128,7 @@ Sign in with the **same account** on every device and your notes sync automatica
 
 **Keyboard (Windows)**
 - Ctrl+N new note · Ctrl+F search · Ctrl+1 / 2 / 3 notes, calendar, network · Ctrl+, theme · Esc close the note.
+- Ctrl+V pastes a screenshot or copied image into the note · in the image viewer: Ctrl+C copy, Ctrl+S save, Esc close.
 
 **Updates & support**
 - The app checks GitHub Releases and installs new versions in one click (Windows installer / Android APK).

@@ -32,6 +32,16 @@ String _plain(QuillController c) => c.document.toPlainText();
 int _lineStart(String t, int offset) =>
     offset <= 0 ? 0 : t.lastIndexOf('\n', offset - 1) + 1;
 
+/// ¿El cursor (sin selección) está justo antes o después de una imagen?
+bool caretNextToImage(QuillController c) {
+  final sel = c.selection;
+  if (!sel.isValid || !sel.isCollapsed) return false;
+  final t = _plain(c);
+  final o = sel.baseOffset;
+  return (o < t.length && t.codeUnitAt(o) == 0xFFFC) ||
+      (o > 0 && o <= t.length && t.codeUnitAt(o - 1) == 0xFFFC);
+}
+
 /// Inserta una imagen en [index] SIEMPRE en su propia línea (Quill solo
 /// separa así los vídeos: una imagen pegada en mitad de una frase quedaría
 /// mezclada con el texto). Devuelve la posición de la imagen.

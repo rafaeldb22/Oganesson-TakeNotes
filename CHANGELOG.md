@@ -2,6 +2,21 @@
 
 All notable changes to Oganesson TakeNotes (formerly *Notas* / *BabuNotes*).
 
+## [1.7.1] — 2026-11-22
+
+### Added
+- Image viewer shortcuts on Windows: **Ctrl+C** copies the image and **Ctrl+S** saves it (shown in
+  the button tooltips).
+
+### Fixed
+- The blinking text cursor is no longer drawn right next to an image (it took the image's height
+  and looked huge); it only shows next to text.
+
+### Changed
+- Supabase is initialised with the new `publishableKey` parameter (`anonKey` is deprecated);
+  `supabase_flutter` ≥ 2.18.
+- Code clean-up: no more analyzer warnings besides the SDK-wide `material.dart` notice.
+
 ## [1.7.0] — 2026-11-22
 
 ### Added
