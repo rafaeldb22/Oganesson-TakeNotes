@@ -1,17 +1,19 @@
 import 'dart:async';
-import 'dart:io' show Platform;
+import 'dart:io' show File, Platform;
 import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:receive_sharing_intent/receive_sharing_intent.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../config.dart';
 import '../data/ai_assistant.dart';
 import '../data/desktop_integration.dart';
+import '../data/note_factory.dart';
 import '../data/note_images.dart';
 import '../data/note_links.dart';
 import '../data/notes_repository.dart';
@@ -24,6 +26,7 @@ import 'account_dialogs.dart';
 import 'archived_sheet.dart';
 import 'assistant_panel.dart';
 import 'calendar_view.dart';
+import 'command_palette.dart';
 import 'completed_sheet.dart';
 import 'context_menu.dart';
 import 'folders.dart';
@@ -37,6 +40,7 @@ import 'link_picker.dart';
 import 'note_color_sheet.dart';
 import 'note_editor.dart';
 import 'note_image.dart' show NoteThumb;
+import 'quick_capture.dart';
 import 'schedule_sheet.dart';
 import 'sort_menu.dart';
 import 'split.dart';
@@ -109,6 +113,8 @@ class _NotesHomeState extends State<NotesHome> {
 
   StreamSubscription<Uri?>? _widgetSub;
   StreamSubscription<void>? _newNoteSub;
+  StreamSubscription<void>? _captureSub;
+  StreamSubscription<List<SharedMediaFile>>? _shareSub;
 
   /// 'todas' | 'calendario' | id de carpeta
   String _filter = 'todas';
@@ -154,6 +160,14 @@ class _NotesHomeState extends State<NotesHome> {
       if (mounted) _newNote();
     });
     DesktopIntegration.instance.askOnFirstClose = _askOnFirstClose;
+    _captureSub =
+        DesktopIntegration.instance.captureRequests.listen((_) => _capture());
+    // Android: lo que se comparte desde otras apps se convierte en una nota.
+    if (!kIsWeb && Platform.isAndroid) {
+      final share = ReceiveSharingIntent.instance;
+      _shareSub = share.getMediaStream().listen(_onShared, onError: (_) {});
+      share.getInitialMedia().then(_onShared).catchError((_) {});
+    }
     vault.addListener(_onVault);
     repo.onLocalEdit = vault.touch;
     WidgetBridge.initialUri().then(_onWidgetUri);
@@ -179,6 +193,8 @@ class _NotesHomeState extends State<NotesHome> {
   void dispose() {
     _widgetSub?.cancel();
     _newNoteSub?.cancel();
+    _captureSub?.cancel();
+    _shareSub?.cancel();
     _entranceTimer?.cancel();
     _titleTimer?.cancel();
     vault.removeListener(_onVault);
@@ -196,6 +212,187 @@ class _NotesHomeState extends State<NotesHome> {
   late final AiSession _ai = AiSession(repo);
 
   void _openAssistant() => openAssistant(context, _ai, onOpenNote: _open);
+
+  // ------------------------------------------------- selección múltiple
+
+  /// Notas marcadas (Ctrl+clic, o ⋯/clic derecho → Seleccionar).
+  final Set<String> _picked = {};
+  bool get _selecting => _picked.isNotEmpty;
+
+  void _togglePick(String id) => setState(
+      () => _picked.contains(id) ? _picked.remove(id) : _picked.add(id));
+
+  void _clearPicked() => setState(_picked.clear);
+
+  void _bulkPin() {
+    final notes = [for (final id in _picked) repo.byId(id)!];
+    // Si alguna está sin fijar, se fijan todas; si no, se desfijan.
+    final pin = notes.any((n) => !n.pinned);
+    for (final n in notes) {
+      if (n.pinned != pin) repo.togglePin(n.id);
+    }
+    _clearPicked();
+  }
+
+  Future<void> _bulkMove() async {
+    final r = await pickFolder(context, repo, null);
+    if (r == null || !mounted) return;
+    for (final id in _picked) {
+      repo.moveToFolder(id, r.isEmpty ? null : r);
+    }
+    _clearPicked();
+  }
+
+  Future<bool> _confirmBulk(String title, String text, String action) async =>
+      await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: Text(title),
+          content: Text(text),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: Text(tr('Cancelar'))),
+            FilledButton(
+                onPressed: () => Navigator.pop(ctx, true), child: Text(action)),
+          ],
+        ),
+      ) ==
+      true;
+
+  Future<void> _bulkArchive() async {
+    final ids = _picked.toList();
+    if (!await _confirmBulk(trf('¿Archivar {0} notas?', [ids.length]),
+            tr('La encontrarás en ⋯ → Archivadas.'), tr('Archivar')) ||
+        !mounted) {
+      return;
+    }
+    if (ids.contains(_openId)) _close();
+    for (final id in ids) {
+      repo.setArchived(id, true);
+    }
+    _clearPicked();
+    showToast(context, trf('{0} notas archivadas', [ids.length]),
+        icon: Icons.archive_outlined,
+        actionLabel: tr('Deshacer'), onAction: () {
+      for (final id in ids) {
+        repo.setArchived(id, false);
+      }
+    });
+  }
+
+  Future<void> _bulkDelete() async {
+    final ids = _picked.toList();
+    if (!await _confirmBulk(trf('¿Eliminar {0} notas?', [ids.length]),
+            tr('Irán a la papelera durante 3 días.'), tr('Eliminar')) ||
+        !mounted) {
+      return;
+    }
+    if (ids.contains(_openId)) _close();
+    for (final id in ids) {
+      repo.delete(id);
+    }
+    _clearPicked();
+    showToast(context, trf('{0} notas en la papelera', [ids.length]),
+        icon: Icons.delete_outline_rounded,
+        actionLabel: tr('Deshacer'), onAction: () {
+      for (final id in ids) {
+        repo.restore(id);
+      }
+    });
+  }
+
+  /// Barra de acciones mientras hay notas seleccionadas.
+  Widget _selectionBar(BuildContext context) => SizedBox(
+        key: const ValueKey('barra-seleccion'),
+        height: 58,
+        child: Row(
+          children: [
+            const SizedBox(width: 8),
+            _BarButton(
+                tooltip: tr('Cancelar selección'),
+                icon: Icons.close_rounded,
+                onTap: _clearPicked),
+            Expanded(
+              child: Text(
+                trn(_picked.length, '{0} seleccionada', '{0} seleccionadas'),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontWeight: FontWeight.w700),
+              ),
+            ),
+            _BarButton(
+                tooltip: tr('Fijar arriba'),
+                icon: Icons.push_pin_outlined,
+                onTap: _bulkPin),
+            _BarButton(
+                tooltip: tr('Mover a carpeta'),
+                icon: Icons.drive_file_move_outline,
+                onTap: _bulkMove),
+            _BarButton(
+                tooltip: tr('Archivar'),
+                icon: Icons.archive_outlined,
+                onTap: _bulkArchive),
+            _BarButton(
+                tooltip: tr('Eliminar'),
+                icon: Icons.delete_outline_rounded,
+                onTap: _bulkDelete),
+            const SizedBox(width: 8),
+          ],
+        ),
+      );
+
+  /// Ctrl+K: buscar notas y lanzar cualquier acción.
+  void _openPalette() {
+    void view(String f) {
+      _close();
+      _setFilter(f);
+    }
+
+    showCommandPalette(
+      context,
+      repo: repo,
+      onOpenNote: _open,
+      commands: [
+        PaletteCommand(Icons.edit_note, tr('Nueva nota'), _newNote,
+            shortcut: 'Ctrl+N'),
+        PaletteCommand(Icons.create_new_folder_outlined, tr('Nueva carpeta'),
+            () async {
+          final f = await editFolderDialog(context, repo);
+          if (f != null && !_openFolders.contains(f.id)) _toggleFolder(f.id);
+        }),
+        PaletteCommand(
+            Icons.auto_awesome_outlined, tr('Asistente IA'), _openAssistant,
+            shortcut: 'Ctrl+J'),
+        PaletteCommand(
+            Icons.sticky_note_2_outlined, tr('Notas'), () => view('todas'),
+            shortcut: 'Ctrl+1'),
+        PaletteCommand(Icons.calendar_month_outlined, tr('Calendario'),
+            () => view('calendario'),
+            shortcut: 'Ctrl+2'),
+        PaletteCommand(
+            Icons.hub_outlined, tr('Red de notas'), () => view('red'),
+            shortcut: 'Ctrl+3'),
+        PaletteCommand(Icons.palette_outlined, tr('Tema y colores'),
+            () => showThemePicker(context),
+            shortcut: 'Ctrl+,'),
+        PaletteCommand(Icons.translate_rounded, tr('Idioma'),
+            () => showLanguagePicker(context)),
+        PaletteCommand(Icons.archive_outlined, tr('Archivadas'),
+            () => showArchived(context, repo)),
+        PaletteCommand(Icons.task_alt_rounded, tr('Completadas'),
+            () => showCompleted(context, repo)),
+        PaletteCommand(Icons.delete_outline, tr('Papelera'),
+            () => showTrash(context, repo)),
+        PaletteCommand(Icons.shield_outlined, 'Vault', _openVault),
+        PaletteCommand(Icons.sync, tr('Sincronizar ahora'), repo.sync),
+        PaletteCommand(
+            Icons.system_update_alt_rounded,
+            tr('Buscar actualizaciones'),
+            () => checkForUpdatesManually(context)),
+      ],
+    );
+  }
 
   /// El menú ⋯ cambia según el Vault esté abierto o no.
   void _onVault() {
@@ -254,6 +451,61 @@ class _NotesHomeState extends State<NotesHome> {
         if (mounted) _newNote();
       });
     }
+  }
+
+  /// Nota rápida (Ctrl+Alt+N): al guardar o cancelar, la ventana vuelve a
+  /// como estaba.
+  Future<void> _capture() async {
+    if (!mounted) return;
+    final desktop = DesktopIntegration.instance;
+    final nav = Navigator.of(context, rootNavigator: true);
+    var closed = false;
+    desktop.cancelCapture = () {
+      if (!closed) nav.maybePop();
+    };
+    final note = await showQuickCapture(context, repo);
+    closed = true;
+    desktop.cancelCapture = null;
+    await desktop.endCapture();
+    if (note != null && mounted) {
+      showToast(context, tr('Nota guardada'),
+          icon: Icons.check_circle_outline_rounded,
+          actionLabel: tr('Abrir'),
+          onAction: () => _open(note.id));
+    }
+  }
+
+  /// Texto, enlaces e imágenes compartidos desde otra app.
+  Future<void> _onShared(List<SharedMediaFile> files) async {
+    if (files.isEmpty) return;
+    final texts = <String>[];
+    final images = <String>[];
+    for (final f in files) {
+      switch (f.type) {
+        case SharedMediaType.text || SharedMediaType.url:
+          texts.add(f.path);
+        case SharedMediaType.image:
+          if (f.message?.trim().isNotEmpty == true) texts.add(f.message!);
+          try {
+            final src =
+                await NoteImages.instance.add(await File(f.path).readAsBytes());
+            if (src != null) images.add(src);
+          } catch (e) {
+            debugPrint('Compartir: no se pudo leer la imagen ($e)');
+          }
+        default:
+          break;
+      }
+    }
+    unawaited(ReceiveSharingIntent.instance.reset());
+    _whenLoaded(() {
+      if (!mounted) return;
+      final n = createNoteFrom(repo, text: texts.join('\n'), images: images);
+      if (n == null) return;
+      _open(n.id);
+      showToast(context, tr('Guardado en una nota nueva'),
+          icon: Icons.check_circle_outline_rounded);
+    });
   }
 
   /// Primera vez que se cierra la ventana en Windows: ¿segundo plano o salir?
@@ -398,6 +650,8 @@ class _NotesHomeState extends State<NotesHome> {
       ('color', Icons.palette_outlined, tr('Color'), false),
       ('folder', Icons.drive_file_move_outline, tr('Mover a carpeta'), false),
       ('-', Icons.remove, '', false),
+      ('select', Icons.check_circle_outline, tr('Seleccionar'), false),
+      ('-', Icons.remove, '', false),
       ('delete', Icons.delete_outline, tr('Eliminar'), true),
     ];
 
@@ -449,6 +703,8 @@ class _NotesHomeState extends State<NotesHome> {
       case 'sub':
         final sub = repo.createSubnote(n.id);
         _open(sub.id, autofocus: true);
+      case 'select':
+        _togglePick(n.id);
       case 'pin':
         repo.togglePin(n.id);
       case 'dates':
@@ -503,6 +759,7 @@ class _NotesHomeState extends State<NotesHome> {
         onClose: _close,
         onDelete: _deleteAnimated,
         onOpenNote: _open,
+        onCommandPalette: _openPalette,
       ),
     );
   }
@@ -520,6 +777,7 @@ class _NotesHomeState extends State<NotesHome> {
       _openId,
       wide,
       _removing.length,
+      Object.hashAllUnordered(_picked),
       Theme.of(context)
     );
     if (_listCache != null && _listKey == key) return _listCache!;
@@ -551,7 +809,9 @@ class _NotesHomeState extends State<NotesHome> {
         bindings: {
           const SingleActivator(LogicalKeyboardKey.keyN, control: true):
               _newNote,
-          const SingleActivator(LogicalKeyboardKey.escape): _close,
+          // Esc: primero quita la selección; si no hay, cierra la nota.
+          const SingleActivator(LogicalKeyboardKey.escape): () =>
+              _selecting ? _clearPicked() : _close(),
           // Ctrl+F: buscar. Ctrl+1/2/3: notas, calendario, red.
           const SingleActivator(LogicalKeyboardKey.keyF, control: true): () =>
               _searchFocus.requestFocus(),
@@ -568,6 +828,9 @@ class _NotesHomeState extends State<NotesHome> {
             _setFilter('red');
           },
           // Ctrl+,: tema y colores.
+          // Ctrl+K: paleta de comandos.
+          const SingleActivator(LogicalKeyboardKey.keyK, control: true):
+              _openPalette,
           // Ctrl+J: asistente de IA.
           const SingleActivator(LogicalKeyboardKey.keyJ, control: true):
               _openAssistant,
@@ -712,6 +975,10 @@ class _NotesHomeState extends State<NotesHome> {
   }
 
   Widget _buildList(BuildContext context, bool wide) {
+    if (_picked.isNotEmpty) {
+      final alive = {for (final n in repo.notes) n.id};
+      _picked.removeWhere((id) => !alive.contains(id));
+    }
     final q = _query.toLowerCase();
     final all = repo.notes
         .where((n) => !n.isEmpty || n.id == _openId)
@@ -909,107 +1176,127 @@ class _NotesHomeState extends State<NotesHome> {
       // Barra inferior: asistente (aparte, a la izquierda) · nº de notas ·
       // notas · red · calendario · nueva carpeta · nueva nota.
       bottomNavigationBar: SafeArea(
-        child: SizedBox(
-          height: 58,
-          child: Row(
-            children: [
-              const SizedBox(width: 8),
-              _BarButton(
-                tooltip: isDesktopWindows
-                    ? '${tr('Asistente IA')} (Ctrl+J)'
-                    : tr('Asistente IA'),
-                icon: Icons.auto_awesome_outlined,
-                onTap: _openAssistant,
-              ),
-              // Separado del resto de botones.
-              Container(
-                width: 1,
-                height: 26,
-                margin: const EdgeInsets.symmetric(horizontal: 8),
-                color: Palette.separator(context),
-              ),
-              // Contador: en pantalla ancha va abajo a la derecha de la
-              // ventana; en el móvil, aquí.
-              Expanded(
-                child: wide
-                    ? const SizedBox()
-                    : Center(child: _statusText(context)),
-              ),
-              // En el móvil la lista, el calendario y la red ocupan la misma
-              // pantalla: botón para volver a las notas.
-              if (!wide) ...[
-                _BarButton(
-                  tooltip: tr('Notas'),
-                  icon: _listShown(noteOpen)
-                      ? Icons.sticky_note_2
-                      : Icons.sticky_note_2_outlined,
-                  active: _listShown(noteOpen),
-                  onTap: () {
-                    if (noteOpen) _close();
-                    if (_filter == 'red' || _filter == 'calendario') {
-                      _setFilter('todas');
-                    }
-                  },
-                ),
-                const SizedBox(width: 4),
-              ],
-              for (final (view, tip, on, off) in [
-                ('red', tr('Red de notas'), Icons.hub, Icons.hub_outlined),
-                (
-                  'calendario',
-                  tr('Calendario'),
-                  Icons.calendar_month,
-                  Icons.calendar_month_outlined
-                ),
-              ]) ...[
-                _BarButton(
-                  // En escritorio el atajo de teclado va en la ayuda.
-                  tooltip: isDesktopWindows
-                      ? '$tip (Ctrl+${view == 'red' ? 3 : 2})'
-                      : tip,
-                  // Solo se ve activo cuando la vista está a la vista: con
-                  // una nota abierta encima no se queda "pulsado".
-                  icon: _viewShown(view, wide, noteOpen) ? on : off,
-                  active: _viewShown(view, wide, noteOpen),
-                  onTap: () {
-                    if (noteOpen &&
-                        (_filter == view ||
-                            (wide &&
-                                view == 'calendario' &&
-                                _filter != 'red'))) {
-                      _close(); // volver a la red / al calendario
-                    } else if (wide) {
-                      // En pantalla ancha el calendario es la vista por
-                      // defecto: la red se activa y desactiva.
-                      _setFilter(
-                          view == 'red' && _filter == 'red' ? 'todas' : view);
-                    } else {
-                      _setFilter(_filter == view ? 'todas' : view);
-                    }
-                  },
-                ),
-                const SizedBox(width: 4),
-              ],
-              _BarButton(
-                tooltip: tr('Nueva carpeta'),
-                icon: Icons.create_new_folder_outlined,
-                onTap: () async {
-                  final f = await editFolderDialog(context, repo);
-                  if (f != null && !_openFolders.contains(f.id)) {
-                    _toggleFolder(f.id);
-                  }
-                },
-              ),
-              const SizedBox(width: 4),
-              _BarButton(
-                tooltip: tr('Nueva nota (Ctrl+N)'),
-                icon: Icons.edit_note,
-                big: true,
-                onTap: _newNote,
-              ),
-              const SizedBox(width: 8),
-            ],
+        child: AnimatedSwitcher(
+          duration: Anim.medium,
+          transitionBuilder: (c, a) => FadeTransition(
+            opacity: a,
+            child: SlideTransition(
+              position: Tween(begin: const Offset(0, 0.3), end: Offset.zero)
+                  .animate(CurvedAnimation(parent: a, curve: Anim.curve)),
+              child: c,
+            ),
           ),
+          child: _selecting
+              ? _selectionBar(context)
+              : SizedBox(
+                  key: const ValueKey('barra-normal'),
+                  height: 58,
+                  child: Row(
+                    children: [
+                      const SizedBox(width: 8),
+                      _BarButton(
+                        tooltip: isDesktopWindows
+                            ? '${tr('Asistente IA')} (Ctrl+J)'
+                            : tr('Asistente IA'),
+                        icon: Icons.auto_awesome_outlined,
+                        onTap: _openAssistant,
+                      ),
+                      // Separado del resto de botones.
+                      Container(
+                        width: 1,
+                        height: 26,
+                        margin: const EdgeInsets.symmetric(horizontal: 8),
+                        color: Palette.separator(context),
+                      ),
+                      // Contador: en pantalla ancha va abajo a la derecha de la
+                      // ventana; en el móvil, aquí.
+                      Expanded(
+                        child: wide
+                            ? const SizedBox()
+                            : Center(child: _statusText(context)),
+                      ),
+                      // En el móvil la lista, el calendario y la red ocupan la misma
+                      // pantalla: botón para volver a las notas.
+                      if (!wide) ...[
+                        _BarButton(
+                          tooltip: tr('Notas'),
+                          icon: _listShown(noteOpen)
+                              ? Icons.sticky_note_2
+                              : Icons.sticky_note_2_outlined,
+                          active: _listShown(noteOpen),
+                          onTap: () {
+                            if (noteOpen) _close();
+                            if (_filter == 'red' || _filter == 'calendario') {
+                              _setFilter('todas');
+                            }
+                          },
+                        ),
+                        const SizedBox(width: 4),
+                      ],
+                      for (final (view, tip, on, off) in [
+                        (
+                          'red',
+                          tr('Red de notas'),
+                          Icons.hub,
+                          Icons.hub_outlined
+                        ),
+                        (
+                          'calendario',
+                          tr('Calendario'),
+                          Icons.calendar_month,
+                          Icons.calendar_month_outlined
+                        ),
+                      ]) ...[
+                        _BarButton(
+                          // En escritorio el atajo de teclado va en la ayuda.
+                          tooltip: isDesktopWindows
+                              ? '$tip (Ctrl+${view == 'red' ? 3 : 2})'
+                              : tip,
+                          // Solo se ve activo cuando la vista está a la vista: con
+                          // una nota abierta encima no se queda "pulsado".
+                          icon: _viewShown(view, wide, noteOpen) ? on : off,
+                          active: _viewShown(view, wide, noteOpen),
+                          onTap: () {
+                            if (noteOpen &&
+                                (_filter == view ||
+                                    (wide &&
+                                        view == 'calendario' &&
+                                        _filter != 'red'))) {
+                              _close(); // volver a la red / al calendario
+                            } else if (wide) {
+                              // En pantalla ancha el calendario es la vista por
+                              // defecto: la red se activa y desactiva.
+                              _setFilter(view == 'red' && _filter == 'red'
+                                  ? 'todas'
+                                  : view);
+                            } else {
+                              _setFilter(_filter == view ? 'todas' : view);
+                            }
+                          },
+                        ),
+                        const SizedBox(width: 4),
+                      ],
+                      _BarButton(
+                        tooltip: tr('Nueva carpeta'),
+                        icon: Icons.create_new_folder_outlined,
+                        onTap: () async {
+                          final f = await editFolderDialog(context, repo);
+                          if (f != null && !_openFolders.contains(f.id)) {
+                            _toggleFolder(f.id);
+                          }
+                        },
+                      ),
+                      const SizedBox(width: 4),
+                      _BarButton(
+                        tooltip: tr('Nueva nota (Ctrl+N)'),
+                        icon: Icons.edit_note,
+                        big: true,
+                        onTap: _newNote,
+                      ),
+                      const SizedBox(width: 8),
+                    ],
+                  ),
+                ),
         ),
       ),
     );
@@ -1237,9 +1524,19 @@ class _NotesHomeState extends State<NotesHome> {
               Divider(height: 1, indent: 16, color: Palette.separator(context)),
             _NoteTile(
               removing: _removing.contains(n.id),
+              checked: _picked.contains(n.id),
+              selecting: _selecting,
               note: n,
               selected: wide && n.id == _openId,
-              onTap: () => _open(n.id),
+              onTap: () {
+                // Ctrl+clic selecciona; con selección activa, cada toque
+                // marca o desmarca.
+                if (_selecting || HardwareKeyboard.instance.isControlPressed) {
+                  _togglePick(n.id);
+                } else {
+                  _open(n.id);
+                }
+              },
               onOptions: (at) => _options(n, at),
               onDismissed: (d) => d == DismissDirection.startToEnd
                   ? _deleteNote(n.id)
@@ -1424,6 +1721,8 @@ class _NotesHomeState extends State<NotesHome> {
 class _NoteTile extends StatefulWidget {
   const _NoteTile({
     required this.removing,
+    this.checked = false,
+    this.selecting = false,
     required this.note,
     required this.selected,
     required this.onTap,
@@ -1436,6 +1735,10 @@ class _NoteTile extends StatefulWidget {
   });
 
   final bool removing;
+
+  /// Marcada en la selección múltiple / hay selección activa.
+  final bool checked;
+  final bool selecting;
   final Note note;
   final bool selected;
   final VoidCallback onTap;
@@ -1479,7 +1782,7 @@ class _NoteTileState extends State<_NoteTile> {
   Widget build(BuildContext context) {
     final n = widget.note;
     // Resaltado limpio: una pastilla redondeada con margen (no toda la fila).
-    final bg = widget.selected
+    final bg = widget.selected || widget.checked
         ? Palette.selected(context)
         : (_hover ? Palette.hover(context) : Palette.card(context));
 
@@ -1522,7 +1825,10 @@ class _NoteTileState extends State<_NoteTile> {
     // dibuja detrás la pastilla redondeada completa según la dirección.
     final dismissible = Dismissible(
       key: ValueKey('desliza-${n.id}'),
-      direction: DismissDirection.horizontal,
+      // Con selección activa no se desliza ni se arrastra.
+      direction: widget.selecting
+          ? DismissDirection.none
+          : DismissDirection.horizontal,
       background: const SizedBox.shrink(),
       onUpdate: (d) {
         final dir = d.progress > 0 ? d.direction : null;
@@ -1566,6 +1872,31 @@ class _NoteTileState extends State<_NoteTile> {
                     const EdgeInsets.symmetric(horizontal: 11, vertical: 8),
                 child: Row(
                   children: [
+                    // Casilla de la selección múltiple.
+                    AnimatedSize(
+                      duration: Anim.medium,
+                      curve: Anim.curve,
+                      child: widget.selecting
+                          ? Padding(
+                              padding: const EdgeInsets.only(right: 10),
+                              child: AnimatedSwitcher(
+                                duration: Anim.fast,
+                                transitionBuilder: (c, a) =>
+                                    ScaleTransition(scale: a, child: c),
+                                child: Icon(
+                                  widget.checked
+                                      ? Icons.check_circle_rounded
+                                      : Icons.radio_button_unchecked_rounded,
+                                  key: ValueKey(widget.checked),
+                                  size: 22,
+                                  color: widget.checked
+                                      ? Palette.accent(context)
+                                      : Palette.secondary(context),
+                                ),
+                              ),
+                            )
+                          : const SizedBox.shrink(),
+                    ),
                     // Franja con el color elegido para la nota.
                     AnimatedContainer(
                       duration: Anim.medium,
@@ -1745,6 +2076,7 @@ class _NoteTileState extends State<_NoteTile> {
     // Arrastrar la nota: con el ratón en vertical (lo horizontal es deslizar)
     // y en el móvil con pulsación larga.
     return LayoutBuilder(builder: (context, c) {
+      if (widget.selecting) return animated;
       final feedback = Material(
         color: Colors.transparent,
         child: Container(

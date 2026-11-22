@@ -124,6 +124,12 @@ that it still arrives. On Windows, check toasts are enabled first:
   close asks), start with Windows via `reg add HKCU\…\Run` with `--background` (launch_at_startup
   conflicts with win32 6 used by package_info_plus). `main.dart` doesn't show the window and the
   splash is skipped when started with `--background`.
+- Daily-use tools (2.2): `lib/ui/command_palette.dart` (Ctrl+K; inside Quill it needs
+  `customShortcuts`, because Quill binds Ctrl+K to links), `lib/ui/quick_capture.dart` +
+  `DesktopIntegration.beginCapture/endCapture`, `lib/data/note_factory.dart` (`createNoteFrom`),
+  Android share via receive_sharing_intent (`_onShared`), multi-select `_picked` in
+  `notes_home.dart`. AI streaming: each client rebuilds SSE events into the normal response shape
+  (`_GeminiStream`, `_OpenAiStream`, `_ClaudeStream`); tests inject `AiStreamTransport`.
 - Smooth wheel scrolling: use `SmoothScrollController` (`lib/ui/smooth_scroll.dart`) for new
   scroll views on desktop.
 - Completed tasks: `Note.doneAt` (column `notes.done_at`); done > 3 days → hidden from lists and

@@ -610,4 +610,27 @@ const enStrings = <String, String>{
   'El servicio está ocupado, reintentando…': 'The service is busy, retrying…',
   'Detener': 'Stop',
   'Respuesta copiada': 'Answer copied',
+
+  // --- Paleta de comandos
+  'Busca notas o escribe una acción…': 'Search notes or type an action…',
+
+  // --- Nota rápida y compartir
+  'Nota rápida': 'Quick note',
+  'Escribe y pulsa Ctrl+Intro…': 'Type and press Ctrl+Enter…',
+  'Nota guardada': 'Note saved',
+  'Guardado en una nota nueva': 'Saved to a new note',
+  'Se ha cortado la conexión. Vuelve a probar.':
+      'The connection was lost. Try again.',
+
+  // --- Selección múltiple
+  'Seleccionar': 'Select',
+  'Cancelar selección': 'Cancel selection',
+  '{0} seleccionada': '{0} selected',
+  '{0} seleccionadas': '{0} selected',
+  '¿Archivar {0} notas?': 'Archive {0} notes?',
+  '¿Eliminar {0} notas?': 'Delete {0} notes?',
+  'Irán a la papelera durante 3 días.':
+      'They will stay in the trash for 3 days.',
+  '{0} notas archivadas': '{0} notes archived',
+  '{0} notas en la papelera': '{0} notes in the trash',
 };

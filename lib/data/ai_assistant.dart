@@ -243,6 +243,249 @@ Future<(int, Map<String, dynamic>)> _httpTransport(String method, Uri url,
   }
 }
 
+/// Respuesta en directo: código, cuerpo del error (si lo hay) y eventos.
+class AiStreamResponse {
+  AiStreamResponse(this.code, this.error, this.events);
+  final int code;
+  final Map<String, dynamic> error;
+  final Stream<Map<String, dynamic>> events;
+}
+
+typedef AiStreamTransport = Future<AiStreamResponse> Function(
+    Uri url, Map<String, String> headers, Map<String, dynamic> body);
+
+/// Eventos JSON de un flujo SSE (líneas `data: {...}`).
+Stream<Map<String, dynamic>> parseSse(Stream<String> lines) async* {
+  await for (final line in lines) {
+    if (!line.startsWith('data:')) continue;
+    final data = line.substring(5).trim();
+    if (data.isEmpty || data == '[DONE]') continue;
+    try {
+      final d = jsonDecode(data);
+      if (d is Map<String, dynamic>) yield d;
+    } catch (_) {}
+  }
+}
+
+Future<AiStreamResponse> _httpStream(
+    Uri url, Map<String, String> headers, Map<String, dynamic> body) async {
+  final client = HttpClient()..connectionTimeout = const Duration(seconds: 20);
+  try {
+    final req = await client.postUrl(url);
+    headers.forEach(req.headers.set);
+    req.headers.contentType = ContentType.json;
+    req.add(utf8.encode(jsonEncode(body)));
+    final res = await req.close().timeout(const Duration(seconds: 120));
+    if (res.statusCode != 200) {
+      final text = await res.transform(utf8.decoder).join();
+      client.close();
+      Map<String, dynamic> json = {};
+      try {
+        final d = jsonDecode(text);
+        if (d is Map<String, dynamic>) json = d;
+      } catch (_) {}
+      return AiStreamResponse(res.statusCode, json, const Stream.empty());
+    }
+    Stream<Map<String, dynamic>> events() async* {
+      try {
+        yield* parseSse(res
+            .transform(utf8.decoder)
+            .transform(const LineSplitter())
+            .timeout(const Duration(seconds: 90)));
+      } finally {
+        // También al detener la respuesta: deja de gastar tokens.
+        client.close(force: true);
+      }
+    }
+
+    return AiStreamResponse(200, const {}, events());
+  } catch (_) {
+    client.close(force: true);
+    rethrow;
+  }
+}
+
+/// Reconstruye una respuesta normal a partir de los eventos en directo.
+abstract class _StreamBuilder {
+  _StreamBuilder(this.onText);
+  final void Function(String) onText;
+  void add(Map<String, dynamic> event);
+  Map<String, dynamic> get result;
+}
+
+class _GeminiStream extends _StreamBuilder {
+  _GeminiStream(super.onText, this.model);
+  final String model;
+  final _parts = <Map<String, dynamic>>[];
+  Object? _feedback;
+
+  @override
+  void add(Map<String, dynamic> e) {
+    if (e['error'] != null) {
+      final err = e['error'];
+      final code = err is Map && err['code'] is int ? err['code'] as int : 500;
+      throw GeminiClient._error(code, e, model: model);
+    }
+    _feedback ??= e['promptFeedback'];
+    final cands = e['candidates'];
+    if (cands is! List || cands.isEmpty) return;
+    final content = (cands.first as Map)['content'];
+    if (content is! Map) return;
+    for (final raw in (content['parts'] as List?) ?? const []) {
+      if (raw is! Map) continue;
+      final part = Map<String, dynamic>.from(raw);
+      final plain = part.length == 1 && part['text'] is String;
+      if (part['text'] is String && part['thought'] != true) {
+        onText(part['text'] as String);
+      }
+      // Solo se unen trozos de texto puro: las firmas van sin tocar.
+      if (plain &&
+          _parts.isNotEmpty &&
+          _parts.last.length == 1 &&
+          _parts.last['text'] is String) {
+        _parts.last['text'] = '${_parts.last['text']}${part['text']}';
+      } else {
+        _parts.add(part);
+      }
+    }
+  }
+
+  @override
+  Map<String, dynamic> get result => {
+        if (_feedback != null) 'promptFeedback': _feedback,
+        'candidates': [
+          if (_parts.isNotEmpty)
+            {
+              'content': {'role': 'model', 'parts': _parts}
+            }
+        ],
+      };
+}
+
+class _OpenAiStream extends _StreamBuilder {
+  _OpenAiStream(super.onText, this.model);
+  final String model;
+  final _text = StringBuffer();
+  final _refusal = StringBuffer();
+  final _calls = <int, Map<String, dynamic>>{};
+
+  @override
+  void add(Map<String, dynamic> e) {
+    if (e['error'] != null) throw OpenAiClient._error(500, e, model: model);
+    final choices = e['choices'];
+    if (choices is! List || choices.isEmpty) return;
+    final delta = (choices.first as Map)['delta'];
+    if (delta is! Map) return;
+    if (delta['content'] is String) {
+      _text.write(delta['content']);
+      onText(delta['content'] as String);
+    }
+    if (delta['refusal'] is String) _refusal.write(delta['refusal']);
+    for (final c in (delta['tool_calls'] as List?) ?? const []) {
+      if (c is! Map) continue;
+      final i = c['index'] is int ? c['index'] as int : _calls.length;
+      final call = _calls.putIfAbsent(
+          i,
+          () => {
+                'id': '',
+                'type': 'function',
+                'function': {'name': '', 'arguments': ''},
+              });
+      if (c['id'] is String) call['id'] = c['id'];
+      final f = c['function'];
+      if (f is Map) {
+        final out = call['function'] as Map<String, dynamic>;
+        if (f['name'] is String) out['name'] = '${out['name']}${f['name']}';
+        if (f['arguments'] is String) {
+          out['arguments'] = '${out['arguments']}${f['arguments']}';
+        }
+      }
+    }
+  }
+
+  @override
+  Map<String, dynamic> get result {
+    final order = _calls.keys.toList()..sort();
+    return {
+      'choices': [
+        {
+          'message': {
+            'role': 'assistant',
+            'content': _text.isEmpty ? null : _text.toString(),
+            if (_refusal.isNotEmpty) 'refusal': _refusal.toString(),
+            if (order.isNotEmpty)
+              'tool_calls': [for (final i in order) _calls[i]],
+          }
+        }
+      ]
+    };
+  }
+}
+
+class _ClaudeStream extends _StreamBuilder {
+  _ClaudeStream(super.onText, this.model);
+  final String model;
+  final _blocks = <int, Map<String, dynamic>>{};
+  final _json = <int, StringBuffer>{};
+  Object? _stop;
+
+  @override
+  void add(Map<String, dynamic> e) {
+    final index = e['index'] is int ? e['index'] as int : 0;
+    switch (e['type']) {
+      case 'error':
+        final err = e['error'];
+        final type = err is Map ? '${err['type']}' : '';
+        throw ClaudeClient._error(
+            switch (type) {
+              'overloaded_error' => 529,
+              'rate_limit_error' => 429,
+              _ => 500,
+            },
+            e,
+            model: model);
+      case 'content_block_start':
+        final b = e['content_block'];
+        if (b is Map) {
+          _blocks[index] = Map<String, dynamic>.from(b);
+          if (b['type'] == 'tool_use') _json[index] = StringBuffer();
+        }
+      case 'content_block_delta':
+        final b = _blocks[index];
+        final d = e['delta'];
+        if (b == null || d is! Map) return;
+        switch (d['type']) {
+          case 'text_delta':
+            b['text'] = '${b['text'] ?? ''}${d['text']}';
+            onText('${d['text']}');
+          case 'input_json_delta':
+            _json[index]?.write(d['partial_json']);
+          case 'thinking_delta':
+            b['thinking'] = '${b['thinking'] ?? ''}${d['thinking']}';
+          case 'signature_delta':
+            b['signature'] = d['signature'];
+        }
+      case 'content_block_stop':
+        final buf = _json[index];
+        if (buf != null && buf.isNotEmpty) {
+          _blocks[index]?['input'] = AiClient.parseArgs(buf.toString());
+        }
+      case 'message_delta':
+        final d = e['delta'];
+        if (d is Map && d['stop_reason'] != null) _stop = d['stop_reason'];
+    }
+  }
+
+  @override
+  Map<String, dynamic> get result {
+    final order = _blocks.keys.toList()..sort();
+    return {
+      'stop_reason': _stop,
+      'content': [for (final i in order) _blocks[i]],
+    };
+  }
+}
+
 /// Una llamada a función pedida por la IA.
 class AiToolCall {
   AiToolCall(this.id, this.name, this.args);
@@ -263,16 +506,21 @@ class AiTurn {
 
 /// Base común de los tres proveedores.
 abstract class AiClient {
-  AiClient({AiTransport? transport}) : _transport = transport ?? _httpTransport;
+  AiClient({AiTransport? transport, AiStreamTransport? stream})
+      : _transport = transport ?? _httpTransport,
+        // Con un transporte de prueba, sin directo salvo que se pase uno.
+        _stream = stream ?? (transport == null ? _httpStream : null);
   final AiTransport _transport;
+  final AiStreamTransport? _stream;
 
   AiProvider get provider;
 
-  static AiClient forProvider(AiProvider p, {AiTransport? transport}) =>
+  static AiClient forProvider(AiProvider p,
+          {AiTransport? transport, AiStreamTransport? stream}) =>
       switch (p) {
-        AiProvider.gemini => GeminiClient(transport: transport),
-        AiProvider.openai => OpenAiClient(transport: transport),
-        AiProvider.claude => ClaudeClient(transport: transport),
+        AiProvider.gemini => GeminiClient(transport: transport, stream: stream),
+        AiProvider.openai => OpenAiClient(transport: transport, stream: stream),
+        AiProvider.claude => ClaudeClient(transport: transport, stream: stream),
       };
 
   /// Mensaje del usuario en el formato de la API.
@@ -298,14 +546,55 @@ abstract class AiClient {
   List<Map<String, dynamic>> toolResults(
       List<(AiToolCall, Map<String, dynamic>)> results);
 
-  /// Un paso de la conversación.
+  /// Un paso de la conversación. Con [onText] el texto llega en directo;
+  /// si [cancelled] pasa a true se deja de leer la respuesta.
   Future<AiTurn> complete({
     required String apiKey,
     required String model,
     required String system,
     required List<Map<String, dynamic>> history,
     required List<Map<String, dynamic>> tools,
+    void Function(String delta)? onText,
+    bool Function()? cancelled,
   });
+
+  /// Envía en directo si se puede y devuelve lo mismo que una petición
+  /// normal, para que el resto del código no distinga.
+  Future<(int, Map<String, dynamic>)> _request(
+    Uri url,
+    Uri streamUrl,
+    Map<String, String> headers,
+    Map<String, dynamic> body,
+    Map<String, dynamic> streamExtra,
+    _StreamBuilder Function(void Function(String)) builder,
+    void Function(String)? onText,
+    bool Function()? cancelled,
+  ) async {
+    final stream = _stream;
+    if (stream == null || onText == null) {
+      return call('POST', url, headers, body);
+    }
+    try {
+      final res = await stream(streamUrl, headers, {...body, ...streamExtra});
+      if (res.code != 200) return (res.code, res.error);
+      final b = builder(onText);
+      await for (final e in res.events) {
+        if (cancelled?.call() == true) break;
+        b.add(e);
+      }
+      return (200, b.result);
+    } on SocketException {
+      throw AiException(tr('Sin conexión. Revisa internet y vuelve a probar.'));
+    } on TimeoutException {
+      throw AiException(tr('La IA ha tardado demasiado. Vuelve a probar.'),
+          retryable: true);
+    } on HandshakeException {
+      throw AiException(tr('Sin conexión. Revisa internet y vuelve a probar.'));
+    } on HttpException {
+      throw AiException(tr('Se ha cortado la conexión. Vuelve a probar.'),
+          retryable: true);
+    }
+  }
 
   /// Petición mínima real: comprueba la clave, el modelo y el saldo/cuota.
   Future<void> check(String apiKey, String model);
@@ -382,7 +671,7 @@ abstract class AiClient {
 // ------------------------------------------------------------- Gemini
 
 class GeminiClient extends AiClient {
-  GeminiClient({super.transport});
+  GeminiClient({super.transport, super.stream});
 
   @override
   AiProvider get provider => AiProvider.gemini;
@@ -440,10 +729,12 @@ class GeminiClient extends AiClient {
     required String system,
     required List<Map<String, dynamic>> history,
     required List<Map<String, dynamic>> tools,
+    void Function(String delta)? onText,
+    bool Function()? cancelled,
   }) async {
-    final (code, res) = await call(
-      'POST',
+    final (code, res) = await _request(
       _base.resolve('models/$model:generateContent'),
+      _base.resolve('models/$model:streamGenerateContent?alt=sse'),
       _h(apiKey),
       {
         'systemInstruction': {
@@ -456,6 +747,10 @@ class GeminiClient extends AiClient {
           {'functionDeclarations': tools}
         ],
       },
+      const {},
+      (t) => _GeminiStream(t, model),
+      onText,
+      cancelled,
     );
     if (code != 200) throw _error(code, res, model: model);
     final cands = res['candidates'];
@@ -586,7 +881,7 @@ class GeminiClient extends AiClient {
 // ------------------------------------------------------- OpenAI (ChatGPT)
 
 class OpenAiClient extends AiClient {
-  OpenAiClient({super.transport});
+  OpenAiClient({super.transport, super.stream});
 
   @override
   AiProvider get provider => AiProvider.openai;
@@ -657,10 +952,13 @@ class OpenAiClient extends AiClient {
     required String system,
     required List<Map<String, dynamic>> history,
     required List<Map<String, dynamic>> tools,
+    void Function(String delta)? onText,
+    bool Function()? cancelled,
   }) async {
-    final (code, res) = await call(
-      'POST',
-      _base.resolve('chat/completions'),
+    final url = _base.resolve('chat/completions');
+    final (code, res) = await _request(
+      url,
+      url,
       _h(apiKey),
       {
         'model': model,
@@ -681,6 +979,10 @@ class OpenAiClient extends AiClient {
             }
         ],
       },
+      const {'stream': true},
+      (t) => _OpenAiStream(t, model),
+      onText,
+      cancelled,
     );
     if (code != 200) throw _error(code, res, model: model);
     final choices = res['choices'];
@@ -764,7 +1066,7 @@ class OpenAiClient extends AiClient {
 // ---------------------------------------------------- Claude (Anthropic)
 
 class ClaudeClient extends AiClient {
-  ClaudeClient({super.transport});
+  ClaudeClient({super.transport, super.stream});
 
   @override
   AiProvider get provider => AiProvider.claude;
@@ -826,28 +1128,38 @@ class ClaudeClient extends AiClient {
     required String system,
     required List<Map<String, dynamic>> history,
     required List<Map<String, dynamic>> tools,
+    void Function(String delta)? onText,
+    bool Function()? cancelled,
   }) async {
-    final (code, res) = await call('POST', _url, _h(apiKey, model), {
-      'model': model,
-      'max_tokens': 16000,
-      'system': system,
-      'messages': history,
-      'tools': [
-        for (final t in tools)
-          {
-            'name': t['name'],
-            'description': t['description'],
-            'input_schema':
-                AiClient.jsonSchema(t['parameters'] as Map<String, dynamic>?),
-          }
-      ],
-      if (_withFallbacks.contains(model)) 'fallbacks': 'default',
-      // Caché automática: herramientas, instrucciones y conversación previa
-      // no se vuelven a procesar en cada pregunta (más rápido y barato).
-      'cache_control': {'type': 'ephemeral'},
-      // Para un chat basta esfuerzo bajo: respuestas rápidas y baratas.
-      'output_config': {'effort': 'low'},
-    });
+    final (code, res) = await _request(
+        _url,
+        _url,
+        _h(apiKey, model),
+        {
+          'model': model,
+          'max_tokens': 16000,
+          'system': system,
+          'messages': history,
+          'tools': [
+            for (final t in tools)
+              {
+                'name': t['name'],
+                'description': t['description'],
+                'input_schema': AiClient.jsonSchema(
+                    t['parameters'] as Map<String, dynamic>?),
+              }
+          ],
+          if (_withFallbacks.contains(model)) 'fallbacks': 'default',
+          // Caché automática: herramientas, instrucciones y conversación previa
+          // no se vuelven a procesar en cada pregunta (más rápido y barato).
+          'cache_control': {'type': 'ephemeral'},
+          // Para un chat basta esfuerzo bajo: respuestas rápidas y baratas.
+          'output_config': {'effort': 'low'},
+        },
+        const {'stream': true},
+        (t) => _ClaudeStream(t, model),
+        onText,
+        cancelled);
     if (code != 200) throw _error(code, res, model: model);
     if (res['stop_reason'] == 'refusal') {
       throw AiException(tr('La IA no ha querido responder a eso.'));
@@ -1523,15 +1835,24 @@ class AiMessage {
 /// Claude (cada cliente traduce el historial y las funciones a su API) y se
 /// guarda en el dispositivo para seguir al volver a abrir la app.
 class AiSession extends ChangeNotifier {
-  AiSession(this.repo, {AiTransport? transport, AiSettings? settings})
+  AiSession(this.repo,
+      {AiTransport? transport, AiStreamTransport? stream, AiSettings? settings})
       : _transport = transport,
+        _streamTransport = stream,
         settings = settings ?? AiSettings.instance;
 
   final NotesRepository repo;
   final AiSettings settings;
   final AiTransport? _transport;
+  final AiStreamTransport? _streamTransport;
 
   final List<AiMessage> messages = [];
+
+  /// Texto de la respuesta mientras va llegando.
+  String streaming = '';
+  int _lastPaint = 0;
+  int _turnStart = 0;
+  AiTools? _currentTools;
 
   /// Historial en el formato de la API del proveedor con el que se empezó
   /// (si se cambia de proveedor, el historial empieza de cero).
@@ -1622,6 +1943,7 @@ class AiSession extends ChangeNotifier {
     _run++;
     messages.clear();
     _history.clear();
+    streaming = '';
     busy = false;
     activity = null;
     notifyListeners();
@@ -1684,8 +2006,18 @@ Cómo responder:
     _run++;
     busy = false;
     activity = null;
-    messages.add(AiMessage(AiRole.error, tr('Respuesta detenida.')));
+    // Sin dejar llamadas a funciones sin respuesta en el historial.
+    if (_turnStart <= _history.length) {
+      _history.removeRange(_turnStart, _history.length);
+    }
+    final partial = streaming.trim();
+    streaming = '';
+    if (partial.isNotEmpty) messages.add(AiMessage(AiRole.assistant, partial));
+    // Lo que ya se hubiera cambiado sigue teniendo Abrir y Deshacer.
+    messages.add(AiMessage(AiRole.error, tr('Respuesta detenida.'),
+        actions: List.of(_currentTools?.actions ?? const [])));
     notifyListeners();
+    unawaited(_save());
   }
 
   /// Vuelve a enviar la última pregunta (tras un error).
@@ -1703,10 +2035,22 @@ Cómo responder:
     await send(q);
   }
 
-  Future<AiTurn> _complete(AiClient client, int run) async {
+  Future<AiTurn> _complete(AiClient client, int run, String before) async {
     for (var attempt = 0;; attempt++) {
+      streaming = before;
       try {
         return await client.complete(
+          cancelled: () => run != _run,
+          onText: (d) {
+            if (run != _run) return;
+            streaming += d;
+            // Como mucho unas 25 veces por segundo.
+            final now = DateTime.now().millisecondsSinceEpoch;
+            if (now - _lastPaint >= 40) {
+              _lastPaint = now;
+              notifyListeners();
+            }
+          },
           apiKey: settings.apiKey!,
           model: settings.model,
           system: _system(),
@@ -1738,22 +2082,24 @@ Cómo responder:
       _history.clear();
       _historyProvider = provider;
     }
-    final client = AiClient.forProvider(provider, transport: _transport);
+    final client = AiClient.forProvider(provider,
+        transport: _transport, stream: _streamTransport);
     final run = ++_run;
     _lastQuestion = t;
 
     messages.add(AiMessage(AiRole.user, t));
-    final start = _history.length;
+    final start = _turnStart = _history.length;
     _history.add(client.userMessage('$t\n\n${_context()}'));
     busy = true;
     activity = tr('Pensando…');
     notifyListeners();
 
-    final tools = AiTools(repo, confirm: confirm);
+    final tools = _currentTools = AiTools(repo, confirm: confirm);
     final reply = StringBuffer();
     try {
       for (var step = 0; step < _maxSteps; step++) {
-        final turn = await _complete(client, run);
+        final turn = await _complete(
+            client, run, reply.isEmpty ? '' : '${reply.toString()}\n\n');
         if (run != _run) return; // detenida
         _history.add(turn.raw);
         if (turn.text.trim().isNotEmpty) {
@@ -1763,6 +2109,7 @@ Cómo responder:
         if (turn.calls.isEmpty) break;
         final results = <(AiToolCall, Map<String, dynamic>)>[];
         for (final c in turn.calls) {
+          if (run != _run) return; // detenida: no se hacen más cambios
           activity = _activityFor(c.name);
           notifyListeners();
           results.add((c, await tools.run(c.name, c.args)));
@@ -1788,6 +2135,7 @@ Cómo responder:
       if (run == _run) {
         busy = false;
         activity = null;
+        streaming = '';
         notifyListeners();
         unawaited(_save());
       }

@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_quill/flutter_quill.dart';
 
@@ -33,6 +34,7 @@ class NoteEditor extends StatefulWidget {
     required this.onClose,
     required this.onDelete,
     this.onOpenNote,
+    this.onCommandPalette,
     this.showBack = true,
     this.autofocus = false,
   });
@@ -48,6 +50,9 @@ class NoteEditor extends StatefulWidget {
 
   /// Abrir otra nota (desde el panel de enlaces).
   final void Function(String id)? onOpenNote;
+
+  /// Ctrl+K dentro del editor (Quill lo usa para enlaces si no se indica).
+  final VoidCallback? onCommandPalette;
 
   /// true en pantallas estrechas (móvil/ventana pequeña): botón "< notas".
   final bool showBack;
@@ -518,6 +523,26 @@ class _NoteEditorState extends State<NoteEditor> {
                                   embedBuilders: const [
                                     NoteImageEmbedBuilder()
                                   ],
+                                  customShortcuts:
+                                      widget.onCommandPalette == null
+                                          ? null
+                                          : const {
+                                              SingleActivator(
+                                                LogicalKeyboardKey.keyK,
+                                                control: true,
+                                              ): _PaletteIntent(),
+                                            },
+                                  customActions: widget.onCommandPalette == null
+                                      ? null
+                                      : {
+                                          _PaletteIntent:
+                                              CallbackAction<_PaletteIntent>(
+                                            onInvoke: (_) {
+                                              widget.onCommandPalette!();
+                                              return null;
+                                            },
+                                          ),
+                                        },
                                   contentInsertionConfiguration:
                                       ContentInsertionConfiguration(
                                     allowedMimeTypes: const [
@@ -563,6 +588,10 @@ class _NoteEditorState extends State<NoteEditor> {
       ),
     ).animate().fadeIn(duration: Anim.medium, curve: Anim.curve);
   }
+}
+
+class _PaletteIntent extends Intent {
+  const _PaletteIntent();
 }
 
 class _TemporalBanner extends StatelessWidget {

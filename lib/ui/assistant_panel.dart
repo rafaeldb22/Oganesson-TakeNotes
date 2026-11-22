@@ -298,7 +298,25 @@ class _AssistantPanelState extends State<AssistantPanel> {
                   itemCount: s.messages.length + (s.busy ? 1 : 0),
                   itemBuilder: (context, i) {
                     if (i == s.messages.length) {
-                      return _Thinking(text: s.activity ?? tr('Pensando…'));
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // La respuesta aparece mientras se escribe.
+                          if (s.streaming.trim().isNotEmpty)
+                            Container(
+                              constraints: const BoxConstraints(maxWidth: 340),
+                              margin: const EdgeInsets.only(bottom: 8),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 14, vertical: 10),
+                              decoration: BoxDecoration(
+                                color: p.background,
+                                borderRadius: BorderRadius.circular(18),
+                              ),
+                              child: _RichText(s.streaming.trimRight()),
+                            ),
+                          _Thinking(text: s.activity ?? tr('Pensando…')),
+                        ],
+                      );
                     }
                     final last = i == s.messages.length - 1;
                     return _Bubble(

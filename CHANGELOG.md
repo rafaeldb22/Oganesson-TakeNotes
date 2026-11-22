@@ -2,6 +2,23 @@
 
 All notable changes to Oganesson TakeNotes (formerly *Notas* / *BabuNotes*).
 
+## [2.2.0] — 2026-11-22
+
+### Added
+- **Command palette (Ctrl+K)**: search notes and run any action from the keyboard, also while
+  writing in a note. Ignores accents and puts title matches first.
+- **Quick note (Ctrl+Alt+N)**: a small floating window to jot something down; when you finish,
+  the app goes back to how it was (hidden stays hidden).
+- **Share to Oganesson on Android**: text, links and images from any app become a new note.
+- **Live AI answers**: text appears as it is written with Gemini, ChatGPT and Claude.
+- **Multi-select**: Ctrl+click, or *Select* in a note's menu, then pin, move, archive or delete
+  several notes at once, with Undo.
+
+### Fixed
+- AI assistant: pressing *Stop* while it was running a tool left the conversation in a state
+  that could make the next question fail. *Stop* now also prevents any further changes, and what
+  was already changed keeps its Undo.
+
 ## [2.1.1] — 2026-11-22
 
 ### Changed

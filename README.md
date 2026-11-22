@@ -139,7 +139,7 @@ Sign in with the **same account** on every device and your notes sync automatica
 - **Ctrl+Alt+N** anywhere in Windows opens a new note. Turn *Open when Windows starts* on or off, or quit completely, from ⋯.
 
 **Keyboard (Windows)**
-- Ctrl+Alt+N new note from anywhere · Ctrl+N new note · Ctrl+J AI assistant · Ctrl+F search · Ctrl+1 / 2 / 3 notes, calendar, network · Ctrl+, theme · Esc close the note.
+- Ctrl+Alt+N quick note from anywhere · Ctrl+K command palette · Ctrl+N new note · Ctrl+J AI assistant · Ctrl+F search · Ctrl+click select several notes · Ctrl+1 / 2 / 3 notes, calendar, network · Ctrl+, theme · Esc close the note.
 - Ctrl+V pastes a screenshot or copied image into the note · in the image viewer: Ctrl+C copy, Ctrl+S save, Esc close.
 
 **Updates & support**

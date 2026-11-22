@@ -41,8 +41,22 @@ class DesktopIntegration with WindowListener, TrayListener {
 
   final _newNote = StreamController<void>.broadcast();
 
-  /// Peticiones de "nota nueva" (Ctrl+Alt+N o la bandeja).
+  /// Peticiones de "nota nueva" (la bandeja).
   Stream<void> get newNoteRequests => _newNote.stream;
+
+  final _capture = StreamController<void>.broadcast();
+
+  /// Peticiones de nota rápida (Ctrl+Alt+N).
+  Stream<void> get captureRequests => _capture.stream;
+
+  bool _capturing = false;
+
+  /// La pone la pantalla principal mientras la nota rápida está abierta.
+  VoidCallback? _cancelCapture;
+  set cancelCapture(VoidCallback? f) => _cancelCapture = f;
+  bool _wasVisible = false;
+  bool _wasMaximized = false;
+  Rect? _bounds;
 
   bool _quitting = false;
 
@@ -125,7 +139,7 @@ class DesktopIntegration with WindowListener, TrayListener {
           modifiers: [HotKeyModifier.control, HotKeyModifier.alt],
           scope: HotKeyScope.system,
         ),
-        keyDownHandler: (_) => requestNewNote(),
+        keyDownHandler: (_) => beginCapture(),
       );
     } catch (e) {
       debugPrint('Escritorio: no se pudo registrar Ctrl+Alt+N ($e)');
@@ -194,6 +208,42 @@ class DesktopIntegration with WindowListener, TrayListener {
     _newNote.add(null);
   }
 
+  /// Ctrl+Alt+N: ventanita flotante para apuntar algo. Al terminar, todo
+  /// vuelve a como estaba (también si la app estaba oculta).
+  Future<void> beginCapture() async {
+    if (!supported) return;
+    if (_capturing) {
+      await windowManager.focus();
+      return;
+    }
+    _capturing = true;
+    _wasVisible =
+        await windowManager.isVisible() && !await windowManager.isMinimized();
+    _wasMaximized = await windowManager.isMaximized();
+    if (await windowManager.isMinimized()) await windowManager.restore();
+    if (_wasMaximized) await windowManager.unmaximize();
+    _bounds = await windowManager.getBounds();
+    await windowManager.setMinimumSize(const Size(420, 240));
+    await windowManager.setSize(const Size(560, 320));
+    await windowManager.center();
+    await windowManager.setAlwaysOnTop(true);
+    await windowManager.setOpacity(1);
+    await windowManager.show();
+    await windowManager.focus();
+    _capture.add(null);
+  }
+
+  /// Fin de la nota rápida. Con [keepOpen] la ventana se queda abierta.
+  Future<void> endCapture({bool keepOpen = false}) async {
+    if (!_capturing) return;
+    _capturing = false;
+    await windowManager.setAlwaysOnTop(false);
+    await windowManager.setMinimumSize(const Size(760, 540));
+    if (_bounds != null) await windowManager.setBounds(_bounds!);
+    if (_wasMaximized) await windowManager.maximize();
+    if (!_wasVisible && !keepOpen) await windowManager.hide();
+  }
+
   /// Cierra la app de verdad (no solo la ventana).
   Future<void> quit() async {
     if (_quitting) return;
@@ -214,6 +264,11 @@ class DesktopIntegration with WindowListener, TrayListener {
   @override
   void onWindowClose() async {
     if (_quitting) return;
+    if (_capturing) {
+      // La ✕ en la nota rápida equivale a cancelarla.
+      _cancelCapture?.call();
+      return;
+    }
     String? choice;
     try {
       choice = (await SharedPreferences.getInstance()).getString(_kCloseChoice);
