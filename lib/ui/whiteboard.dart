@@ -16,7 +16,17 @@ import 'note_image.dart';
 import 'theme.dart';
 import 'toast.dart';
 
-enum BoardTool { lasso, pen, eraser }
+enum BoardTool { lasso, pen, marker, eraser }
+
+/// Colores del marcador: translúcidos, para ver lo que hay debajo.
+const boardMarkers = <int>[
+  0x70FFE500,
+  0x7030D158,
+  0x7040A0FF,
+  0x70FF6FB5,
+  0x70FF9F2E,
+  0x70B98CFF,
+];
 
 /// Estado de una pizarra: contenido, selección, deshacer y herramienta.
 class BoardController extends ChangeNotifier {
@@ -29,6 +39,13 @@ class BoardController extends ChangeNotifier {
   List<BoardImage> images;
   Set<int> selectedStrokes = {};
   Set<int> selectedImages = {};
+
+  /// Caja de la selección (con su giro).
+  BoardBox? selBox;
+
+  /// Acciones de la barra que hace la pizarra.
+  VoidCallback? fitView;
+  VoidCallback? insertImage;
 
   /// Sube cuando cambia lo que hay que volver a grabar en la imagen fija.
   int paintVersion = 0;
@@ -45,6 +62,8 @@ class BoardController extends ChangeNotifier {
   static int _color = 0;
   static double _penWidth = 3;
   static double _penForce = 0.5;
+  static int _markerColor = boardMarkers.first;
+  static double _markerWidth = 20;
   static double _eraserWidth = 22;
   static double _eraserForce = 0;
 
@@ -56,6 +75,8 @@ class BoardController extends ChangeNotifier {
   int get color => _color;
   double get penWidth => _penWidth;
   double get penForce => _penForce;
+  int get markerColor => _markerColor;
+  double get markerWidth => _markerWidth;
   double get eraserWidth => _eraserWidth;
   double get eraserForce => _eraserForce;
   bool get canUndo => _undo.isNotEmpty;
@@ -84,13 +105,32 @@ class BoardController extends ChangeNotifier {
     notifyListeners();
   }
 
+  void setMarker({int? color, double? width}) {
+    _markerColor = color ?? _markerColor;
+    _markerWidth = width ?? _markerWidth;
+    notifyListeners();
+  }
+
   BoardData toData({bool active = true}) => BoardData(
       active: active, strokes: List.of(strokes), images: List.of(images));
+
+  /// Lo que lee la IA: la selección si hay, o toda la pizarra.
+  BoardData dataForAi() => !hasSelection
+      ? toData()
+      : BoardData(
+          strokes: [for (final i in selectedStrokes) strokes[i]],
+          images: [for (final i in selectedImages) images[i]]);
+
+  void _fitBox() {
+    final r = selectionBounds;
+    selBox = r == null ? null : BoardBox.around(r.inflate(6));
+  }
 
   /// Cambios que llegan de otro dispositivo.
   void load(BoardData d) {
     strokes = List.of(d.strokes);
     images = List.of(d.images);
+    selBox = null;
     selectedStrokes = {};
     selectedImages = {};
     _undo.clear();
@@ -106,6 +146,7 @@ class BoardController extends ChangeNotifier {
   }
 
   void _changed() {
+    if (!hasSelection) selBox = null;
     paintVersion++;
     notifyListeners();
     onChanged();
@@ -154,6 +195,7 @@ class BoardController extends ChangeNotifier {
     selectedStrokes = {};
     selectedImages = {images.length - 1};
     _tool = BoardTool.lasso;
+    _fitBox();
     _changed();
   }
 
@@ -173,8 +215,9 @@ class BoardController extends ChangeNotifier {
     selectedStrokes = strokesInLasso(strokes, lasso);
     selectedImages = {
       for (var i = 0; i < images.length; i++)
-        if (insidePolygon(images[i].rect.center, lasso)) i,
+        if (insidePolygon(images[i].center, lasso)) i,
     };
+    _fitBox();
     paintVersion++;
     notifyListeners();
   }
@@ -183,6 +226,7 @@ class BoardController extends ChangeNotifier {
     _tool = BoardTool.lasso;
     selectedStrokes = {for (var i = 0; i < strokes.length; i++) i};
     selectedImages = {for (var i = 0; i < images.length; i++) i};
+    _fitBox();
     paintVersion++;
     notifyListeners();
   }
@@ -191,6 +235,7 @@ class BoardController extends ChangeNotifier {
     if (!hasSelection) return;
     selectedStrokes = {};
     selectedImages = {};
+    selBox = null;
     paintVersion++;
     notifyListeners();
   }
@@ -202,23 +247,25 @@ class BoardController extends ChangeNotifier {
       r = r?.expandToInclude(b) ?? b;
     }
     for (final i in selectedImages) {
-      final b = images[i].rect;
+      final b = images[i].bounds;
       r = r?.expandToInclude(b) ?? b;
     }
     return r;
   }
 
-  void moveSelection(Offset by) {
-    if (by == Offset.zero || !hasSelection) return;
+  /// Mueve, escala o gira lo seleccionado; [box] es su caja resultante.
+  void applySelection(BoardAffine t, BoardBox box) {
+    if (!hasSelection) return;
     checkpoint();
     strokes = [
       for (var i = 0; i < strokes.length; i++)
-        selectedStrokes.contains(i) ? strokes[i].moved(by) : strokes[i],
+        selectedStrokes.contains(i) ? strokes[i].transformed(t) : strokes[i],
     ];
     images = [
       for (var i = 0; i < images.length; i++)
-        selectedImages.contains(i) ? images[i].moved(by) : images[i],
+        selectedImages.contains(i) ? images[i].transformed(t) : images[i],
     ];
+    selBox = box;
     _changed();
   }
 
@@ -252,7 +299,7 @@ class BoardController extends ChangeNotifier {
       box = box?.expandToInclude(s.bounds) ?? s.bounds;
     }
     for (final i in _clipImages) {
-      box = box?.expandToInclude(i.rect) ?? i.rect;
+      box = box?.expandToInclude(i.bounds) ?? i.bounds;
     }
     final by = at - box!.center;
     checkpoint();
@@ -262,6 +309,7 @@ class BoardController extends ChangeNotifier {
     selectedStrokes = {for (var i = firstStroke; i < strokes.length; i++) i};
     selectedImages = {for (var i = firstImage; i < images.length; i++) i};
     _tool = BoardTool.lasso;
+    _fitBox();
     _changed();
   }
 
@@ -274,44 +322,6 @@ class BoardController extends ChangeNotifier {
     selectedImages = {};
     _changed();
   }
-}
-
-/// Pinta un trazo; con presión, cada tramo lleva su propio grosor.
-void paintBoardStroke(Canvas canvas, BoardStroke s, Color ink) {
-  final paint = Paint()
-    ..color = s.color == 0 ? ink : Color(s.color)
-    ..strokeCap = StrokeCap.round
-    ..strokeJoin = StrokeJoin.round
-    ..style = PaintingStyle.stroke
-    ..isAntiAlias = true;
-  final p = s.points;
-  if (p.length == 1) {
-    canvas.drawCircle(p.first, s.width * s.factors.first / 2,
-        paint..style = PaintingStyle.fill);
-    return;
-  }
-  final first = s.factors.first;
-  if (s.factors.every((f) => (f - first).abs() < 0.02)) {
-    final path = Path()..moveTo(p.first.dx, p.first.dy);
-    for (var i = 1; i < p.length - 1; i++) {
-      final mid = (p[i] + p[i + 1]) / 2;
-      path.quadraticBezierTo(p[i].dx, p[i].dy, mid.dx, mid.dy);
-    }
-    path.lineTo(p.last.dx, p.last.dy);
-    canvas.drawPath(path, paint..strokeWidth = s.width * first);
-    return;
-  }
-  var from = p.first;
-  for (var i = 1; i < p.length - 1; i++) {
-    final mid = (p[i] + p[i + 1]) / 2;
-    canvas.drawPath(
-        Path()
-          ..moveTo(from.dx, from.dy)
-          ..quadraticBezierTo(p[i].dx, p[i].dy, mid.dx, mid.dy),
-        paint..strokeWidth = s.width * s.factors[i]);
-    from = mid;
-  }
-  canvas.drawLine(from, p.last, paint..strokeWidth = s.width * s.factors.last);
 }
 
 /// Lienzo infinito con puntos de referencia. Dibuja con ratón, dedo o lápiz;
@@ -347,13 +357,19 @@ class _WhiteboardState extends State<Whiteboard> {
   // Trazo en curso.
   List<Offset>? _points;
   List<double>? _factors;
+  Offset? _rawPen;
+  bool _strokeIsMarker = false;
   double _lastFactor = 1;
   Duration _lastTime = Duration.zero;
   Offset _lastWorld = Offset.zero;
 
   List<Offset>? _lasso;
-  bool _moving = false;
-  Offset _moveBy = Offset.zero;
+
+  // Transformar la selección: -1 mover, 0-7 tiradores, 8 girar.
+  int? _dragHandle;
+  Offset _dragStart = Offset.zero;
+  BoardAffine? _xform;
+  BoardBox? _xformBox;
   bool _erasing = false;
   bool _erased = false;
   bool _invertedStylus = false;
@@ -367,6 +383,73 @@ class _WhiteboardState extends State<Whiteboard> {
   Color? _pictureInk;
 
   static const _holdSlop = 8.0;
+  static const _rotateGap = 30.0;
+
+  @override
+  void initState() {
+    super.initState();
+    _bindActions();
+  }
+
+  @override
+  void didUpdateWidget(Whiteboard old) {
+    super.didUpdateWidget(old);
+    if (old.controller != widget.controller) _bindActions();
+  }
+
+  void _bindActions() {
+    _c.fitView = _fitView;
+    _c.insertImage = () => _insertImages(_world(_size.center(Offset.zero)));
+  }
+
+  /// Encuadra todo el contenido.
+  void _fitView() {
+    final d = _c.toData();
+    Rect? box;
+    for (final s in d.strokes) {
+      box = box?.expandToInclude(s.bounds) ?? s.bounds;
+    }
+    for (final i in d.images) {
+      box = box?.expandToInclude(i.bounds) ?? i.bounds;
+    }
+    if (box == null || _size.isEmpty) return _resetView();
+    final area = box.inflate(32);
+    _scale = math
+        .min(_size.width / area.width, _size.height / area.height)
+        .clamp(0.25, 2.0);
+    _offset = _size.center(Offset.zero) - area.center * _scale;
+    _repaint();
+  }
+
+  Future<void> _insertImages(Offset at) async {
+    final picked = await pickImageBytes(context);
+    for (final (i, b) in picked.indexed) {
+      await _addImage(b, at + Offset(24.0 * i, 24.0 * i));
+    }
+  }
+
+  Offset _rotateHandle(BoardBox box) =>
+      box.toWorld(Offset(0, -box.size.height / 2 - _rotateGap / _scale));
+
+  /// Tirador bajo el puntero, o null.
+  int? _handleAt(Offset world, PointerDeviceKind kind) {
+    final box = _c.selBox;
+    if (box == null) return null;
+    final reach = (kind == PointerDeviceKind.mouse ? 11.0 : 20.0) / _scale;
+    if ((world - _rotateHandle(box)).distance <= reach) {
+      return BoardBox.rotateHandle;
+    }
+    int? best;
+    var bestD = reach;
+    for (var i = 0; i < 8; i++) {
+      final d = (world - box.toWorld(box.handleLocal(i))).distance;
+      if (d <= bestD) {
+        best = i;
+        bestD = d;
+      }
+    }
+    return best;
+  }
 
   @override
   void dispose() {
@@ -406,6 +489,8 @@ class _WhiteboardState extends State<Whiteboard> {
 
   void _paintImage(Canvas canvas, BoardImage i, Color frame) {
     final bmp = _bitmaps[NoteImages.pathOf(i.src)];
+    canvas.save();
+    canvas.transform(i.transform.matrix4);
     if (bmp == null) {
       _loadBitmap(i.src);
       canvas.drawRect(
@@ -413,13 +498,14 @@ class _WhiteboardState extends State<Whiteboard> {
           Paint()
             ..style = PaintingStyle.stroke
             ..color = frame);
-      return;
+    } else {
+      canvas.drawImageRect(
+          bmp,
+          Rect.fromLTWH(0, 0, bmp.width.toDouble(), bmp.height.toDouble()),
+          i.rect,
+          Paint()..filterQuality = FilterQuality.medium);
     }
-    canvas.drawImageRect(
-        bmp,
-        Rect.fromLTWH(0, 0, bmp.width.toDouble(), bmp.height.toDouble()),
-        i.rect,
-        Paint()..filterQuality = FilterQuality.medium);
+    canvas.restore();
   }
 
   /// Lo no seleccionado se graba una vez: repintar no recorre cada trazo.
@@ -548,17 +634,28 @@ class _WhiteboardState extends State<Whiteboard> {
     _c.busy = true;
     switch (tool) {
       case BoardTool.pen:
+        _strokeIsMarker = false;
+        _rawPen = at;
         _points = [at];
         _factors = [_pressure(e, at, _c.penForce)];
+      case BoardTool.marker:
+        _strokeIsMarker = true;
+        _rawPen = at;
+        _points = [at];
+        _factors = [1];
       case BoardTool.eraser:
         _c.checkpoint();
         _erasing = true;
         _erased = _c.erase(at, at, _eraserRadius(e, at));
       case BoardTool.lasso:
-        final box = _c.selectionBounds?.inflate(8);
-        if (box != null && box.contains(at)) {
-          _moving = true;
-          _moveBy = Offset.zero;
+        final handle = _handleAt(at, e.kind);
+        final box = _c.selBox;
+        if (handle != null) {
+          _dragHandle = handle;
+          _dragStart = at;
+        } else if (box != null && box.contains(at, 4 / _scale)) {
+          _dragHandle = -1;
+          _dragStart = at;
         } else {
           _c.clearSelection();
           _lasso = [at];
@@ -596,16 +693,29 @@ class _WhiteboardState extends State<Whiteboard> {
     if (e.pointer != _drawing) return;
     final at = _world(e.localPosition);
     if (_points != null) {
-      if ((at - _points!.last).distance < 0.7 / _scale) return;
-      final f = _pressure(e, at, _c.penForce);
-      _points!.add(at);
-      _factors!.add(f);
+      _rawPen = at;
+      // Estabilizador: filtra el temblor sin que la línea se quede atrás.
+      final follow = e.kind == PointerDeviceKind.stylus ? 0.68 : 0.46;
+      final next = _points!.last + (at - _points!.last) * follow;
+      if ((next - _points!.last).distance >= 0.6 / _scale) {
+        final f = _strokeIsMarker ? 1.0 : _pressure(e, next, _c.penForce);
+        _points!.add(next);
+        _factors!.add(f);
+      }
     } else if (_erasing) {
       if (_c.erase(_lastWorld, at, _eraserRadius(e, at))) _erased = true;
     } else if (_lasso != null) {
       if ((at - _lasso!.last).distance > 2 / _scale) _lasso!.add(at);
-    } else if (_moving) {
-      _moveBy += e.delta / _scale;
+    } else if (_dragHandle != null && _c.selBox != null) {
+      final box = _c.selBox!;
+      final h = _dragHandle!;
+      final (t, b) = h == -1
+          ? box.move(at - _dragStart)
+          : h == BoardBox.rotateHandle
+              ? box.rotate(_dragStart, at)
+              : box.resize(h, at);
+      _xform = t;
+      _xformBox = b;
     }
     _lastWorld = at;
     _lastTime = e.timeStamp;
@@ -621,9 +731,17 @@ class _WhiteboardState extends State<Whiteboard> {
     _drawing = null;
     _c.busy = false;
     if (_points != null) {
-      _c.addStroke(BoardStroke(_c.color, _c.penWidth, _points!, _factors!));
+      // El último punto real: la línea acaba justo donde se soltó.
+      final end = _rawPen;
+      if (end != null && (end - _points!.last).distance > 0.3 / _scale) {
+        _points!.add(end);
+        _factors!.add(_factors!.last);
+      }
+      _c.addStroke(BoardStroke(_strokeIsMarker ? _c.markerColor : _c.color,
+          _strokeIsMarker ? _c.markerWidth : _c.penWidth, _points!, _factors!));
       _points = null;
       _factors = null;
+      _rawPen = null;
     } else if (_erasing) {
       _erasing = false;
       _erased ? _c.commitErase() : _c.rollback();
@@ -632,11 +750,12 @@ class _WhiteboardState extends State<Whiteboard> {
       _lasso = null;
       // Al soltar se cierra solo y selecciona todo lo de dentro.
       if (loop.length >= 3) _c.selectLasso(loop);
-    } else if (_moving) {
-      _moving = false;
-      final by = _moveBy;
-      _moveBy = Offset.zero;
-      _c.moveSelection(by);
+    } else if (_dragHandle != null) {
+      final t = _xform, b = _xformBox;
+      _dragHandle = null;
+      _xform = null;
+      _xformBox = null;
+      if (t != null && b != null) _c.applySelection(t, b);
     }
     _repaint();
   }
@@ -654,9 +773,11 @@ class _WhiteboardState extends State<Whiteboard> {
     _drawing = null;
     _points = null;
     _factors = null;
+    _rawPen = null;
     _lasso = null;
-    _moving = false;
-    _moveBy = Offset.zero;
+    _dragHandle = null;
+    _xform = null;
+    _xformBox = null;
     _erasing = false;
     _erased = false;
     _c.busy = false;
@@ -808,10 +929,7 @@ class _WhiteboardState extends State<Whiteboard> {
       case 'pegar':
         await _paste(at);
       case 'imagen':
-        final picked = await pickImageBytes(context);
-        for (final (i, b) in picked.indexed) {
-          await _addImage(b, at + Offset(24.0 * i, 24.0 * i));
-        }
+        await _insertImages(at);
       case 'todo':
         _c.selectAll();
       case 'vista':
@@ -899,6 +1017,11 @@ class _WhiteboardState extends State<Whiteboard> {
   }
 }
 
+/// Distancia en pantalla del tirador de giro a la caja.
+abstract final class BoardRotateGap {
+  static const value = _WhiteboardState._rotateGap;
+}
+
 class _BoardPainter extends CustomPainter {
   _BoardPainter(this.s, this.ink, this.colors)
       : super(repaint: Listenable.merge([s._live, s._c]));
@@ -949,19 +1072,33 @@ class _BoardPainter extends CustomPainter {
     canvas.scale(s._scale);
     canvas.drawPicture(fixed);
 
-    canvas.save();
-    canvas.translate(s._moveBy.dx, s._moveBy.dy);
+    // Lo seleccionado se pinta ya transformado mientras se arrastra.
+    final t = s._xform;
     for (final i in c.selectedImages) {
-      if (i < c.images.length) s._paintImage(canvas, c.images[i], frame);
+      if (i < c.images.length) {
+        final img = c.images[i];
+        s._paintImage(canvas, t == null ? img : img.transformed(t), frame);
+      }
     }
     for (final i in c.selectedStrokes) {
-      if (i < c.strokes.length) paintBoardStroke(canvas, c.strokes[i], ink);
+      if (i < c.strokes.length) {
+        final st = c.strokes[i];
+        paintBoardStroke(canvas, t == null ? st : st.transformed(t), ink);
+      }
     }
-    canvas.restore();
 
     if (s._points != null) {
-      paintBoardStroke(canvas,
-          BoardStroke(c.color, c.penWidth, s._points!, s._factors!), ink);
+      // Con el tramo hasta el puntero, para que no se note el estabilizador.
+      final raw = s._rawPen;
+      final extra = raw != null && raw != s._points!.last;
+      paintBoardStroke(
+          canvas,
+          BoardStroke(
+              s._strokeIsMarker ? c.markerColor : c.color,
+              s._strokeIsMarker ? c.markerWidth : c.penWidth,
+              extra ? [...s._points!, raw] : s._points!,
+              extra ? [...s._factors!, s._factors!.last] : s._factors!),
+          ink);
     }
     final dash = Paint()
       ..style = PaintingStyle.stroke
@@ -978,12 +1115,46 @@ class _BoardPainter extends CustomPainter {
           path, Paint()..color = colors.accent.withValues(alpha: 0.08));
       _dashed(canvas, path, dash, 6 / s._scale);
     }
-    final box = c.selectionBounds?.shift(s._moveBy).inflate(8);
+    final box = s._xformBox ?? c.selBox;
     if (box != null) {
-      final r = RRect.fromRectAndRadius(box, Radius.circular(8 / s._scale));
-      canvas.drawRRect(
-          r, Paint()..color = colors.accent.withValues(alpha: 0.07));
-      _dashed(canvas, Path()..addRRect(r), dash, 6 / s._scale);
+      final u = 1 / s._scale;
+      canvas.save();
+      canvas.translate(box.center.dx, box.center.dy);
+      canvas.rotate(box.angle);
+      final rect = Rect.fromCenter(
+          center: Offset.zero, width: box.size.width, height: box.size.height);
+      canvas.drawRect(
+          rect, Paint()..color = colors.accent.withValues(alpha: 0.07));
+      _dashed(canvas, Path()..addRect(rect), dash, 6 * u);
+      final top = Offset(0, rect.top);
+      final knob = top - Offset(0, BoardRotateGap.value * u);
+      canvas.drawLine(
+          top,
+          knob,
+          Paint()
+            ..color = colors.accent
+            ..strokeWidth = 1.4 * u);
+      final fill = Paint()..color = colors.card;
+      final edge = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.8 * u
+        ..color = colors.accent;
+      canvas.drawCircle(knob, 7 * u, fill);
+      canvas.drawCircle(knob, 7 * u, edge);
+      canvas.drawArc(Rect.fromCircle(center: knob, radius: 3.4 * u), -2.4, 4.4,
+          false, edge..strokeWidth = 1.3 * u);
+      edge.strokeWidth = 1.8 * u;
+      for (var i = 0; i < 8; i++) {
+        final h = box.handleLocal(i);
+        final corner = i.isEven;
+        final size = (corner ? 10.0 : 8.0) * u;
+        final r = RRect.fromRectAndRadius(
+            Rect.fromCenter(center: h, width: size, height: size),
+            Radius.circular((corner ? 2.5 : 4) * u));
+        canvas.drawRRect(r, fill);
+        canvas.drawRRect(r, edge);
+      }
+      canvas.restore();
     }
     canvas.restore();
 
@@ -1075,7 +1246,7 @@ class _PreviewPainter extends CustomPainter {
       box = box?.expandToInclude(s.bounds) ?? s.bounds;
     }
     for (final i in data.images) {
-      box = box?.expandToInclude(i.rect) ?? i.rect;
+      box = box?.expandToInclude(i.bounds) ?? i.bounds;
     }
     if (box == null) return;
     final k = math.min(
@@ -1086,7 +1257,10 @@ class _PreviewPainter extends CustomPainter {
     canvas.scale(k);
     canvas.translate(-box.center.dx, -box.center.dy);
     for (final i in data.images) {
+      canvas.save();
+      canvas.transform(i.transform.matrix4);
       canvas.drawRect(i.rect, Paint()..color = ink.withValues(alpha: 0.12));
+      canvas.restore();
     }
     for (final s in data.strokes) {
       paintBoardStroke(canvas, s, ink);
@@ -1117,7 +1291,7 @@ const boardColors = <int>[
 /// Colores, tamaño y fuerza del boli, o tamaño y fuerza de la goma.
 Future<void> showBoardToolPanel(
     BuildContext context, BoardController c, Offset anchor) {
-  final pen = c.tool == BoardTool.pen;
+  final tool = c.tool;
   return showGeneralDialog<void>(
     context: context,
     barrierDismissible: true,
@@ -1133,7 +1307,7 @@ Future<void> showBoardToolPanel(
             left: (anchor.dx - width / 2).clamp(8.0, media.width - width - 8),
             top: anchor.dy + 6,
             width: width,
-            child: _ToolPanel(controller: c, pen: pen),
+            child: _ToolPanel(controller: c, tool: tool),
           ),
         ],
       );
@@ -1153,9 +1327,9 @@ Future<void> showBoardToolPanel(
 }
 
 class _ToolPanel extends StatelessWidget {
-  const _ToolPanel({required this.controller, required this.pen});
+  const _ToolPanel({required this.controller, required this.tool});
   final BoardController controller;
-  final bool pen;
+  final BoardTool tool;
 
   @override
   Widget build(BuildContext context) {
@@ -1175,36 +1349,44 @@ class _ToolPanel extends StatelessWidget {
           listenable: controller,
           builder: (context, _) {
             final c = controller;
-            final width = pen ? c.penWidth : c.eraserWidth;
-            final force = pen ? c.penForce : c.eraserForce;
-            final shown = c.color == 0 ? ink : Color(c.color);
+            final pen = tool == BoardTool.pen;
+            final marker = tool == BoardTool.marker;
+            final width =
+                pen ? c.penWidth : (marker ? c.markerWidth : c.eraserWidth);
+            final force = pen ? c.penForce : (marker ? 0.0 : c.eraserForce);
+            final current = marker ? c.markerColor : c.color;
+            final shown = current == 0 ? ink : Color(current);
             return Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                if (pen) ...[
+                if (pen || marker) ...[
                   Wrap(
                     spacing: 8,
                     runSpacing: 8,
                     children: [
-                      for (final v in boardColors)
+                      for (final v in marker ? boardMarkers : boardColors)
                         Semantics(
                           button: true,
-                          selected: v == c.color,
+                          selected: v == current,
                           label: tr('Color'),
                           child: GestureDetector(
-                            onTap: () => c.setPen(color: v),
+                            onTap: () => marker
+                                ? c.setMarker(color: v)
+                                : c.setPen(color: v),
                             child: AnimatedContainer(
                               duration: Anim.fast,
                               curve: Anim.curve,
                               width: 34,
                               height: 34,
                               decoration: BoxDecoration(
-                                color: v == 0 ? ink : Color(v),
+                                color: v == 0
+                                    ? ink
+                                    : Color(v).withValues(alpha: 1),
                                 shape: BoxShape.circle,
                                 border: Border.all(
-                                  color: v == c.color ? p.accent : p.separator,
-                                  width: v == c.color ? 3 : 1,
+                                  color: v == current ? p.accent : p.separator,
+                                  width: v == current ? 3 : 1,
                                 ),
                               ),
                             ),
@@ -1218,25 +1400,29 @@ class _ToolPanel extends StatelessWidget {
                   label: tr('Tamaño'),
                   value: width,
                   min: pen ? 1 : 6,
-                  max: pen ? 24 : 80,
+                  max: pen ? 24 : (marker ? 48 : 80),
                   text: width.round().toString(),
-                  onChanged: (v) =>
-                      pen ? c.setPen(width: v) : c.setEraser(width: v),
+                  onChanged: (v) => pen
+                      ? c.setPen(width: v)
+                      : (marker
+                          ? c.setMarker(width: v)
+                          : c.setEraser(width: v)),
                 ),
-                _SliderRow(
-                  label: tr('Fuerza'),
-                  value: force,
-                  min: 0,
-                  max: 1,
-                  text: '${(force * 100).round()}%',
-                  onChanged: (v) =>
-                      pen ? c.setPen(force: v) : c.setEraser(force: v),
-                ),
+                if (!marker)
+                  _SliderRow(
+                    label: tr('Fuerza'),
+                    value: force,
+                    min: 0,
+                    max: 1,
+                    text: '${(force * 100).round()}%',
+                    onChanged: (v) =>
+                        pen ? c.setPen(force: v) : c.setEraser(force: v),
+                  ),
                 const SizedBox(height: 6),
                 SizedBox(
                   height: 34,
                   child: Center(
-                    child: pen
+                    child: pen || marker
                         ? CustomPaint(
                             size: const Size(200, 30),
                             painter: _PenPreview(shown, width, force),

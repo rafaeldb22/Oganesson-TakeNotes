@@ -383,23 +383,27 @@ class NotesRepository extends ChangeNotifier {
   /// Borra de la nube las imágenes de notas eliminadas para siempre, salvo
   /// las que siga usando otra nota (una imagen copiada de una nota a otra).
   void _releaseImages(List<Note> gone) {
-    final paths = {for (final n in gone) ...NoteImages.pathsIn(n.rich)};
+    final paths = {for (final n in gone) ...NoteImages.pathsIn(_fileRefs(n))};
     if (paths.isEmpty) return;
     for (final n in _notes.values) {
-      paths.removeAll(NoteImages.pathsIn(n.rich));
+      paths.removeAll(NoteImages.pathsIn(_fileRefs(n)));
     }
     NoteImages.instance.remove(paths);
   }
 
   /// Igual con los adjuntos.
   void _releaseFiles(List<Note> gone) {
-    final paths = {for (final n in gone) ...NoteFiles.pathsIn(n.rich)};
+    final paths = {for (final n in gone) ...NoteFiles.pathsIn(_fileRefs(n))};
     if (paths.isEmpty) return;
     for (final n in _notes.values) {
-      paths.removeAll(NoteFiles.pathsIn(n.rich));
+      paths.removeAll(NoteFiles.pathsIn(_fileRefs(n)));
     }
     NoteFiles.instance.remove(paths);
   }
+
+  /// Texto donde buscar archivos: el Delta y los adjuntos conectados.
+  static String? _fileRefs(Note n) =>
+      n.links.isEmpty ? n.rich : '${n.rich ?? ''} ${n.links.join(' ')}';
 
   Note? byId(String id) => _notes[id];
   Folder? folderById(String? id) => id == null ? null : _folders[id];

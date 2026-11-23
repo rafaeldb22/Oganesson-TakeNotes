@@ -281,19 +281,23 @@ class EditorToolbar extends StatelessWidget {
   }
 }
 
-/// Barra del modo pizarra: deshacer, lazo, boli y goma; compartir e IA se
-/// quedan donde estaban. Pulsar la herramienta activa abre sus opciones.
+/// Barra del modo pizarra: deshacer, herramientas con sus colores y tamaños a
+/// mano, y acciones. Pulsar la herramienta activa abre todas sus opciones.
 class BoardToolbar extends StatelessWidget {
   const BoardToolbar(
       {super.key,
       required this.controller,
       this.readOnly = false,
       this.onShare,
-      this.onAi});
+      this.onAi,
+      this.onReadText});
   final BoardController controller;
   final bool readOnly;
   final VoidCallback? onShare;
   final VoidCallback? onAi;
+
+  /// Pasar lo escrito a mano a texto con la IA; null = sin botón.
+  final VoidCallback? onReadText;
 
   void _pick(BuildContext button, BoardTool tool) {
     if (controller.tool != tool) {
@@ -304,6 +308,61 @@ class BoardToolbar extends StatelessWidget {
     final box = button.findRenderObject() as RenderBox;
     showBoardToolPanel(button, controller,
         box.localToGlobal(box.size.bottomCenter(Offset.zero)));
+  }
+
+  List<Widget> _quick(BuildContext context) {
+    final c = controller;
+    final ink = Theme.of(context).colorScheme.onSurface;
+    final tool = c.tool;
+    if (tool == BoardTool.lasso) return const [];
+    final colors = switch (tool) {
+      BoardTool.pen => const [
+          0,
+          0xFFE5484D,
+          0xFF3E8BFF,
+          0xFF30A46C,
+          0xFFF5A524
+        ],
+      BoardTool.marker => boardMarkers.take(5).toList(),
+      _ => const <int>[],
+    };
+    final current = tool == BoardTool.marker ? c.markerColor : c.color;
+    final sizes = switch (tool) {
+      BoardTool.pen => const [2.0, 4.0, 8.0],
+      BoardTool.marker => const [12.0, 20.0, 32.0],
+      _ => const [12.0, 24.0, 48.0],
+    };
+    final width = switch (tool) {
+      BoardTool.pen => c.penWidth,
+      BoardTool.marker => c.markerWidth,
+      _ => c.eraserWidth,
+    };
+    void setSize(double v) => switch (tool) {
+          BoardTool.pen => c.setPen(width: v),
+          BoardTool.marker => c.setMarker(width: v),
+          _ => c.setEraser(width: v),
+        };
+    return [
+      if (colors.isNotEmpty) ...[
+        const _GroupGap(),
+        for (final v in colors)
+          _Swatch(
+            color: v == 0 ? ink : Color(v).withValues(alpha: 1),
+            active: v == current,
+            onTap: () => tool == BoardTool.marker
+                ? c.setMarker(color: v)
+                : c.setPen(color: v),
+          ),
+      ],
+      const _GroupGap(),
+      for (final (i, v) in sizes.indexed)
+        _SizeDot(
+          dot: 5.0 + i * 4,
+          label: trf('Grosor {0}', [v.round()]),
+          active: (width - v).abs() < 0.5,
+          onTap: () => setSize(v),
+        ),
+    ];
   }
 
   @override
@@ -343,11 +402,13 @@ class BoardToolbar extends StatelessWidget {
                     onTap: c.canRedo ? c.redo : null),
               ],
               Expanded(
-                child: readOnly
-                    ? const SizedBox.shrink()
-                    : Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
+                child: Center(
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (!readOnly) ...[
                           _BoardTile(
                             tooltip: tr('Selector'),
                             active: c.tool == BoardTool.lasso,
@@ -369,13 +430,41 @@ class BoardToolbar extends StatelessWidget {
                                     : color),
                           ),
                           _BoardTile(
+                            tooltip: tr('Marcador'),
+                            active: c.tool == BoardTool.marker,
+                            onTap: (b) => _pick(b, BoardTool.marker),
+                            builder: (color) => Icon(Icons.border_color_rounded,
+                                size: 20,
+                                color: c.tool == BoardTool.marker
+                                    ? Color(c.markerColor).withValues(alpha: 1)
+                                    : color),
+                          ),
+                          _BoardTile(
                             tooltip: tr('Goma'),
                             active: c.tool == BoardTool.eraser,
                             onTap: (b) => _pick(b, BoardTool.eraser),
                             builder: (color) => EraserIcon(color: color),
                           ),
+                          ..._quick(context),
+                          const _GroupGap(),
+                          _Btn(
+                              icon: Icons.add_photo_alternate_outlined,
+                              tooltip: tr('Insertar imagen'),
+                              onTap: () => c.insertImage?.call()),
                         ],
-                      ),
+                        _Btn(
+                            icon: Icons.fit_screen_rounded,
+                            tooltip: tr('Ver todo'),
+                            onTap: () => c.fitView?.call()),
+                        if (onReadText != null)
+                          _Btn(
+                              icon: Icons.document_scanner_outlined,
+                              tooltip: tr('Pasar a texto con IA'),
+                              onTap: c.isEmpty ? null : onReadText),
+                      ],
+                    ),
+                  ),
+                ),
               ),
               if (onShare != null)
                 _Btn(
@@ -388,6 +477,99 @@ class BoardToolbar extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+}
+
+class _Swatch extends StatelessWidget {
+  const _Swatch(
+      {required this.color, required this.active, required this.onTap});
+  final Color color;
+  final bool active;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = Palette.of(context);
+    return Semantics(
+      button: true,
+      selected: active,
+      label: tr('Color'),
+      child: Bouncy(
+        pressedScale: 0.85,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: onTap,
+          child: SizedBox(
+            width: 30,
+            height: 40,
+            child: Center(
+              child: AnimatedContainer(
+                duration: Anim.fast,
+                curve: Anim.curve,
+                width: active ? 23 : 19,
+                height: active ? 23 : 19,
+                decoration: BoxDecoration(
+                  color: color,
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                      color: active ? p.accent : p.separator,
+                      width: active ? 2.5 : 1),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SizeDot extends StatelessWidget {
+  const _SizeDot({
+    required this.dot,
+    required this.label,
+    required this.active,
+    required this.onTap,
+  });
+  final double dot;
+  final String label;
+  final bool active;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = Palette.of(context);
+    final fg = Theme.of(context).colorScheme.onSurface;
+    return Tooltip(
+      message: label,
+      waitDuration: const Duration(milliseconds: 500),
+      child: Bouncy(
+        pressedScale: 0.85,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: onTap,
+          child: AnimatedContainer(
+            duration: Anim.fast,
+            width: 30,
+            height: 32,
+            margin: const EdgeInsets.symmetric(vertical: 8),
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: active ? fg.withValues(alpha: 0.13) : Colors.transparent,
+              borderRadius: BorderRadius.circular(9),
+            ),
+            child: Container(
+              width: dot,
+              height: dot,
+              decoration: BoxDecoration(
+                color: active ? fg : p.secondary,
+                shape: BoxShape.circle,
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

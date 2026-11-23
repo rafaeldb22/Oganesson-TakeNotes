@@ -19,6 +19,7 @@ import '../data/note_images.dart';
 import 'anim.dart';
 import 'context_menu.dart';
 import 'i18n.dart';
+import 'pdf_viewer.dart';
 import 'theme.dart';
 import 'toast.dart';
 
@@ -99,8 +100,22 @@ Future<void> pickNoteFiles(
   }
 }
 
-/// Abre un adjunto con su programa (en Android, con el menú de compartir).
+/// Abre un adjunto: los PDF en el lector de la app y el resto con su programa.
 Future<void> openNoteFile(BuildContext context, NoteFile file) async {
+  if (!file.isPdf) return openFileExternally(context, file);
+  final local = await NoteFiles.instance.local(file.path);
+  if (!context.mounted) return;
+  if (local == null) {
+    showToast(context, tr('No se pudo abrir el archivo'),
+        icon: Icons.error_outline_rounded);
+    return;
+  }
+  await openPdfViewer(context, local.path, file.name,
+      onExternal: () => openFileExternally(context, file));
+}
+
+/// Abre un archivo con su programa (en Android, con el menú de compartir).
+Future<void> openFileExternally(BuildContext context, NoteFile file) async {
   void missing() {
     if (context.mounted) {
       showToast(context, tr('No se pudo abrir el archivo'),
@@ -132,7 +147,8 @@ Future<void> openNoteFile(BuildContext context, NoteFile file) async {
 
 /// Enseña lo que ha leído la IA, para copiarlo o añadirlo a la nota.
 Future<void> _showReadResult(
-    BuildContext context, QuillController? c, String title, String text) {
+    BuildContext context, QuillController? c, String title, String text,
+    {void Function(String text)? onInsert}) {
   final edit = TextEditingController(text: text);
   return showModalBottomSheet<void>(
     context: context,
@@ -176,11 +192,15 @@ Future<void> _showReadResult(
                 },
                 child: Text(tr('Copiar')),
               ),
-              if (c != null) ...[
+              if (c != null || onInsert != null) ...[
                 const SizedBox(width: 8),
                 FilledButton(
                   onPressed: () {
-                    _insertTextAtCursor(c, edit.text.trim());
+                    if (onInsert != null) {
+                      onInsert(edit.text.trim());
+                    } else {
+                      _insertTextAtCursor(c!, edit.text.trim());
+                    }
                     Navigator.pop(ctx);
                   },
                   child: Text(tr('Añadir a la nota')),
@@ -195,7 +215,8 @@ Future<void> _showReadResult(
 }
 
 Future<void> _readWithAi(BuildContext context, QuillController? c,
-    Uint8List bytes, String mime, String prompt, String title) async {
+    Uint8List bytes, String mime, String prompt, String title,
+    {void Function(String text)? onInsert}) async {
   final nav = Navigator.of(context, rootNavigator: true);
   var open = true;
   unawaited(showDialog<void>(
@@ -221,7 +242,7 @@ Future<void> _readWithAi(BuildContext context, QuillController? c,
           icon: Icons.info_outline_rounded);
       return;
     }
-    await _showReadResult(context, c, title, text.trim());
+    await _showReadResult(context, c, title, text.trim(), onInsert: onInsert);
   } on AiException catch (e) {
     if (open) nav.pop();
     if (context.mounted) {
@@ -251,6 +272,13 @@ Future<void> readImageText(
         },
         aiOcrPrompt,
         tr('Texto de la imagen'));
+
+/// Lee una pizarra con la IA; [onInsert] añade el resultado a la nota.
+Future<void> readBoardText(BuildContext context, Uint8List png,
+        {required void Function(String text) onInsert}) =>
+    _readWithAi(context, null, png, 'image/png', aiBoardPrompt,
+        tr('Texto de la pizarra'),
+        onInsert: onInsert);
 
 // ------------------------------------------------------------- nota de voz
 

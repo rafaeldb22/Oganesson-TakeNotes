@@ -7,12 +7,15 @@ import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_quill/flutter_quill.dart';
 
+import '../data/note_attachments.dart';
 import '../data/note_board.dart';
+import '../data/note_images.dart';
 import '../data/note_links.dart';
 import '../data/notes_repository.dart';
 import '../models/note.dart';
 import 'ai_tools_ui.dart';
 import 'anim.dart';
+import 'attachments_ui.dart';
 import 'editor_toolbar.dart';
 import 'folders.dart';
 import 'note_color_sheet.dart';
@@ -142,6 +145,22 @@ class _NoteEditorState extends State<NoteEditor> {
     _lastSaved = rich;
     _lastTyped = DateTime.now();
     repo.updateContent(widget.noteId, content, rich: rich);
+  }
+
+  /// Pasa lo escrito a mano (la selección o todo) a texto con la IA.
+  Future<void> _boardToText() async {
+    final c = _board;
+    if (c == null) return;
+    final png = await renderBoardPng(c.dataForAi(), NoteImages.instance.load);
+    if (png == null || !mounted) return;
+    await readBoardText(context, png, onInsert: (text) {
+      final n = repo.byId(widget.noteId);
+      if (n == null || text.isEmpty) return;
+      final (content, rich) = withText(n.content, n.rich, text);
+      _lastSaved = rich;
+      _lastTyped = DateTime.now();
+      repo.updateContent(widget.noteId, content, rich: rich);
+    });
   }
 
   /// Cambios de la pizarra que llegan desde otro dispositivo.
@@ -695,6 +714,9 @@ class _NoteEditorState extends State<NoteEditor> {
                         onAi: n == null || n.vault || foreign
                             ? null
                             : () => showNoteAiActions(context, repo, n.id),
+                        onReadText: n == null || n.vault || foreign
+                            ? null
+                            : _boardToText,
                       )
                     : _toolbarOpen
                         ? EditorToolbar(
@@ -991,10 +1013,67 @@ class _LinksBar extends StatelessWidget {
     final out = graph.outgoing[noteId] ?? const <String>{};
     final back = graph.incoming[noteId] ?? const <String>{};
     final missing = graph.unresolved[noteId] ?? const <String>{};
-    if (out.isEmpty && back.isEmpty && missing.isEmpty) {
+    final note = repo.byId(noteId);
+    final files = note == null ? const <MediaItem>[] : linkedMedia(note);
+    final canRemove = note != null && !repo.isForeign(note);
+    if (out.isEmpty && back.isEmpty && missing.isEmpty && files.isEmpty) {
       return const SizedBox.shrink();
     }
     final p = Palette.of(context);
+
+    Widget fileChip(MediaItem m) {
+      final label = m.kind == MediaKind.image ? tr('Imagen') : m.name;
+      return Padding(
+        padding: const EdgeInsets.only(right: 6),
+        child: Tooltip(
+          message: label,
+          child: Material(
+            color: p.accent.withValues(alpha: 0.12),
+            shape: StadiumBorder(
+                side: BorderSide(color: p.accent.withValues(alpha: 0.4))),
+            clipBehavior: Clip.antiAlias,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                InkWell(
+                  onTap: () => openMediaItem(context, m),
+                  child: Padding(
+                    padding: EdgeInsets.fromLTRB(10, 5, canRemove ? 4 : 10, 5),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(mediaIcon(m), size: 14, color: p.accent),
+                        const SizedBox(width: 5),
+                        ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 160),
+                          child: Text(label,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(fontSize: 12.5)),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                if (canRemove)
+                  InkWell(
+                    onTap: () => removeLinkedMedia(repo, noteId, m.path),
+                    child: Semantics(
+                      button: true,
+                      label: tr('Quitar'),
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(2, 5, 8, 5),
+                        child: Icon(Icons.close_rounded,
+                            size: 13, color: p.secondary),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
 
     Widget chip(
         IconData icon, String label, String tooltip, VoidCallback? onTap,
@@ -1054,6 +1133,7 @@ class _LinksBar extends StatelessWidget {
               padding: const EdgeInsets.only(right: 8),
               child: Icon(Icons.hub_outlined, size: 16, color: p.accent),
             ),
+            for (final m in files) fileChip(m),
             for (final id in out)
               chip(
                   Icons.north_east_rounded,

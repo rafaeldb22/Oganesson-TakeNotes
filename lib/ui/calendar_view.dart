@@ -4,6 +4,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import '../data/notes_repository.dart';
 import '../models/note.dart';
 import 'anim.dart';
+import 'context_menu.dart';
 import 'format.dart';
 import 'split.dart';
 import 'smooth_scroll.dart';
@@ -49,10 +50,9 @@ class _CalendarViewState extends State<CalendarView> {
   final _calScroll = SmoothScrollController();
   final _listScroll = SmoothScrollController();
 
-  /// Alto mínimo de una celda del mes: margen + borde (7) + espacio (4) +
-  /// número del día (28) + 3 barras (21) + "+N" (12) = 72, con holgura.
-  /// Si no cabe, el calendario se desplaza en vez de desbordarse.
-  static const _minCell = 78.0;
+  /// Alto mínimo de una celda: número del día (34) + 7 líneas (32) + "+N"
+  /// (13) + márgenes. Si no cabe, el calendario se desplaza.
+  static const _minCell = 86.0;
 
   static const _before = 3;
   late final PageController _pages = PageController(initialPage: _before);
@@ -215,6 +215,7 @@ class _CalendarViewState extends State<CalendarView> {
                     cellHeight: cellHeight,
                     accent: accent,
                     onSelect: (d) => setState(() => _selected = d),
+                    onNewOnDay: widget.onNewOnDay,
                   ),
                 ),
               ),
@@ -266,7 +267,7 @@ class _CalendarViewState extends State<CalendarView> {
 
           // Estrecho (móvil): todo en un único desplazamiento, sin capas
           // que se monten unas encima de otras.
-          final cellH = ((c.maxWidth - 24) / 7 * 0.95).clamp(_minCell, 92.0);
+          final cellH = ((c.maxWidth - 24) / 7 * 0.95).clamp(_minCell, 96.0);
           final dayNotes = activeOn(notes, _selected);
           return ColoredBox(
             color: Palette.card(context),
@@ -326,49 +327,56 @@ class DaySlots {
   int extra = 0;
 }
 
-/// Reparte las notas de una semana en filas. Una barra mantiene su fila
-/// mientras puede, pero si no cabe y ese día hay un hueco, lo ocupa: "+N"
-/// solo aparece cuando de verdad hay más notas que filas.
+/// Fila de cada nota en todo el mes. Se reparte por orden de inicio, que usa
+/// el mínimo de filas posible: con hasta 7 a la vez, cada línea conserva su
+/// fila de principio a fin.
+Map<String, int> assignLanes(List<Note> notes) {
+  final items = [
+    for (final n in notes)
+      (n, _day(n.periodStart.toLocal()), _day(n.dueAt!.toLocal())),
+  ]..sort((x, y) {
+      final byStart = x.$2.compareTo(y.$2);
+      if (byStart != 0) return byStart;
+      if (x.$1.isSingleDay != y.$1.isSingleDay) {
+        return x.$1.isSingleDay ? -1 : 1;
+      }
+      final byEnd = y.$3.compareTo(x.$3);
+      return byEnd != 0 ? byEnd : x.$1.id.compareTo(y.$1.id);
+    });
+  final laneEnds = <DateTime>[];
+  final out = <String, int>{};
+  for (final (n, s, e) in items) {
+    var lane = laneEnds.indexWhere((end) => end.isBefore(s));
+    if (lane == -1) {
+      laneEnds.add(e);
+      lane = laneEnds.length - 1;
+    } else {
+      laneEnds[lane] = e;
+    }
+    out[n.id] = lane;
+  }
+  return out;
+}
+
+/// Reparte las notas de una semana en filas. Si una no cabe en la suya y ese
+/// día hay un hueco, lo ocupa: "+N" solo sale cuando hay más notas que filas.
 Map<DateTime, DaySlots> layoutWeek(DateTime monday, List<Note> notes,
-    {int lanes = 3}) {
+    {int lanes = 7, Map<String, int>? assigned}) {
+  final rows = assigned ?? assignLanes(notes);
   final days = [
     for (var i = 0; i < 7; i++)
       DateTime(monday.year, monday.month, monday.day + i)
   ];
-  final spans = <(Note, int, int)>[];
+  final overflow = List.generate(7, (_) => <Note>[]);
+  final out = {for (final d in days) d: DaySlots(lanes)};
   for (final n in notes) {
     final s = _day(n.periodStart.toLocal());
     final e = _day(n.dueAt!.toLocal());
     if (e.isBefore(days.first) || s.isAfter(days.last)) continue;
     final a = s.isBefore(days.first) ? 0 : days.indexOf(s);
     final b = e.isAfter(days.last) ? 6 : days.indexOf(e);
-    spans.add((n, a, b));
-  }
-  // Las de un día primero (son las que deben verse) y luego las más largas.
-  spans.sort((x, y) {
-    if (x.$1.isSingleDay != y.$1.isSingleDay) {
-      return x.$1.isSingleDay ? -1 : 1;
-    }
-    if (x.$2 != y.$2) return x.$2.compareTo(y.$2);
-    return (y.$3 - y.$2).compareTo(x.$3 - x.$2);
-  });
-
-  final used = <List<bool>>[];
-  final overflow = List.generate(7, (_) => <Note>[]);
-  final out = {for (final d in days) d: DaySlots(lanes)};
-  for (final (n, a, b) in spans) {
-    var lane = used.indexWhere((l) {
-      for (var d = a; d <= b; d++) {
-        if (l[d]) return false;
-      }
-      return true;
-    });
-    if (lane == -1) {
-      used.add(List.filled(7, false));
-      lane = used.length - 1;
-    }
+    final lane = rows[n.id] ?? lanes;
     for (var d = a; d <= b; d++) {
-      used[lane][d] = true;
       if (lane < lanes) {
         out[days[d]]!.notes[lane] = n;
       } else {
@@ -398,6 +406,7 @@ class _MonthGrid extends StatelessWidget {
     required this.cellHeight,
     required this.accent,
     required this.onSelect,
+    required this.onNewOnDay,
   });
 
   final DateTime month;
@@ -406,8 +415,25 @@ class _MonthGrid extends StatelessWidget {
   final double cellHeight;
   final Color accent;
   final void Function(DateTime) onSelect;
+  final void Function(DateTime) onNewOnDay;
 
-  static const _maxLanes = 3;
+  static const _maxLanes = 7;
+  static const _barHeight = 3.0;
+  static const _barGap = 1.5;
+
+  /// Clic derecho en un día: crear una nota ahí.
+  Future<void> _dayMenu(
+      BuildContext context, DateTime day, Offset position) async {
+    onSelect(day);
+    final choice = await showContextMenu(context,
+        position: position,
+        title: trf('{0} de {1}', [day.day, tr(mesesNombre[day.month - 1])]),
+        entries: [
+          MenuEntry(
+              'nueva', Icons.note_add_outlined, tr('Nueva nota este día')),
+        ]);
+    if (choice == 'nueva') onNewOnDay(day);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -415,13 +441,23 @@ class _MonthGrid extends StatelessWidget {
     // Por calendario, no restando horas: un cambio de hora movería el día.
     final gridStart =
         DateTime(first.year, first.month, 1 - (first.weekday - 1));
+    final gridEnd =
+        DateTime(gridStart.year, gridStart.month, gridStart.day + 41);
     final today = _day(DateTime.now());
+    final visible = notes.where((n) {
+      final s = _day(n.periodStart.toLocal());
+      final e = _day(n.dueAt!.toLocal());
+      return !e.isBefore(gridStart) && !s.isAfter(gridEnd);
+    }).toList();
+    // Filas de todo el mes: una línea no cambia de fila al pasar de semana.
+    final rows = assignLanes(visible);
     final weeks = [
       for (var w = 0; w < 6; w++)
         layoutWeek(
             DateTime(gridStart.year, gridStart.month, gridStart.day + w * 7),
-            notes,
-            lanes: _maxLanes),
+            visible,
+            lanes: _maxLanes,
+            assigned: rows),
     ];
 
     return Padding(
@@ -456,12 +492,10 @@ class _MonthGrid extends StatelessWidget {
     final isSel = day == selected;
     final extra = slots.extra;
 
-    // Las barras de las tareas van de borde a borde de la celda (sin el
-    // margen de la selección), así se unen con el día anterior y el
-    // siguiente formando una línea continua.
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: () => onSelect(day),
+      onSecondaryTapUp: (d) => _dayMenu(context, day, d.globalPosition),
       child: Stack(
         // La columna ocupa toda la celda: el número y el círculo de hoy
         // quedan centrados (antes, sin tareas, se iban a la izquierda).
@@ -511,9 +545,10 @@ class _MonthGrid extends StatelessWidget {
                   ),
                 ),
               ),
-              const Spacer(),
+              const SizedBox(height: 2),
               for (var lane = 0; lane < _maxLanes; lane++)
                 _laneBar(context, day, slots.notes[lane], inMonth),
+              const Spacer(),
               SizedBox(
                 height: 12,
                 child: extra > 0
@@ -532,102 +567,33 @@ class _MonthGrid extends StatelessWidget {
     );
   }
 
+  /// Línea lisa. Una tarea larga es un tramo por día, separados por un hueco
+  /// mínimo; la de un solo día es una línea igual de gruesa.
   Widget _laneBar(BuildContext context, DateTime day, Note? n, bool inMonth) {
-    if (n == null) return const SizedBox(height: 6);
-    final id = n.id;
-    final single = n.isSingleDay;
+    if (n == null) return const SizedBox(height: _barHeight + _barGap);
     final s = _day(n.periodStart.toLocal());
     final e = _day(n.dueAt!.toLocal());
-    final isStart = day == s || day.weekday == DateTime.monday;
-    final isEnd = day == e || day.weekday == DateTime.sunday;
-    final radius = BorderRadius.horizontal(
-      left: Radius.circular(isStart ? 3 : 0),
-      right: Radius.circular(isEnd ? 3 : 0),
-    );
     final fade = inMonth ? 1.0 : 0.45;
-
-    // Las de un día son una píldora más corta que no toca los bordes.
-    final inset = single ? 8.0 : 4.0;
-    Widget bar(Decoration d) => Padding(
-          padding: EdgeInsets.only(
-              left: isStart ? inset : 0, right: isEnd ? inset : 0, bottom: 2),
-          child: Container(height: 4, decoration: d)
-              .animate(key: ValueKey('$id-$day'))
-              .fadeIn(duration: Anim.medium)
-              .scaleX(
-                  begin: 0.5,
-                  alignment: Alignment.centerLeft,
-                  duration: Anim.medium,
-                  curve: Anim.curve),
-        );
-
-    if (n.done) {
-      return bar(BoxDecoration(
-        color: Palette.secondary(context).withValues(alpha: 0.6 * fade),
-        borderRadius: radius,
-      ));
-    }
-
-    // Degradado continuo: el tramo de cada día va del color de su inicio
-    // al de su final (con las horas reales de la tarea), así la línea
-    // cambia de color suavemente de un día a otro.
-    final start = n.periodStart.toLocal();
-    final due = n.dueAt!.toLocal();
-    final span = due.difference(start).inSeconds.toDouble();
-    double tAt(DateTime x) => span <= 0
-        ? 1.0
-        : (x.difference(start).inSeconds / span).clamp(0.0, 1.0);
-    final dayStart = day;
-    final dayEnd = day.add(const Duration(days: 1));
-    final t0 = tAt(dayStart), t1 = tAt(dayEnd);
-    final stops = fuseForTheme(context, notePalette(n));
-    Color colorAt(double f) => paletteAt(stops, t0 + (t1 - t0) * f);
-
-    // Lo que ya pasó, un poco más oscuro; hoy se parte en la hora actual.
-    final now = DateTime.now();
-    final past = (now.difference(dayStart).inSeconds / 86400).clamp(0.0, 1.0);
-    Color darker(Color c) {
-      final hsl = HSLColor.fromColor(c);
-      return hsl
-          .withLightness((hsl.lightness - 0.16).clamp(0.0, 1.0))
-          .toColor();
-    }
-
-    // Un solo día: color liso, más oscuro solo si ya ha pasado.
-    if (single) {
-      final c = day.isBefore(_day(now)) ? darker(stops.first) : stops.first;
-      return bar(BoxDecoration(
-        color: c.withValues(alpha: 0.95 * fade),
-        borderRadius: radius,
-      ));
-    }
-
-    final colors = <Color>[];
-    final positions = <double>[];
-    void add(double f, bool isPast) {
-      final c = colorAt(f);
-      colors.add((isPast ? darker(c) : c).withValues(alpha: 0.95 * fade));
-      positions.add(f);
-    }
-
-    if (past >= 1) {
-      add(0, true);
-      add(0.5, true);
-      add(1, true);
-    } else if (past <= 0) {
-      add(0, false);
-      add(0.5, false);
-      add(1, false);
-    } else {
-      add(0, true);
-      add(past, true);
-      add(past, false);
-      add(1, false);
-    }
-    return bar(BoxDecoration(
-      gradient: LinearGradient(colors: colors, stops: positions),
-      borderRadius: radius,
-    ));
+    final color = n.done
+        ? Palette.secondary(context).withValues(alpha: 0.6 * fade)
+        : (n.color != null
+                ? Color(n.color!)
+                : fuseForTheme(context, notePalette(n)).first)
+            .withValues(alpha: 0.95 * fade);
+    return Padding(
+      padding: EdgeInsets.only(
+        left: day == s ? 4 : 1.5,
+        right: day == e ? 4 : 1.5,
+        bottom: _barGap,
+      ),
+      child: Container(
+        height: _barHeight,
+        decoration: BoxDecoration(
+          color: color,
+          borderRadius: BorderRadius.circular(_barHeight / 2),
+        ),
+      ),
+    );
   }
 }
 

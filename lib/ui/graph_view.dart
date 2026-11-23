@@ -10,12 +10,10 @@ import '../data/note_images.dart';
 import '../data/note_links.dart';
 import '../data/notes_repository.dart';
 import '../models/note.dart';
+import 'attachments_ui.dart';
 import 'context_menu.dart';
 import 'link_picker.dart';
-import 'note_image.dart';
-import 'note_media.dart';
 import 'theme.dart';
-import 'toast.dart';
 import 'i18n.dart';
 
 /// Red de notas (como la vista de grafo de Obsidian): cada nota es un nodo
@@ -88,50 +86,15 @@ class _GraphViewState extends State<GraphView> with TickerProviderStateMixin {
     }
   }
 
-  Future<void> _openMedia(_GraphMedia m) async {
-    final item = m.item;
-    if (item.kind == MediaKind.image) {
-      final bytes = await NoteImages.instance.load(item.path);
-      if (!mounted) return;
-      if (bytes == null) {
-        showToast(context, tr('No se pudo abrir la imagen'),
-            icon: Icons.error_outline_rounded);
-        return;
-      }
-      await openImageViewer(context,
-          image: MemoryImage(bytes),
-          heroTag: 'red-${m.noteId}-${item.path}',
-          bytes: () async => bytes);
-      return;
-    }
-    final file = item.file;
-    if (file == null) return;
-    if (item.kind == MediaKind.file) return openNoteFile(context, file);
-    await showModalBottomSheet<void>(
-      context: context,
-      useSafeArea: true,
-      constraints: const BoxConstraints(maxWidth: 480),
-      builder: (_) => Padding(
-        padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
-        child: NoteFileCard(file: file, autoplay: true),
-      ),
-    );
-  }
-
-  Future<void> _connectFiles(String noteId, String kind) async {
-    final repo = widget.repo;
-    switch (kind) {
-      case 'imagen':
-        for (final bytes in await pickImageBytes(context)) {
-          final src = await NoteImages.instance.add(bytes);
-          if (src != null) connectMedia(repo, noteId, {'image': src});
-        }
-      case 'voz':
-        final f = await recordVoiceFile(context);
-        if (f != null) connectMedia(repo, noteId, fileEmbed(f));
-      case 'archivo':
-        await pickNoteFiles(
-            context, (f) => connectMedia(repo, noteId, fileEmbed(f)));
+  /// Clic izquierdo: abre directamente la nota o el archivo.
+  void _openAt(Offset local) {
+    final id = _hit(local);
+    if (id == null) return;
+    final media = _media[id];
+    if (media != null) {
+      openMediaItem(context, media.item);
+    } else {
+      widget.onOpenNote(id);
     }
   }
 
@@ -151,19 +114,26 @@ class _GraphViewState extends State<GraphView> with TickerProviderStateMixin {
             if (canEdit)
               MenuEntry(
                   'quitar', Icons.link_off_rounded, tr('Quitar de la red'),
-                  subtitle: tr('Sigue dentro de la nota'), danger: true),
+                  subtitle:
+                      media.item.linked ? null : tr('Sigue dentro de la nota'),
+                  danger: true),
           ]);
       if (!mounted) return;
-      if (choice == 'abrir') await _openMedia(media);
+      if (choice == 'abrir') await openMediaItem(context, media.item);
       if (choice == 'quitar') {
-        disconnectMedia(widget.repo, media.noteId, media.item.path);
+        if (media.item.linked) {
+          removeLinkedMedia(widget.repo, media.noteId, media.item.path);
+        } else {
+          disconnectMedia(widget.repo, media.noteId, media.item.path);
+        }
       }
       return;
     }
     final note = widget.repo.byId(id);
     if (note == null) return;
     final foreign = widget.repo.isForeign(note);
-    final canAttach = widget.repo.canEdit(note);
+    // Los adjuntos conectados son de quien creó la nota.
+    final canAttach = !foreign;
     final choice = await showContextMenu(context,
         position: global,
         title: note.title,
@@ -187,7 +157,7 @@ class _GraphViewState extends State<GraphView> with TickerProviderStateMixin {
       case 'enlazar':
         await showLinkNotesPicker(context, widget.repo, id);
       default:
-        await _connectFiles(id, choice);
+        await pickAndConnect(context, widget.repo, id, choice);
     }
   }
 
@@ -276,8 +246,6 @@ class _GraphViewState extends State<GraphView> with TickerProviderStateMixin {
   String? _dragging;
   Offset? _lastFocal;
   double _startScale = 1;
-  Offset _downPos = Offset.zero;
-  bool _moved = false;
 
   // Energía de la simulación: se para sola cuando todo está quieto.
   double _alpha = 1;
@@ -340,7 +308,7 @@ class _GraphViewState extends State<GraphView> with TickerProviderStateMixin {
     _media.clear();
     _mediaOfNote.clear();
     for (final n in _graph!.nodes) {
-      for (final item in mediaIn(n.rich)) {
+      for (final item in allMediaOf(n)) {
         if (!item.inGraph) continue;
         final id = 'm|${n.id}|${item.path}';
         _media[id] = _GraphMedia(n.id, item);
@@ -606,15 +574,14 @@ class _GraphViewState extends State<GraphView> with TickerProviderStateMixin {
                           onExit: (_) => _setHover(null),
                           child: GestureDetector(
                             behavior: HitTestBehavior.opaque,
+                            onTapUp: (d) => _openAt(d.localPosition),
                             onSecondaryTapUp: (d) =>
                                 _nodeMenu(d.localPosition, d.globalPosition),
                             onLongPressStart: (d) =>
                                 _nodeMenu(d.localPosition, d.globalPosition),
                             onScaleStart: (d) {
-                              _downPos = d.localFocalPoint;
                               _lastFocal = d.localFocalPoint;
                               _startScale = _scale;
-                              _moved = false;
                               _autoFit = false;
                               _dragging = d.pointerCount == 1
                                   ? _hit(d.localFocalPoint)
@@ -622,9 +589,6 @@ class _GraphViewState extends State<GraphView> with TickerProviderStateMixin {
                               if (_dragging != null) _reheat(0.3);
                             },
                             onScaleUpdate: (d) {
-                              if ((d.localFocalPoint - _downPos).distance > 4) {
-                                _moved = true;
-                              }
                               final last = _lastFocal ?? d.localFocalPoint;
                               _lastFocal = d.localFocalPoint;
                               if (_dragging != null) {
@@ -655,16 +619,8 @@ class _GraphViewState extends State<GraphView> with TickerProviderStateMixin {
                               });
                             },
                             onScaleEnd: (_) {
-                              final tapped = !_moved ? _hit(_downPos) : null;
                               _dragging = null;
                               _lastFocal = null;
-                              if (tapped == null) return;
-                              final media = _media[tapped];
-                              if (media != null) {
-                                _openMedia(media);
-                              } else {
-                                widget.onOpenNote(tapped);
-                              }
                             },
                             child: CustomPaint(
                               size: size,
@@ -786,6 +742,9 @@ class _Pill extends StatelessWidget {
   }
 }
 
+/// Caracteres de una etiqueta de la red.
+const _maxLabel = 14;
+
 class _GraphPainter extends CustomPainter {
   _GraphPainter({
     required this.nodes,
@@ -868,11 +827,7 @@ class _GraphPainter extends CustomPainter {
             ..color = Colors.white.withValues(alpha: alpha));
       canvas.restore();
     } else {
-      final icon = switch (m.item.kind) {
-        MediaKind.image => Icons.image_outlined,
-        MediaKind.audio => Icons.graphic_eq_rounded,
-        MediaKind.file => Icons.insert_drive_file_outlined,
-      };
+      final icon = mediaIcon(m.item);
       final tp = TextPainter(
         text: TextSpan(
           text: String.fromCharCode(icon.codePoint),
@@ -992,7 +947,9 @@ class _GraphPainter extends CustomPainter {
       final labelIn = Curves.easeOut
           .transform(((appear(n.id) - 0.4) / 0.6).clamp(0.0, 1.0));
       if (visible * labelIn <= 0.01) continue;
-      final title = label.length > 28 ? '${label.substring(0, 27)}…' : label;
+      final title = label.length > _maxLabel
+          ? '${label.substring(0, _maxLabel - 1).trimRight()}…'
+          : label;
       final tp = TextPainter(
         text: TextSpan(
           text: title,

@@ -2,6 +2,30 @@
 
 All notable changes to Oganesson TakeNotes (formerly *Notas* / *BabuNotes*).
 
+## [2.13.0] — 2026-11-23
+
+### Added
+- **PDF reader** inside the app, with page navigation and zoom.
+- **Connected files**: attach images, voice messages and files to a note without putting them in
+  its text. They appear at the bottom with its links and as circles in the network. Available from
+  the link button in the editor, right-clicking a note and the network.
+- **File index for the AI**: every file has a short code, so the assistant can find it and put it
+  in any note.
+- **The AI reads whiteboards**: handwriting and drawings, plus a button to turn them into text.
+- **Whiteboard**: highlighter, quick colors and sizes, insert image and fit to screen. The selector
+  can now resize, stretch and rotate.
+- Right-click a calendar day to create a note on it.
+
+### Changed
+- **Calendar**: solid lines with no gradients, up to 7 per day, and each line keeps its row.
+- Multi-day tasks are split into one segment per day, and single-day tasks are a plain line.
+- Smoother pen strokes.
+- Shorter labels in the note network.
+- Creating a note from the calendar no longer opens the date menu.
+
+### Fixed
+- Left-clicking anything in the note network opens it directly.
+
 ## [2.12.0] — 2026-11-23
 
 ### Added

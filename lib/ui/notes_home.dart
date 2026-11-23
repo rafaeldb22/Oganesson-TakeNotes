@@ -553,11 +553,6 @@ class _NotesHomeState extends State<NotesHome> {
   void _newNote({String? folderId}) {
     final n = repo.createNote(folderId: folderId);
     _open(n.id, autofocus: true);
-    if (_filter == 'calendario') {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) showScheduleSheet(context, repo, n.id);
-      });
-    }
   }
 
   Future<void> _fromTemplate() async {
@@ -662,7 +657,7 @@ class _NotesHomeState extends State<NotesHome> {
         : <(String, IconData, String, bool)>[
             ('share', Icons.group_add_outlined, tr('Compartir'), false),
             ('-', Icons.remove, '', false),
-            ('link', Icons.hub_outlined, tr('Enlazar con otras notas…'), false),
+            ('link', Icons.hub_outlined, tr('Enlazar notas o archivos…'), false),
             (
               'sub',
               Icons.account_tree_outlined,

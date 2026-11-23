@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 
+import '../data/note_attachments.dart';
 import '../data/note_links.dart';
 import '../data/notes_repository.dart';
 import '../models/note.dart';
 import 'anim.dart';
+import 'attachments_ui.dart';
 import 'i18n.dart';
 import 'text_menu.dart';
 import 'theme.dart';
@@ -50,6 +52,80 @@ class _LinkPickerState extends State<_LinkPicker> {
     super.dispose();
   }
 
+  Future<void> _attach(String kind) async {
+    await pickAndConnect(context, widget.repo, widget.noteId, kind);
+    if (mounted) setState(() {});
+  }
+
+  /// Añadir archivos conectados (salen abajo de la nota, no en su texto).
+  Widget _files(BuildContext context, Note note) {
+    final p = Palette.of(context);
+    final linked = linkedMedia(note);
+    Widget add(String kind, IconData icon, String label) => Expanded(
+          child: OutlinedButton.icon(
+            onPressed: () => _attach(kind),
+            icon: Icon(icon, size: 17),
+            label: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
+            style: OutlinedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 6)),
+          ),
+        );
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(tr('Conectar con archivos'),
+              style: TextStyle(
+                  color: p.secondary,
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w700)),
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              add('imagen', Icons.image_outlined, tr('Imagen')),
+              const SizedBox(width: 6),
+              add('voz', Icons.mic_none_rounded, tr('Voz')),
+              const SizedBox(width: 6),
+              add('archivo', Icons.insert_drive_file_outlined, tr('Archivo')),
+            ],
+          ),
+          if (linked.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            SizedBox(
+              height: 36,
+              child: ListView(
+                scrollDirection: Axis.horizontal,
+                children: [
+                  for (final m in linked)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 6),
+                      child: InputChip(
+                        avatar: Icon(mediaIcon(m), size: 16),
+                        label: ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 130),
+                          child: Text(
+                              m.kind == MediaKind.image ? tr('Imagen') : m.name,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis),
+                        ),
+                        onPressed: () => openMediaItem(context, m),
+                        deleteButtonTooltipMessage: tr('Quitar'),
+                        onDeleted: () {
+                          removeLinkedMedia(widget.repo, widget.noteId, m.path);
+                          setState(() {});
+                        },
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
   List<Note> _matches() {
     final q = _query.text.trim().toLowerCase();
     final all = widget.repo.notes
@@ -77,14 +153,15 @@ class _LinkPickerState extends State<_LinkPicker> {
     final matches = _matches();
 
     return AlertDialog(
-      title: Text(tr('Enlazar notas')),
+      title: Text(tr('Enlazar notas y archivos')),
       contentPadding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
       content: SizedBox(
         width: 440,
-        height: 420,
+        height: 510,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            if (note != null) _files(context, note),
             if (note != null)
               Padding(
                 padding: const EdgeInsets.only(bottom: 10),

@@ -161,7 +161,10 @@ that it still arrives. On Windows, check toasts are enabled first:
   unchanged. While it is open, `_ctrl` is stale: save through `BoardData.store`, never `_onEdit`.
 - Attachments as data: `lib/data/note_attachments.dart` (`mediaIn`, `withEmbeds`, `withText`). Append
   through these helpers: inserting before the last newline moves that line's header to the new text.
-  Network file nodes are attachments marked `net` (`net=1` in image sources).
+  Connected files (2.13) live in `Note.links` as `att:<embed JSON>` tokens next to note ids, never in
+  the text; migration 013 makes sharing cover them. Older network files are embeds marked `net`.
+  The AI reaches files by code (`mediaCode`, tools `find_files` / `attach_files`), with the latest
+  25 listed in `<contexto>`. PDFs open in `lib/ui/pdf_viewer.dart` (pdfrx).
 - Accounts (2.12): migration 012, `lib/data/accounts.dart`, `lib/ui/friends_sheet.dart`. Friends are
   one-way. `note_shares.email` now holds `u:<account id>`, and the `email` / `owner_email` columns
   of `note_people` / `my_shared_notes` carry the @username. `login_email` returns the address only
@@ -230,8 +233,9 @@ that it still arrives. On Windows, check toasts are enabled first:
 - Migration 011 ties shares to an existing account id, so sign-up needs no confirmation email. Run
   it **before** turning off *Confirm email*. Password recovery needs `{{ .Token }}` in the Supabase
   *Reset Password* email template.
-- Migration 012 (@usernames, friends) must be run by hand in the SQL Editor. Until then the app
-  keeps working with email sign-in and email sharing.
+- Migrations 012 (@usernames, friends) and 013 (connected files in shared notes) must be run by hand
+  in the SQL Editor, in that order. Until then the app keeps working with email sign-in and email
+  sharing, and collaborators can't open connected files.
 - Images: not yet verified on a real phone (Android paste via pasteboard, camera, saving to the
   gallery on Android < 10).
 - Vault password reset by email code needs the Supabase *Magic Link* email template to include

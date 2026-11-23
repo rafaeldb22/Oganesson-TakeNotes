@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import '../models/note.dart';
 import '../ui/i18n.dart';
 import 'ai_assistant.dart';
+import 'note_board.dart';
 import 'note_images.dart';
 import 'notes_repository.dart';
 
@@ -87,6 +88,19 @@ Future<String> _runWithImages(
         if (r.trim().isNotEmpty) seen.add(r.trim());
       } on AiException {
         if (text.isEmpty) rethrow; // Sin texto no hay nada más que enviar.
+      }
+    }
+    final board = BoardData.of(n.rich);
+    if (board != null) {
+      try {
+        final png = await renderBoardPng(board, loadImage);
+        if (png != null) {
+          final r = await aiReadMedia(png, 'image/png', aiBoardPrompt,
+              settings: settings, client: client);
+          if (r.trim().isNotEmpty) seen.add(r.trim());
+        }
+      } on AiException {
+        if (text.isEmpty && seen.isEmpty) rethrow;
       }
     }
   }

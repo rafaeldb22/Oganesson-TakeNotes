@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import '../models/note.dart';
 import 'note_factory.dart';
 import 'note_files.dart';
 import 'note_images.dart';
@@ -9,8 +10,12 @@ enum MediaKind { image, audio, file }
 
 /// Una imagen, nota de voz o archivo dentro del Delta de una nota.
 class MediaItem {
-  const MediaItem(this.kind, this.path, this.name, this.embed, this.inGraph);
+  const MediaItem(this.kind, this.path, this.name, this.embed, this.inGraph,
+      {this.linked = false});
   final MediaKind kind;
+
+  /// Conectado a la nota sin estar dentro de su texto.
+  final bool linked;
 
   /// Ruta en Storage: identifica el archivo aunque esté en varias notas.
   final String path;
@@ -153,14 +158,86 @@ List<MediaItem> mediaIn(String? rich) {
   return _result(ops);
 }
 
-/// Conecta un adjunto nuevo a una nota de la red.
+/// Prefijo de los adjuntos guardados en `Note.links`, junto a los ids de nota.
+const linkedMediaPrefix = 'att:';
+
+String _linkToken(Map<String, dynamic> embed) =>
+    '$linkedMediaPrefix${jsonEncode(embedWithGraph(embed, false))}';
+
+MediaItem? _linkedItem(String token) {
+  if (!token.startsWith(linkedMediaPrefix)) return null;
+  try {
+    final embed = jsonDecode(token.substring(linkedMediaPrefix.length));
+    final item = _itemOf({'insert': embed});
+    if (item == null) return null;
+    return MediaItem(item.kind, item.path, item.name, item.embed, true,
+        linked: true);
+  } catch (_) {
+    return null;
+  }
+}
+
+/// Adjuntos conectados a la nota sin estar dentro de su texto.
+List<MediaItem> linkedMedia(Note n) => [
+      for (final t in n.links)
+        if (_linkedItem(t) case final item?) item,
+    ];
+
+/// Todo lo que tiene una nota: dentro del texto y conectado.
+List<MediaItem> allMediaOf(Note n) => [...mediaIn(n.rich), ...linkedMedia(n)];
+
+/// Conecta un adjunto a una nota sin meterlo en su texto: sale abajo, con
+/// los enlaces, y como una bola en la red.
 void connectMedia(
     NotesRepository repo, String noteId, Map<String, dynamic> embed) {
   final n = repo.byId(noteId);
+  final item = _itemOf({'insert': embed});
+  if (n == null || item == null) return;
+  if (linkedMedia(n).any((m) => m.path == item.path)) return;
+  repo.addLinks(noteId, [_linkToken(embed)]);
+}
+
+/// Quita un adjunto conectado. Si no está en otra nota, el archivo sigue en
+/// la nube hasta que se borre la nota.
+void removeLinkedMedia(NotesRepository repo, String noteId, String path) {
+  final n = repo.byId(noteId);
   if (n == null) return;
-  final (content, rich) =
-      withEmbeds(n.content, n.rich, [embedWithGraph(embed, true)]);
-  repo.updateContent(noteId, content, rich: rich);
+  for (final t in n.links.toList()) {
+    if (_linkedItem(t)?.path == path) repo.removeLink(noteId, t);
+  }
+}
+
+/// Código corto y estable de un archivo, para que la IA lo pida sin errores.
+String mediaCode(String path) {
+  var h = 0x811c9dc5;
+  for (final c in path.codeUnits) {
+    h = ((h ^ c) * 0x01000193) & 0xffffffff;
+  }
+  return 'F${h.toRadixString(36).toUpperCase().padLeft(7, '0')}';
+}
+
+/// Un archivo disponible y la nota en la que está.
+class MediaEntry {
+  const MediaEntry(this.code, this.note, this.item);
+  final String code;
+  final Note note;
+  final MediaItem item;
+
+  String get kindName => switch (item.kind) {
+        MediaKind.image => 'image',
+        MediaKind.audio => 'audio',
+        MediaKind.file => item.file?.isPdf == true ? 'pdf' : 'file',
+      };
+}
+
+/// Índice de todos los archivos de [notes], sin repetir.
+List<MediaEntry> mediaCatalog(Iterable<Note> notes) {
+  final seen = <String>{};
+  return [
+    for (final n in notes)
+      for (final m in allMediaOf(n))
+        if (seen.add(m.path)) MediaEntry(mediaCode(m.path), n, m),
+  ];
 }
 
 /// Quita la bola de la red; el adjunto sigue dentro de la nota.

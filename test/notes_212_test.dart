@@ -26,6 +26,91 @@ BoardStroke _line(double x0, double x1) => BoardStroke(0, 2, [
     ]);
 
 void main() {
+  group('2.13', () {
+    test('siete líneas solapadas conservan su fila toda la semana', () {
+      final monday = DateTime(2026, 11, 23);
+      final notes = [
+        for (var i = 0; i < 7; i++)
+          _task('n$i', DateTime(2026, 11, 23 + (i % 2), 9),
+              DateTime(2026, 11, 28, 18)),
+      ];
+      final rows = assignLanes(notes);
+      expect(rows.values.toSet().length, 7);
+      final week = layoutWeek(monday, notes, assigned: rows);
+      final sat = week[DateTime(2026, 11, 28)]!;
+      expect(sat.extra, 0);
+      for (final n in notes) {
+        expect(sat.notes[rows[n.id]!]?.id, n.id);
+      }
+    });
+
+    test('dos tareas que no coinciden comparten fila', () {
+      final rows = assignLanes([
+        _task('a', DateTime(2026, 11, 23, 9), DateTime(2026, 11, 24, 9)),
+        _task('b', DateTime(2026, 11, 26, 9), DateTime(2026, 11, 27, 9)),
+      ]);
+      expect(rows['a'], rows['b']);
+    });
+
+    test('un archivo conectado no entra en el texto de la nota', () {
+      final n = Note(
+          id: 'n',
+          content: 'Nota',
+          rich: richFor('Nota'),
+          createdAt: DateTime.utc(2026),
+          updatedAt: DateTime.utc(2026),
+          links: [
+            'otra-nota',
+            'att:${jsonEncode({'image': 'sb://u/foto?w=1&h=1'})}',
+          ]);
+      expect(mediaIn(n.rich), isEmpty);
+      final item = linkedMedia(n).single;
+      expect(item.linked, isTrue);
+      expect(item.path, 'u/foto');
+      expect(allMediaOf(n).length, 1);
+    });
+
+    test('el código de un archivo es estable y corto', () {
+      expect(mediaCode('u/a'), mediaCode('u/a'));
+      expect(mediaCode('u/a'), isNot(mediaCode('u/b')));
+      expect(mediaCode('u/a'), matches(RegExp(r'^F[0-9A-Z]{7}$')));
+    });
+
+    test('escalar desde una esquina deja quieta la opuesta', () {
+      final box = BoardBox.around(const Rect.fromLTWH(0, 0, 100, 50));
+      final (t, b) = box.resize(4, const Offset(200, 100));
+      final anchor = t.apply(Offset.zero);
+      expect(anchor.dx, closeTo(0, 1e-6));
+      expect(anchor.dy, closeTo(0, 1e-6));
+      expect(b.size.width, closeTo(200, 1e-6));
+      expect(b.size.height, closeTo(100, 1e-6));
+    });
+
+    test('un lado cambia solo el ancho', () {
+      final box = BoardBox.around(const Rect.fromLTWH(0, 0, 100, 50));
+      final (_, b) = box.resize(3, const Offset(150, 25));
+      expect(b.size.width, closeTo(150, 1e-6));
+      expect(b.size.height, closeTo(50, 1e-6));
+    });
+
+    test('girar mantiene el centro y los trazos a la misma distancia', () {
+      final box = BoardBox.around(const Rect.fromLTWH(-10, -10, 20, 20));
+      final (t, b) = box.rotate(const Offset(10, 0), const Offset(0, 10));
+      expect(b.angle, closeTo(1.5707963, 1e-6));
+      final p = t.apply(const Offset(10, 0));
+      expect(p.dx, closeTo(0, 1e-6));
+      expect(p.dy, closeTo(10, 1e-6));
+    });
+
+    test('una imagen girada se guarda y se recupera', () {
+      final t = BoardAffine.rotation(const Offset(5, 5), 0.5);
+      final img = BoardImage('sb://u/a', const Rect.fromLTWH(0, 0, 10, 10), t);
+      final back = BoardImage.fromJson(jsonDecode(jsonEncode(img.toJson())))!;
+      expect(back.center.dx, closeTo(img.center.dx, 1e-6));
+      expect(back.bounds.width, closeTo(img.bounds.width, 1e-6));
+    });
+  });
+
   group('calendario', () {
     final monday = DateTime(2026, 11, 23);
     DateTime day(int i, [int h = 12]) => DateTime(2026, 11, 23 + i, h);
@@ -39,7 +124,7 @@ void main() {
         _task('c', day(0), day(1)),
         _task('d', day(1), day(3)),
       ];
-      final w = layoutWeek(monday, notes);
+      final w = layoutWeek(monday, notes, lanes: 3);
       expect(w[DateTime(2026, 11, 24)]!.extra, 1);
       final wed = w[DateTime(2026, 11, 25)]!;
       expect(wed.extra, 0);
@@ -50,7 +135,8 @@ void main() {
       final notes = [
         for (final id in ['a', 'b', 'c', 'd']) _task(id, day(2, 9), day(2, 18)),
       ];
-      final slots = layoutWeek(monday, notes)[DateTime(2026, 11, 25)]!;
+      final slots =
+          layoutWeek(monday, notes, lanes: 3)[DateTime(2026, 11, 25)]!;
       expect(slots.notes.whereType<Note>().length, 3);
       expect(slots.extra, 1);
     });
