@@ -25,6 +25,59 @@ BoardStroke _line(double x) =>
     BoardStroke(0, 2, [Offset(x, 0), Offset(x + 10, 0)], [1, 1]);
 
 void main() {
+  test('quitar la pizarra deja el texto de alrededor', () {
+    final (c, rich) =
+        BoardData.store('Título\nTexto', richFor('Título\nTexto'), BoardData());
+    final (content, out) = BoardData.remove(c, rich);
+    expect(content, 'Título\nTexto');
+    expect(BoardData.of(out), isNull);
+    expect((jsonDecode(out) as List).last['insert'], endsWith('\n'));
+  });
+
+  test('una nota que solo era pizarra queda vacía y válida', () {
+    final (c, rich) = BoardData.store('', null, BoardData());
+    final (content, out) = BoardData.remove(c, rich);
+    expect(content.trim(), isEmpty);
+    expect(jsonDecode(out), isNotEmpty);
+  });
+
+  testWidgets('eliminar la pizarra desde su tarjeta', (t) async {
+    appLanguage.code = 'es';
+    SharedPreferences.setMockInitialValues({});
+    t.view.physicalSize = const Size(1200, 800);
+    t.view.devicePixelRatio = 1;
+    addTearDown(t.view.reset);
+    final r = NotesRepository(
+        SupabaseClient('http://127.0.0.1:9', 'k',
+            authOptions: const AuthClientOptions(autoRefreshToken: false)),
+        'demo')
+      ..loaded = true;
+    final n = r.createNote();
+    final (c, rich) = BoardData.store('Titulo', richFor('Titulo'),
+        BoardData(active: false, strokes: [_line(0)]));
+    r.updateContent(n.id, c, rich: rich);
+    await t.pumpWidget(MaterialApp(
+      theme: buildTheme(themeById(''), Brightness.dark),
+      home: NoteEditor(
+          repo: r,
+          noteId: n.id,
+          showBack: false,
+          onClose: () {},
+          onDelete: (_) {}),
+    ));
+    await _settle(t);
+    await t.tap(find.byTooltip('Eliminar pizarra'));
+    await _settle(t);
+    await t.tap(find.widgetWithText(FilledButton, 'Eliminar'));
+    await _settle(t);
+    expect(BoardData.of(r.byId(n.id)!.rich), isNull);
+    expect(r.byId(n.id)!.title, 'Titulo');
+    expect(find.byTooltip('Eliminar pizarra'), findsNothing);
+    await t.pumpWidget(const SizedBox());
+    r.dispose();
+    await t.pump(const Duration(minutes: 5));
+  });
+
   test('completar gana aunque otro dispositivo tenga el reloj adelantado', () {
     SharedPreferences.setMockInitialValues({});
     final r = NotesRepository(

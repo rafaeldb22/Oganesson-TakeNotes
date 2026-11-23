@@ -476,6 +476,37 @@ class BoardData {
         ..add(embed)
         ..add({'insert': '\n'});
     }
+    return _result(ops);
+  }
+
+  /// Quita la pizarra del Delta, con su línea, sin tocar el resto de la nota.
+  static (String content, String rich) remove(String content, String rich) {
+    final ops = List<Object?>.of(jsonDecode(rich) as List);
+    final at = ops.indexWhere((o) => _dataIn(o) != null);
+    if (at == -1) return (content, rich);
+    ops.removeAt(at);
+    final next = at < ops.length ? ops[at] : null;
+    if (next is Map &&
+        next['attributes'] == null &&
+        next['insert'] is String &&
+        (next['insert'] as String).startsWith('\n')) {
+      final rest = (next['insert'] as String).substring(1);
+      if (rest.isEmpty) {
+        ops.removeAt(at);
+      } else {
+        ops[at] = {'insert': rest};
+      }
+    }
+    final last = ops.isEmpty ? null : ops.last;
+    if (last is! Map ||
+        last['insert'] is! String ||
+        !(last['insert'] as String).endsWith('\n')) {
+      ops.add({'insert': '\n'});
+    }
+    return _result(ops);
+  }
+
+  static (String, String) _result(List<Object?> ops) {
     final plain = StringBuffer();
     for (final o in ops) {
       final v = o is Map ? o['insert'] : null;

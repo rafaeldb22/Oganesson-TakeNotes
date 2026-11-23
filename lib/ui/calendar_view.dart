@@ -418,8 +418,11 @@ class _MonthGrid extends StatelessWidget {
   final void Function(DateTime) onNewOnDay;
 
   static const _maxLanes = 7;
-  static const _barHeight = 3.0;
+  static const _barHeight = 3.5;
   static const _barGap = 1.5;
+
+  /// Margen a cada lado de un día: separa visualmente unos días de otros.
+  static const _dayGap = 6.0;
 
   /// Clic derecho en un día: crear una nota ahí.
   Future<void> _dayMenu(
@@ -567,8 +570,8 @@ class _MonthGrid extends StatelessWidget {
     );
   }
 
-  /// Tarea de varios días: el primer y el último día son línea entera y los
-  /// de en medio, discontinuos. La de un solo día es una línea entera.
+  /// Tarea de varios días: línea y punto el primero, puntos en medio, y punto
+  /// y línea el último. La de un solo día es una línea entera.
   Widget _laneBar(BuildContext context, DateTime day, Note? n, bool inMonth) {
     if (n == null) return const SizedBox(height: _barHeight + _barGap);
     final s = _day(n.periodStart.toLocal());
@@ -581,57 +584,65 @@ class _MonthGrid extends StatelessWidget {
                 : fuseForTheme(context, notePalette(n)).first)
             .withValues(alpha: 0.95 * fade);
     return Padding(
-      padding: EdgeInsets.only(
-        left: day == s ? 4 : 0,
-        right: day == e ? 4 : 0,
-        bottom: _barGap,
-      ),
-      child: day == s || day == e
+      padding: const EdgeInsets.fromLTRB(_dayGap, 0, _dayGap, _barGap),
+      child: s == e
           ? Container(
               height: _barHeight,
               decoration: BoxDecoration(
                 color: color,
-                borderRadius: BorderRadius.horizontal(
-                  left: Radius.circular(day == s ? _barHeight / 2 : 0),
-                  right: Radius.circular(day == e ? _barHeight / 2 : 0),
-                ),
+                borderRadius: BorderRadius.circular(_barHeight / 2),
               ),
             )
           : CustomPaint(
               size: const Size(double.infinity, _barHeight),
-              painter: _DashPainter(color),
+              painter: _SpanPainter(
+                  color,
+                  day == s
+                      ? _SpanPart.first
+                      : (day == e ? _SpanPart.last : _SpanPart.middle)),
             ),
     );
   }
 }
 
-/// Rayitas iguales que encajan en el ancho: el hueco del final de un día
-/// continúa en el siguiente y la línea se ve seguida.
-class _DashPainter extends CustomPainter {
-  const _DashPainter(this.color);
-  final Color color;
+enum _SpanPart { first, middle, last }
 
-  static const _dash = 13.0, _gap = 8.0;
+/// Un día de una tarea larga: `— ·` el primero, `· · ·` en medio y `· —` el
+/// último.
+class _SpanPainter extends CustomPainter {
+  const _SpanPainter(this.color, this.part);
+  final Color color;
+  final _SpanPart part;
+
+  static const _dotStep = 13.0;
 
   @override
   void paint(Canvas canvas, Size size) {
-    final count = (size.width / (_dash + _gap)).round().clamp(1, 1000);
-    final step = size.width / count;
-    final y = size.height / 2;
+    final w = size.width, r = size.height / 2, y = r;
     final paint = Paint()
       ..color = color
       ..strokeWidth = size.height
       ..strokeCap = StrokeCap.round;
-    // Las puntas redondas ya ocupan medio grosor a cada lado.
-    final inset = (_gap + size.height) / 2;
-    for (var i = 0; i < count; i++) {
-      canvas.drawLine(Offset(i * step + inset, y),
-          Offset((i + 1) * step - inset, y), paint);
+    void dot(double x) => canvas.drawCircle(Offset(x, y), r + 0.3, paint);
+    void line(double a, double b) =>
+        canvas.drawLine(Offset(a, y), Offset(b, y), paint);
+    switch (part) {
+      case _SpanPart.first:
+        line(r, w * 0.62);
+        dot(w * 0.86);
+      case _SpanPart.last:
+        dot(w * 0.14);
+        line(w * 0.38, w - r);
+      case _SpanPart.middle:
+        final count = (w / _dotStep).round().clamp(2, 100);
+        for (var i = 0; i < count; i++) {
+          dot((i + 0.5) * w / count);
+        }
     }
   }
 
   @override
-  bool shouldRepaint(_DashPainter o) => o.color != color;
+  bool shouldRepaint(_SpanPainter o) => o.color != color || o.part != part;
 }
 
 class _DayPanel extends StatelessWidget {

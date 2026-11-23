@@ -1,7 +1,7 @@
 name: notas
 description: Oganesson TakeNotes — synced notes for Android and Windows (Flutter + Supabase).
 publish_to: 'none'
-version: 2.16.0+43
+version: 2.17.0+44
 
 environment:
   sdk: '>=3.4.0 <4.0.0'

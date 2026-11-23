@@ -938,4 +938,10 @@ const enStrings = <String, String>{
   "PDF, documentos, audio e imágenes": "PDFs, documents, audio and images",
   "Leyendo los archivos…": "Reading the files…",
   "No se puede leer este tipo de archivo.": "This file type can't be read.",
+  // 2.17
+  "Eliminar pizarra": "Delete whiteboard",
+  "Eliminar pizarra de la nota": "Delete whiteboard from note",
+  "¿Eliminar la pizarra?": "Delete the whiteboard?",
+  "Podrás recuperarla desde el historial de versiones.":
+      "You can bring it back from the version history.",
 };

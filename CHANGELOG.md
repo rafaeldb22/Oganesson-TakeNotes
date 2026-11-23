@@ -2,6 +2,16 @@
 
 All notable changes to Oganesson TakeNotes (formerly *Notas* / *BabuNotes*).
 
+## [2.17.0] — 2026-11-23
+
+### Added
+- **Delete a whiteboard** from its card in the note or from the whiteboard's right-click menu. The
+  note's text stays, and the whiteboard can be restored from the version history.
+
+### Changed
+- **Calendar**: days are further apart, and long tasks now show a line and dot on the first day,
+  dots in the middle, and a dot and line on the last day.
+
 ## [2.16.0] — 2026-11-23
 
 ### Changed

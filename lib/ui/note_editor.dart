@@ -129,6 +129,49 @@ class _NoteEditorState extends State<NoteEditor> {
     WidgetsBinding.instance.addPostFrameCallback((_) => old?.dispose());
   }
 
+  /// Quita la pizarra de la nota; el texto no se toca.
+  Future<void> _removeBoard() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(tr('¿Eliminar la pizarra?')),
+        content:
+            Text(tr('Podrás recuperarla desde el historial de versiones.')),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: Text(tr('Cancelar'))),
+          FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: Text(tr('Eliminar'))),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    if (_boardSave?.isActive ?? false) {
+      _boardSave!.cancel();
+      _saveBoard();
+    }
+    final n = repo.byId(widget.noteId);
+    if (n == null || !repo.canEdit(n)) return;
+    repo.history.record(n, force: true);
+    final (content, rich) = BoardData.remove(n.content, n.rich ?? _richJson());
+    final old = _board;
+    _applyingRemote = true;
+    _lastSaved = rich;
+    repo.updateContent(widget.noteId, content, rich: rich);
+    _ctrl.document = _docFor(repo.byId(widget.noteId));
+    _ctrl.updateSelection(
+        const TextSelection.collapsed(offset: 0), ChangeSource.local);
+    _lastSaved = _richJson();
+    _applyingRemote = false;
+    if (n.rich != _lastSaved) {
+      repo.updateContent(widget.noteId, _plain(), rich: _lastSaved);
+    }
+    setState(() => _board = null);
+    WidgetsBinding.instance.addPostFrameCallback((_) => old?.dispose());
+  }
+
   void _queueBoardSave() {
     _boardSave?.cancel();
     _boardSave = Timer(const Duration(milliseconds: 500), _saveBoard);
@@ -770,6 +813,7 @@ class _NoteEditorState extends State<NoteEditor> {
                   key: const ValueKey('pizarra-nota'),
                   controller: _board!,
                   readOnly: !writable,
+                  onRemove: _removeBoard,
                 ).animate().fadeIn(duration: Anim.medium, curve: Anim.curve),
               ),
             if (_board != null && n != null)
@@ -851,7 +895,8 @@ class _NoteEditorState extends State<NoteEditor> {
                                         const NoteImageEmbedBuilder(),
                                         const NoteFileEmbedBuilder(),
                                         NoteBoardEmbedBuilder(
-                                            onOpen: _enterBoard),
+                                            onOpen: _enterBoard,
+                                            onRemove: _removeBoard),
                                       ],
                                       customShortcuts:
                                           widget.onCommandPalette == null

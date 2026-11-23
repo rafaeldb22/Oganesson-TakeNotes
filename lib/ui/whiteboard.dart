@@ -353,9 +353,15 @@ class BoardController extends ChangeNotifier {
 /// dos dedos o la rueda mueven la vista, Ctrl + rueda hace zoom.
 class Whiteboard extends StatefulWidget {
   const Whiteboard(
-      {super.key, required this.controller, this.readOnly = false});
+      {super.key,
+      required this.controller,
+      this.readOnly = false,
+      this.onRemove});
   final BoardController controller;
   final bool readOnly;
+
+  /// Quitar la pizarra de la nota.
+  final VoidCallback? onRemove;
 
   @override
   State<Whiteboard> createState() => _WhiteboardState();
@@ -939,6 +945,10 @@ class _WhiteboardState extends State<Whiteboard> {
       if (!widget.readOnly && !_c.isEmpty)
         MenuEntry('limpiar', Icons.delete_sweep_outlined, tr('Borrar pizarra'),
             danger: true),
+      if (!widget.readOnly && widget.onRemove != null)
+        MenuEntry('eliminar', Icons.delete_forever_outlined,
+            tr('Eliminar pizarra de la nota'),
+            danger: true),
     ]);
     if (!mounted) return;
     switch (choice) {
@@ -961,6 +971,8 @@ class _WhiteboardState extends State<Whiteboard> {
         _resetView();
       case 'limpiar':
         await _confirmClear();
+      case 'eliminar':
+        widget.onRemove?.call();
     }
   }
 
@@ -1203,8 +1215,9 @@ class _BoardPainter extends CustomPainter {
 
 /// Tarjeta de la pizarra dentro de la nota en modo texto.
 class NoteBoardEmbedBuilder extends EmbedBuilder {
-  const NoteBoardEmbedBuilder({required this.onOpen});
+  const NoteBoardEmbedBuilder({required this.onOpen, required this.onRemove});
   final VoidCallback onOpen;
+  final VoidCallback onRemove;
 
   @override
   String get key => BoardData.embedType;
@@ -1250,6 +1263,18 @@ class NoteBoardEmbedBuilder extends EmbedBuilder {
                     ],
                   ),
                 ),
+                if (!e.readOnly)
+                  Positioned(
+                    top: 4,
+                    right: 4,
+                    child: IconButton(
+                      tooltip: tr('Eliminar pizarra'),
+                      visualDensity: VisualDensity.compact,
+                      icon: Icon(Icons.delete_outline_rounded,
+                          size: 19, color: p.secondary),
+                      onPressed: onRemove,
+                    ),
+                  ),
               ],
             ),
           ),
