@@ -157,17 +157,24 @@ class _LinkPickerState extends State<_LinkPicker> {
       contentPadding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
       content: SizedBox(
         width: 440,
-        height: 510,
+        height: (MediaQuery.sizeOf(context).height -
+                MediaQuery.viewInsetsOf(context).bottom -
+                210)
+            .clamp(200.0, 510.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (note != null) _files(context, note),
+            // Con el teclado abierto no cabe: se deja sitio a la búsqueda.
+            if (note != null && MediaQuery.viewInsetsOf(context).bottom == 0)
+              _files(context, note),
             if (note != null)
               Padding(
                 padding: const EdgeInsets.only(bottom: 10),
                 child: Text(
                   trf('Marca las notas que quieres conectar con «{0}».',
                       [note.title]),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: TextStyle(color: p.secondary, fontSize: 13),
                 ),
               ),

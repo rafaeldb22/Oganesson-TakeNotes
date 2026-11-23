@@ -2,6 +2,21 @@
 
 All notable changes to Oganesson TakeNotes (formerly *Notas* / *BabuNotes*).
 
+## [3.0.0] — 2026-11-23
+
+Oganesson 3 brings together whiteboards, @usernames and friends, a PDF reader, files in the note
+network and an AI that can read everything in your notes.
+
+### Changed
+- **Calendar**: straight lines with space between them. Multi-day tasks are one continuous line.
+- **32 colors**, and each new task picks the one that stands out most from those in use.
+
+### Fixed
+- Large whiteboards could arrive incomplete on another device and leave the note empty there.
+- A whiteboard deleted on another device no longer comes back.
+- *Add to the end* from the AI panel keeps the note's formatting.
+- The link and share windows fit on small phones.
+
 ## [2.17.0] — 2026-11-23
 
 ### Added

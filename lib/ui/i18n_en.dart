@@ -944,4 +944,16 @@ const enStrings = <String, String>{
   "¿Eliminar la pizarra?": "Delete the whiteboard?",
   "Podrás recuperarla desde el historial de versiones.":
       "You can bring it back from the version history.",
+  // 2.18
+  "Granate": "Maroon",
+  "Mandarina": "Tangerine",
+  "Mostaza": "Mustard",
+  "Pistacho": "Pistachio",
+  "Esmeralda": "Emerald",
+  "Verde azulado": "Teal",
+  "Aguamarina": "Aquamarine",
+  "Zafiro": "Sapphire",
+  "Violeta": "Violet",
+  "Magenta": "Magenta",
+  "Frambuesa": "Raspberry",
 };

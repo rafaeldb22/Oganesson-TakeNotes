@@ -8,6 +8,7 @@ import 'package:notas/data/note_board.dart';
 import 'package:notas/data/note_factory.dart';
 import 'package:notas/data/note_files.dart';
 import 'package:notas/data/notes_repository.dart';
+import 'package:notas/models/note.dart';
 import 'package:notas/ui/i18n.dart';
 import 'package:notas/ui/note_editor.dart';
 import 'package:notas/ui/theme.dart';
@@ -25,6 +26,23 @@ BoardStroke _line(double x) =>
     BoardStroke(0, 2, [Offset(x, 0), Offset(x + 10, 0)], [1, 1]);
 
 void main() {
+  test('un aviso sin las columnas largas no sustituye la nota', () {
+    final local = Note(
+        id: 'n',
+        content: 'Pizarra',
+        rich: '[{"insert":"Pizarra\\n"}]',
+        createdAt: DateTime.utc(2026),
+        updatedAt: DateTime.utc(2026));
+    expect(realtimeRowIsComplete({'id': 'n', 'done': true}, local), isFalse);
+    expect(
+        realtimeRowIsComplete({'id': 'n', 'content': 'x', 'rich': null}, local),
+        isFalse);
+    expect(
+        realtimeRowIsComplete({'id': 'n', 'content': 'x', 'rich': '[]'}, local),
+        isTrue);
+    expect(realtimeRowIsComplete({'content': 'x', 'rich': null}, null), isTrue);
+  });
+
   test('quitar la pizarra deja el texto de alrededor', () {
     final (c, rich) =
         BoardData.store('Título\nTexto', richFor('Título\nTexto'), BoardData());

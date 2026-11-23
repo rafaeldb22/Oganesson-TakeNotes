@@ -226,7 +226,19 @@ class _NoteEditorState extends State<NoteEditor> {
     final c = _board;
     if (c == null || c.busy) return;
     final remote = BoardData.of(n.rich);
-    if (remote == null) return;
+    if (remote == null) {
+      // Eliminada en otro dispositivo. Si aquí hay trazos sin guardar, ganan.
+      if (c.isEmpty || (_boardSave?.isActive ?? false)) return;
+      _applyingRemote = true;
+      _ctrl.document = _docFor(n);
+      _ctrl.updateSelection(
+          const TextSelection.collapsed(offset: 0), ChangeSource.local);
+      _lastSaved = _richJson();
+      _applyingRemote = false;
+      _board = null;
+      WidgetsBinding.instance.addPostFrameCallback((_) => c.dispose());
+      return;
+    }
     remote.active = true;
     if (remote.encode() != c.toData().encode()) c.load(remote);
   }

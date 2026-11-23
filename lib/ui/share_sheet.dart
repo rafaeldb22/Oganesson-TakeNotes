@@ -217,34 +217,43 @@ class _ShareSheetState extends State<_ShareSheet> {
               ),
             ),
             const SizedBox(height: 10),
-            Row(
-              children: [
-                Expanded(
-                  child: SegmentedButton<String>(
-                    showSelectedIcon: false,
-                    segments: [
-                      ButtonSegment(
-                          value: 'edit',
-                          icon: const Icon(Icons.edit_outlined, size: 16),
-                          label: Text(tr('Puede editar'))),
-                      ButtonSegment(
-                          value: 'read',
-                          icon: const Icon(Icons.visibility_outlined, size: 16),
-                          label: Text(tr('Solo ver'))),
-                    ],
-                    selected: {_role},
-                    onSelectionChanged: (s) => setState(() => _role = s.first),
-                  ),
+            LayoutBuilder(builder: (context, box) {
+              final roles = SegmentedButton<String>(
+                showSelectedIcon: false,
+                segments: [
+                  ButtonSegment(
+                      value: 'edit',
+                      icon: const Icon(Icons.edit_outlined, size: 16),
+                      label: Text(tr('Puede editar'),
+                          maxLines: 1, overflow: TextOverflow.ellipsis)),
+                  ButtonSegment(
+                      value: 'read',
+                      icon: const Icon(Icons.visibility_outlined, size: 16),
+                      label: Text(tr('Solo ver'),
+                          maxLines: 1, overflow: TextOverflow.ellipsis)),
+                ],
+                selected: {_role},
+                onSelectionChanged: (s) => setState(() => _role = s.first),
+              );
+              final send = Bouncy(
+                child: FilledButton(
+                  onPressed: _busy ? null : () => _invite(),
+                  child: Text(tr('Compartir')),
                 ),
+              );
+              // En un móvil estrecho no caben en la misma fila.
+              if (box.maxWidth < 400) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [roles, const SizedBox(height: 8), send],
+                );
+              }
+              return Row(children: [
+                Expanded(child: roles),
                 const SizedBox(width: 10),
-                Bouncy(
-                  child: FilledButton(
-                    onPressed: _busy ? null : () => _invite(),
-                    child: Text(tr('Compartir')),
-                  ),
-                ),
-              ],
-            ),
+                send,
+              ]);
+            }),
           ],
           AnimatedSize(
             duration: Anim.medium,

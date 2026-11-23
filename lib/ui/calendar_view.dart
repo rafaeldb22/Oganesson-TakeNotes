@@ -418,11 +418,13 @@ class _MonthGrid extends StatelessWidget {
   final void Function(DateTime) onNewOnDay;
 
   static const _maxLanes = 7;
-  static const _barHeight = 3.5;
-  static const _barGap = 1.5;
+  static const _barHeight = 3.0;
 
-  /// Margen a cada lado de un día: separa visualmente unos días de otros.
-  static const _dayGap = 6.0;
+  /// Espacio entre una línea y la de encima.
+  static const _barGap = 3.0;
+
+  /// Margen en el inicio y el final de cada tarea.
+  static const _dayGap = 3.0;
 
   /// Clic derecho en un día: crear una nota ahí.
   Future<void> _dayMenu(
@@ -570,12 +572,12 @@ class _MonthGrid extends StatelessWidget {
     );
   }
 
-  /// Tarea de varios días: línea y punto el primero, puntos en medio, y punto
-  /// y línea el último. La de un solo día es una línea entera.
+  /// Línea recta: los días de una misma tarea van unidos y solo se redondean
+  /// y se separan de la siguiente en su inicio y su final.
   Widget _laneBar(BuildContext context, DateTime day, Note? n, bool inMonth) {
     if (n == null) return const SizedBox(height: _barHeight + _barGap);
-    final s = _day(n.periodStart.toLocal());
-    final e = _day(n.dueAt!.toLocal());
+    final isStart = day == _day(n.periodStart.toLocal());
+    final isEnd = day == _day(n.dueAt!.toLocal());
     final fade = inMonth ? 1.0 : 0.45;
     final color = n.done
         ? Palette.secondary(context).withValues(alpha: 0.6 * fade)
@@ -584,65 +586,23 @@ class _MonthGrid extends StatelessWidget {
                 : fuseForTheme(context, notePalette(n)).first)
             .withValues(alpha: 0.95 * fade);
     return Padding(
-      padding: const EdgeInsets.fromLTRB(_dayGap, 0, _dayGap, _barGap),
-      child: s == e
-          ? Container(
-              height: _barHeight,
-              decoration: BoxDecoration(
-                color: color,
-                borderRadius: BorderRadius.circular(_barHeight / 2),
-              ),
-            )
-          : CustomPaint(
-              size: const Size(double.infinity, _barHeight),
-              painter: _SpanPainter(
-                  color,
-                  day == s
-                      ? _SpanPart.first
-                      : (day == e ? _SpanPart.last : _SpanPart.middle)),
-            ),
+      padding: EdgeInsets.only(
+        left: isStart ? _dayGap : 0,
+        right: isEnd ? _dayGap : 0,
+        bottom: _barGap,
+      ),
+      child: Container(
+        height: _barHeight,
+        decoration: BoxDecoration(
+          color: color,
+          borderRadius: BorderRadius.horizontal(
+            left: Radius.circular(isStart ? _barHeight / 2 : 0),
+            right: Radius.circular(isEnd ? _barHeight / 2 : 0),
+          ),
+        ),
+      ),
     );
   }
-}
-
-enum _SpanPart { first, middle, last }
-
-/// Un día de una tarea larga: `— ·` el primero, `· · ·` en medio y `· —` el
-/// último.
-class _SpanPainter extends CustomPainter {
-  const _SpanPainter(this.color, this.part);
-  final Color color;
-  final _SpanPart part;
-
-  static const _dotStep = 13.0;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final w = size.width, r = size.height / 2, y = r;
-    final paint = Paint()
-      ..color = color
-      ..strokeWidth = size.height
-      ..strokeCap = StrokeCap.round;
-    void dot(double x) => canvas.drawCircle(Offset(x, y), r + 0.3, paint);
-    void line(double a, double b) =>
-        canvas.drawLine(Offset(a, y), Offset(b, y), paint);
-    switch (part) {
-      case _SpanPart.first:
-        line(r, w * 0.62);
-        dot(w * 0.86);
-      case _SpanPart.last:
-        dot(w * 0.14);
-        line(w * 0.38, w - r);
-      case _SpanPart.middle:
-        final count = (w / _dotStep).round().clamp(2, 100);
-        for (var i = 0; i < count; i++) {
-          dot((i + 0.5) * w / count);
-        }
-    }
-  }
-
-  @override
-  bool shouldRepaint(_SpanPainter o) => o.color != color || o.part != part;
 }
 
 class _DayPanel extends StatelessWidget {

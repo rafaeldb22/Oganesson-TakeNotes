@@ -19,6 +19,13 @@ import 'widget_bridge.dart';
 
 enum SyncStatus { syncing, synced, pending, offline }
 
+/// ¿Trae este aviso de tiempo real la nota entera? Supabase omite las columnas
+/// muy largas o sin cambios, y aplicarlo dejaría la nota vacía.
+bool realtimeRowIsComplete(Map<String, dynamic> row, Note? local) =>
+    row.containsKey('content') &&
+    row.containsKey('rich') &&
+    !(row['rich'] == null && local?.rich != null);
+
 /// Guarda notas y carpetas en local (funciona sin internet) y las sincroniza
 /// con Supabase: sube los cambios pendientes y recibe los de otros
 /// dispositivos en tiempo real. Si hay conflicto gana la edición más reciente.
@@ -472,7 +479,18 @@ class NotesRepository extends ChangeNotifier {
     return n;
   }
 
-  /// Color para una línea temporal nueva: el menos usado por las activas.
+  /// Parecido entre dos colores tal como los ve el ojo (fórmula "redmean").
+  static double _colorGap(int a, int b) {
+    final r1 = a >> 16 & 255, g1 = a >> 8 & 255, b1 = a & 255;
+    final r2 = b >> 16 & 255, g2 = b >> 8 & 255, b2 = b & 255;
+    final mean = (r1 + r2) / 2;
+    return (2 + mean / 256) * (r1 - r2) * (r1 - r2) +
+        4.0 * (g1 - g2) * (g1 - g2) +
+        (2 + (255 - mean) / 256) * (b1 - b2) * (b1 - b2);
+  }
+
+  /// Color para una línea temporal nueva: el menos usado por las activas y,
+  /// entre esos, el que más se distingue de los que ya están en uso.
   int _nextTimelineColor() {
     final used = <int, int>{};
     for (final n in _notes.values) {
@@ -482,10 +500,22 @@ class NotesRepository extends ChangeNotifier {
       }
     }
     var best = noteColors.first.$2;
-    for (var i = 0; i < noteColors.length; i++) {
-      // La paleta va por tono: saltar 8 evita que las seguidas se parezcan.
-      final c = noteColors[i * 8 % noteColors.length].$2;
-      if ((used[c] ?? 0) < (used[best] ?? 0)) best = c;
+    var bestUses = used[best] ?? 0;
+    var bestGap = -1.0;
+    for (final (_, c) in noteColors) {
+      final uses = used[c] ?? 0;
+      if (uses > bestUses) continue;
+      var gap = double.infinity;
+      for (final other in used.keys) {
+        if (other == c) continue;
+        final d = _colorGap(c, other);
+        if (d < gap) gap = d;
+      }
+      if (uses < bestUses || gap > bestGap) {
+        best = c;
+        bestUses = uses;
+        bestGap = gap;
+      }
     }
     return best;
   }
@@ -1066,6 +1096,13 @@ class NotesRepository extends ChangeNotifier {
           callback: (payload) {
             final rec = payload.newRecord;
             if (_disposed || rec.isEmpty) return;
+            // Una pizarra grande puede llegar sin sus columnas largas: se
+            // pide la nota entera en vez de sustituirla por una incompleta.
+            if (payload.errors != null ||
+                !realtimeRowIsComplete(rec, _notes['${rec['id']}'])) {
+              unawaited(sync());
+              return;
+            }
             try {
               if (_mergeNote(Note.fromRow(rec))) {
                 _schedulePersist();

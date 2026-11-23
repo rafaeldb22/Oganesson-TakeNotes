@@ -187,20 +187,7 @@ List<String> parseTasks(String reply) {
 void appendToNote(NotesRepository repo, Note n, String text) {
   final clean = text.trim();
   if (clean.isEmpty) return;
-  final content = '${n.content.trimRight()}\n\n$clean\n';
-  String? rich;
-  final old = n.rich;
-  if (old != null) {
-    try {
-      final ops = jsonDecode(old);
-      if (ops is List) {
-        rich = jsonEncode([
-          ...ops,
-          {'insert': '\n$clean\n'}
-        ]);
-      }
-    } catch (_) {}
-  }
+  final (content, rich) = withText(n.content, n.rich, clean);
   repo.updateContent(n.id, content, rich: rich);
 }
 
