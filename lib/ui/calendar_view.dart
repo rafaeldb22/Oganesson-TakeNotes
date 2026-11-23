@@ -545,30 +545,30 @@ class _MonthGrid extends StatelessWidget {
                   ),
                 ),
               ),
-              const SizedBox(height: 2),
-              for (var lane = 0; lane < _maxLanes; lane++)
-                _laneBar(context, day, slots.notes[lane], inMonth),
               const Spacer(),
-              SizedBox(
-                height: 12,
-                child: extra > 0
-                    ? Text('+$extra',
-                        style: TextStyle(
-                            fontSize: 9.5,
-                            fontWeight: FontWeight.w700,
-                            color: Palette.secondary(context)))
-                    : null,
-              ),
-              const SizedBox(height: 2),
+              // La primera fila es la de abajo: las líneas crecen hacia arriba.
+              for (var lane = _maxLanes - 1; lane >= 0; lane--)
+                _laneBar(context, day, slots.notes[lane], inMonth),
+              const SizedBox(height: 3),
             ],
           ),
+          if (extra > 0)
+            Positioned(
+              top: 7,
+              right: 7,
+              child: Text('+$extra',
+                  style: TextStyle(
+                      fontSize: 9.5,
+                      fontWeight: FontWeight.w700,
+                      color: Palette.secondary(context))),
+            ),
         ],
       ),
     );
   }
 
-  /// Una tarea de varios días es una línea discontinua; la de un solo día,
-  /// una línea entera del mismo grosor.
+  /// Tarea de varios días: el primer y el último día son línea entera y los
+  /// de en medio, discontinuos. La de un solo día es una línea entera.
   Widget _laneBar(BuildContext context, DateTime day, Note? n, bool inMonth) {
     if (n == null) return const SizedBox(height: _barHeight + _barGap);
     final s = _day(n.periodStart.toLocal());
@@ -586,12 +586,15 @@ class _MonthGrid extends StatelessWidget {
         right: day == e ? 4 : 0,
         bottom: _barGap,
       ),
-      child: s == e
+      child: day == s || day == e
           ? Container(
               height: _barHeight,
               decoration: BoxDecoration(
                 color: color,
-                borderRadius: BorderRadius.circular(_barHeight / 2),
+                borderRadius: BorderRadius.horizontal(
+                  left: Radius.circular(day == s ? _barHeight / 2 : 0),
+                  right: Radius.circular(day == e ? _barHeight / 2 : 0),
+                ),
               ),
             )
           : CustomPaint(
@@ -608,7 +611,7 @@ class _DashPainter extends CustomPainter {
   const _DashPainter(this.color);
   final Color color;
 
-  static const _dash = 5.0, _gap = 3.0;
+  static const _dash = 13.0, _gap = 8.0;
 
   @override
   void paint(Canvas canvas, Size size) {

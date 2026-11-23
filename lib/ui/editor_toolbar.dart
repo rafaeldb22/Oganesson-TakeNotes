@@ -419,28 +419,21 @@ class BoardToolbar extends StatelessWidget {
                           tooltip: tr('Boli'),
                           active: c.tool == BoardTool.pen,
                           onTap: (b) => _pick(b, BoardTool.pen),
-                          builder: (color) => c.tool == BoardTool.pen
-                              ? _InkIcon(
-                                  fill: Icons.edit,
-                                  outline: Icons.edit_outlined,
-                                  color: c.color == 0 ? ink : Color(c.color),
-                                )
-                              : Icon(Icons.edit_outlined,
-                                  size: 21, color: color),
+                          builder: (color) => Icon(Icons.edit_rounded,
+                              size: 21,
+                              color: c.tool == BoardTool.pen
+                                  ? (c.color == 0 ? ink : Color(c.color))
+                                  : color),
                         ),
                         _BoardTile(
                           tooltip: tr('Marcador'),
                           active: c.tool == BoardTool.marker,
                           onTap: (b) => _pick(b, BoardTool.marker),
-                          builder: (color) => c.tool == BoardTool.marker
-                              ? _InkIcon(
-                                  fill: Icons.border_color,
-                                  outline: Icons.border_color_outlined,
-                                  color:
-                                      Color(c.markerColor).withValues(alpha: 1),
-                                )
-                              : Icon(Icons.border_color_outlined,
-                                  size: 20, color: color),
+                          builder: (color) => Icon(Icons.border_color_rounded,
+                              size: 20,
+                              color: c.tool == BoardTool.marker
+                                  ? Color(c.markerColor).withValues(alpha: 1)
+                                  : color),
                         ),
                         _BoardTile(
                           tooltip: tr('Goma'),
@@ -479,29 +472,6 @@ class BoardToolbar extends StatelessWidget {
           ),
         );
       },
-    );
-  }
-}
-
-/// Icono relleno del color de la tinta con un borde que contrasta, para que
-/// se distinga con cualquier color y sobre cualquier tema.
-class _InkIcon extends StatelessWidget {
-  const _InkIcon(
-      {required this.fill, required this.outline, required this.color});
-  final IconData fill, outline;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    final edge = color.computeLuminance() > 0.45
-        ? const Color(0xE6000000)
-        : const Color(0xF2FFFFFF);
-    return Stack(
-      alignment: Alignment.center,
-      children: [
-        Icon(fill, size: 22, color: color),
-        Icon(outline, size: 22, color: edge),
-      ],
     );
   }
 }

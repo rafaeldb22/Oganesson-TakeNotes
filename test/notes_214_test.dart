@@ -25,6 +25,25 @@ BoardStroke _line(double x) =>
     BoardStroke(0, 2, [Offset(x, 0), Offset(x + 10, 0)], [1, 1]);
 
 void main() {
+  test('completar gana aunque otro dispositivo tenga el reloj adelantado', () {
+    SharedPreferences.setMockInitialValues({});
+    final r = NotesRepository(
+        SupabaseClient('http://127.0.0.1:9', 'k',
+            authOptions: const AuthClientOptions(autoRefreshToken: false)),
+        'demo')
+      ..loaded = true;
+    final now = DateTime.now();
+    final n = r.createNote(
+        dueAt: now.add(const Duration(days: 2)).toUtc(), remindAt: now.toUtc());
+    r.updateContent(n.id, 'Tarea');
+    final ahead = DateTime.now().toUtc().add(const Duration(hours: 1));
+    n.updatedAt = ahead;
+    r.toggleDone(n.id);
+    expect(n.done, isTrue);
+    expect(n.updatedAt.isAfter(ahead), isTrue);
+    r.dispose();
+  });
+
   testWidgets('quitar un archivo lo borra y no toca el título', (t) async {
     appLanguage.code = 'es';
     SharedPreferences.setMockInitialValues({});

@@ -194,12 +194,11 @@ class NotesRepository extends ChangeNotifier {
   /// Coloca varias notas a la vez (orden personalizado al arrastrar).
   void setPositions(Map<String, double> positions) {
     if (_disposed || positions.isEmpty) return;
-    final now = DateTime.now().toUtc();
     for (final e in positions.entries) {
       final n = _notes[e.key];
       if (n == null || isForeign(n) || n.position == e.value) continue;
       n.position = e.value;
-      n.updatedAt = now;
+      n.updatedAt = _nextStamp(n.updatedAt);
       _dirty.add(n.id);
     }
     _changed();
@@ -272,7 +271,7 @@ class NotesRepository extends ChangeNotifier {
           !isForeign(n) &&
           _doneSince(n).isBefore(limit)) {
         n.deleted = true;
-        n.updatedAt = DateTime.now().toUtc();
+        n.updatedAt = _nextStamp(n.updatedAt);
         _dirty.add(n.id);
       }
     }
@@ -498,7 +497,7 @@ class NotesRepository extends ChangeNotifier {
     if (!n.vault) history.record(n);
     n.content = content;
     n.rich = rich;
-    n.updatedAt = DateTime.now().toUtc();
+    n.updatedAt = _nextStamp(n.updatedAt);
     _touch(id);
   }
 
@@ -514,9 +513,8 @@ class NotesRepository extends ChangeNotifier {
           final singleDay = n.isSingleDay;
           n.dueAt = next.toUtc();
           // Con cambio de hora, sumar el desfase movería las 00:00.
-          n.remindAt = singleDay
-              ? Note.dayStart(next).toUtc()
-              : n.remindAt?.add(shift);
+          n.remindAt =
+              singleDay ? Note.dayStart(next).toUtc() : n.remindAt?.add(shift);
           n.rich = uncheckAll(n.rich);
           return;
         }
@@ -545,7 +543,7 @@ class NotesRepository extends ChangeNotifier {
       ..content = content
       ..rich = rich
       ..subtasks = []
-      ..updatedAt = DateTime.now().toUtc();
+      ..updatedAt = _nextStamp(n.updatedAt);
     _dirty.add(n.id);
   }
 
@@ -635,7 +633,7 @@ class NotesRepository extends ChangeNotifier {
         // El enlace puede estar guardado en la otra nota.
         final other = _notes[target];
         if (other != null && other.links.remove(id)) {
-          other.updatedAt = DateTime.now().toUtc();
+          other.updatedAt = _nextStamp(other.updatedAt);
           _dirty.add(other.id);
         }
       });
@@ -646,7 +644,7 @@ class NotesRepository extends ChangeNotifier {
     final n = createNote(folderId: parent?.folderId);
     if (parent != null) {
       parent.links.add(n.id);
-      parent.updatedAt = DateTime.now().toUtc();
+      parent.updatedAt = _nextStamp(parent.updatedAt);
       _dirty.add(parent.id);
       if (parent.vault) n.vault = true;
       _changed();
@@ -703,7 +701,7 @@ class NotesRepository extends ChangeNotifier {
     // Carpeta, fechas, fijar… de una nota ajena son de quien la creó.
     if (_disposed || n == null || isForeign(n)) return;
     change(n);
-    n.updatedAt = DateTime.now().toUtc();
+    n.updatedAt = _nextStamp(n.updatedAt);
     // Una nota "fresca" con fecha o carpeta ya cuenta como nota real
     // solo cuando tenga texto; si sigue vacía se descartará al cerrar.
     if (_fresh.contains(id) && n.isEmpty) {
@@ -723,7 +721,7 @@ class NotesRepository extends ChangeNotifier {
       return;
     }
     n.deleted = true;
-    n.updatedAt = DateTime.now().toUtc();
+    n.updatedAt = _nextStamp(n.updatedAt);
     _touch(id);
   }
 
@@ -731,7 +729,6 @@ class NotesRepository extends ChangeNotifier {
   /// notas de otras cuentas no se tocan. Devuelve los ids para poder deshacer.
   List<String> deleteAllNotes() {
     if (_disposed) return const [];
-    final now = DateTime.now().toUtc();
     final ids = <String>[];
     for (final n in _notes.values.toList()) {
       if (n.deleted || n.vault || isForeign(n)) continue;
@@ -740,7 +737,7 @@ class NotesRepository extends ChangeNotifier {
         continue;
       }
       n.deleted = true;
-      n.updatedAt = now;
+      n.updatedAt = _nextStamp(n.updatedAt);
       _dirty.add(n.id);
       ids.add(n.id);
     }
@@ -753,7 +750,7 @@ class NotesRepository extends ChangeNotifier {
     final n = _notes[id];
     if (_disposed || n == null || !n.deleted) return;
     n.deleted = false;
-    n.updatedAt = DateTime.now().toUtc();
+    n.updatedAt = _nextStamp(n.updatedAt);
     _touch(id);
   }
 
@@ -762,6 +759,16 @@ class NotesRepository extends ChangeNotifier {
     final n = _notes[id];
     if (_disposed || n == null || n.deleted) return;
     if (n.isEmpty) delete(id);
+  }
+
+  /// Hora de un cambio, siempre posterior a la anterior. Si otro dispositivo
+  /// tiene el reloj adelantado, un cambio hecho aquí parecería más antiguo y
+  /// "gana la última edición" lo descartaría.
+  static DateTime _nextStamp(DateTime previous) {
+    final now = DateTime.now().toUtc();
+    return now.isAfter(previous)
+        ? now
+        : previous.add(const Duration(microseconds: 1));
   }
 
   void _touch(String id) {
@@ -791,7 +798,7 @@ class NotesRepository extends ChangeNotifier {
     if (_disposed || f == null) return;
     f.name = name.trim();
     if (color != null) f.color = color;
-    f.updatedAt = DateTime.now().toUtc();
+    f.updatedAt = _nextStamp(f.updatedAt);
     _dirtyFolders.add(id);
     _changed();
   }
@@ -801,11 +808,11 @@ class NotesRepository extends ChangeNotifier {
     final f = _folders[id];
     if (_disposed || f == null) return;
     f.deleted = true;
-    f.updatedAt = DateTime.now().toUtc();
+    f.updatedAt = _nextStamp(f.updatedAt);
     _dirtyFolders.add(id);
     for (final n in _notes.values.where((n) => n.folderId == id).toList()) {
       n.folderId = null;
-      n.updatedAt = DateTime.now().toUtc();
+      n.updatedAt = _nextStamp(n.updatedAt);
       _dirty.add(n.id);
     }
     _changed();

@@ -2,6 +2,16 @@
 
 All notable changes to Oganesson TakeNotes (formerly *Notas* / *BabuNotes*).
 
+## [2.16.0] — 2026-11-23
+
+### Changed
+- **Calendar lines**: long tasks have a solid first and last day, longer dashes in between, and
+  lines now stack from the bottom of each day.
+- The pen and highlighter icons no longer have a border.
+
+### Fixed
+- Marking a task as done, or any other edit, is no longer lost when another device's clock is ahead.
+
 ## [2.15.0] — 2026-11-23
 
 ### Added
