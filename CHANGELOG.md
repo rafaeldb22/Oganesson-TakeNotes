@@ -2,6 +2,21 @@
 
 All notable changes to Oganesson TakeNotes (formerly *Notas* / *BabuNotes*).
 
+## [3.1.0] — 2026-11-24
+
+### Added
+- **Scribble to erase** on the whiteboard: scribble over something with the pen and it disappears.
+- The whiteboard pointer is now a small dot.
+
+### Changed
+- **Calendar**: every line ends at the same place with rounded ends, sits clear of the selected
+  day's border and fades softly into the next month.
+- **The AI asks before each change**, one at a time, instead of applying several at once.
+- The time-left banner is now at the bottom of the note.
+
+### Fixed
+- All-day tasks no longer show an end time: they last until the end of the day.
+
 ## [3.0.0] — 2026-11-23
 
 Oganesson 3 brings together whiteboards, @usernames and friends, a PDF reader, files in the note

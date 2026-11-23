@@ -850,16 +850,6 @@ class _NoteEditorState extends State<NoteEditor> {
                       child: Column(
                         children: [
                           const SizedBox(height: 8),
-                          if (n != null && n.isTemporal)
-                            _TemporalBanner(
-                              note: n,
-                              onToggleDone: () =>
-                                  completeTask(context, repo, n.id),
-                              onEdit: foreign
-                                  ? () {}
-                                  : () =>
-                                      showScheduleSheet(context, repo, n.id),
-                            ),
                           if (foreign)
                             _SharedBanner(
                               owner: repo.incomingShare(n.id)?.ownerEmail,
@@ -967,6 +957,16 @@ class _NoteEditorState extends State<NoteEditor> {
                               onOpen: widget.onOpenNote,
                               onCreate: _createLinked,
                             ),
+                          if (n != null && n.isTemporal)
+                            _TemporalBanner(
+                              note: n,
+                              onToggleDone: () =>
+                                  completeTask(context, repo, n.id),
+                              onEdit: foreign
+                                  ? () {}
+                                  : () =>
+                                      showScheduleSheet(context, repo, n.id),
+                            ),
                         ],
                       ),
                     ),
@@ -1035,7 +1035,7 @@ class _TemporalBanner extends StatelessWidget {
   Widget build(BuildContext context) {
     final color = urgencyColor(context, note);
     return Container(
-      margin: const EdgeInsets.only(bottom: 10),
+      margin: const EdgeInsets.only(top: 6, bottom: 10),
       padding: const EdgeInsets.fromLTRB(6, 8, 12, 10),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.10),
@@ -1070,7 +1070,7 @@ class _TemporalBanner extends StatelessWidget {
           ),
         ],
       ),
-    ).animate().fadeIn(duration: Anim.medium).slideY(begin: -0.2);
+    ).animate().fadeIn(duration: Anim.medium).slideY(begin: 0.2);
   }
 }
 

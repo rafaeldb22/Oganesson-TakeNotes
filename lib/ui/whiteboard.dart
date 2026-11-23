@@ -236,6 +236,29 @@ class BoardController extends ChangeNotifier {
 
   void commitErase() => onChanged();
 
+  /// Borra lo que recorre un garabato. false si no pasa por encima de nada.
+  bool eraseScribble(List<Offset> path, double radius) {
+    var out = strokes;
+    var touched = false;
+    var last = path.first;
+    for (final p in path) {
+      if (p != path.last && (p - last).distance < radius / 2) continue;
+      final next = eraseStrokes(out, last, p, radius);
+      if (next != null) {
+        out = next;
+        touched = true;
+      }
+      last = p;
+    }
+    if (!touched) return false;
+    checkpoint();
+    selectedStrokes = {};
+    selectedImages = {};
+    strokes = out;
+    _changed();
+    return true;
+  }
+
   void selectLasso(List<Offset> lasso) {
     selectedStrokes = strokesInLasso(strokes, lasso);
     selectedImages = {
@@ -768,8 +791,17 @@ class _WhiteboardState extends State<Whiteboard> {
         _points!.add(end);
         _factors!.add(_factors!.last);
       }
-      _c.addStroke(BoardStroke(_strokeIsMarker ? _c.markerColor : _c.color,
-          _strokeIsMarker ? _c.markerWidth : _c.penWidth, _points!, _factors!));
+      // Garabatear encima de algo lo borra; sobre el vacío es un dibujo más.
+      final scribbled = !_strokeIsMarker &&
+          isScribble(_points!) &&
+          _c.eraseScribble(_points!, math.max(6, _c.penWidth * 2));
+      if (!scribbled) {
+        _c.addStroke(BoardStroke(
+            _strokeIsMarker ? _c.markerColor : _c.color,
+            _strokeIsMarker ? _c.markerWidth : _c.penWidth,
+            _points!,
+            _factors!));
+      }
       _points = null;
       _factors = null;
       _rawPen = null;
@@ -1014,12 +1046,11 @@ class _WhiteboardState extends State<Whiteboard> {
             child: Focus(
               focusNode: _focus,
               child: MouseRegion(
-                cursor: _c.tool == BoardTool.eraser
-                    ? SystemMouseCursors.none
-                    : SystemMouseCursors.precise,
+                // El puntero lo pinta la pizarra: un puntito o la goma.
+                cursor: SystemMouseCursors.none,
                 onHover: (e) {
                   _hover = e.localPosition;
-                  if (_c.tool == BoardTool.eraser) _repaint();
+                  _repaint();
                 },
                 onExit: (_) {
                   _hover = null;
@@ -1029,7 +1060,10 @@ class _WhiteboardState extends State<Whiteboard> {
                   behavior: HitTestBehavior.opaque,
                   onPointerDown: _onDown,
                   onPointerMove: (e) {
-                    _hover = e.localPosition;
+                    // Con el dedo no hay puntero que enseñar.
+                    if (e.kind != PointerDeviceKind.touch) {
+                      _hover = e.localPosition;
+                    }
                     _onMove(e);
                   },
                   onPointerUp: _onUp,
@@ -1204,6 +1238,15 @@ class _BoardPainter extends CustomPainter {
             ..style = PaintingStyle.stroke
             ..strokeWidth = 1.2
             ..color = colors.secondary);
+    } else if (hover != null) {
+      final tint = switch (c.tool) {
+        BoardTool.pen when c.color != 0 => Color(c.color),
+        BoardTool.marker => Color(c.markerColor).withValues(alpha: 1),
+        _ => ink,
+      };
+      // Con halo, para que se vea aunque pase sobre tinta del mismo color.
+      canvas.drawCircle(hover, 3.6, Paint()..color = colors.card);
+      canvas.drawCircle(hover, 2.4, Paint()..color = tint);
     }
   }
 

@@ -1822,6 +1822,19 @@ class AiTools {
     return DateTime.tryParse(v.trim());
   }
 
+  /// Fecha límite: sin hora, la tarea dura hasta el final de ese día.
+  static DateTime? _due(Object? v) {
+    final d = _date(v);
+    return d != null && !'$v'.contains(RegExp('[T ]', caseSensitive: false))
+        ? Note.dayEnd(d)
+        : d;
+  }
+
+  static const _denied = {
+    'ok': false,
+    'reason': 'El usuario no ha permitido este cambio. No insistas.',
+  };
+
   String _folderName(String? id) => repo.folderById(id)?.name ?? '';
 
   String? _folderId(String name, {bool create = true}) {
@@ -2021,7 +2034,7 @@ class AiTools {
         final title = '${a['title'] ?? ''}'.trim();
         if (title.isEmpty) return {'error': 'Falta el título.'};
         final body = '${a['body'] ?? ''}'.trim();
-        final due = _date(a['due']);
+        final due = _due(a['due']);
         final start = _date(a['start']);
         final folder = '${a['folder'] ?? ''}'.trim();
         final n = repo.createNote(
@@ -2051,6 +2064,10 @@ class AiTools {
         if (n == null) return {'error': 'No existe esa nota.'};
         final text = '${a['text'] ?? ''}';
         if (text.trim().isEmpty) return {'error': 'Falta el texto.'};
+        if (!await confirm(
+            trf('La IA quiere añadir texto a «{0}». ¿Añadirlo?', [n.title]))) {
+          return _denied;
+        }
         _record('edit', trf('Texto añadido a «{0}»', [n.title]), n);
         final (content, rich) = withText(n.content, n.rich, text);
         repo.updateContent(n.id, content, rich: rich);
@@ -2111,13 +2128,21 @@ class AiTools {
         final present = {
           for (final m in linked ? linkedMedia(to) : mediaIn(to.rich)) m.path
         };
-        final picked = [
+        final wanted = [
           for (final c in codes.toSet())
             if (!present.contains(catalog[c]!.item.path)) catalog[c]!.item,
         ];
-        if (picked.isEmpty) {
+        if (wanted.isEmpty) {
           return {'ok': true, 'added': 0, 'note': 'Ya estaban en esa nota.'};
         }
+        final picked = <MediaItem>[];
+        for (final m in wanted) {
+          if (await confirm(trf('La IA quiere añadir «{0}» a «{1}». ¿Añadirlo?',
+              [m.name, to.title]))) {
+            picked.add(m);
+          }
+        }
+        if (picked.isEmpty) return _denied;
         _record(
             'attach_file',
             trf('{0} archivo(s) añadidos a «{1}»', [picked.length, to.title]),
@@ -2150,14 +2175,24 @@ class AiTools {
         final n = _note(a['id']);
         if (n == null) return {'error': 'No existe esa nota.'};
         if (a['clear'] == true) {
+          if (!await confirm(trf(
+              'La IA quiere quitar las fechas de «{0}». ¿Quitarlas?',
+              [n.title]))) {
+            return _denied;
+          }
           _record('event_busy', trf('Fechas quitadas de «{0}»', [n.title]), n);
           repo.setSchedule(n.id);
           return {'ok': true};
         }
-        final due = _date(a['due']);
+        final due = _due(a['due']);
         if (due == null) return {'error': 'Falta una fecha límite válida.'};
         final start = _date(a['start']) ??
             (n.isSingleDay ? Note.dayStart(due) : n.remindAt?.toLocal());
+        if (!await confirm(trf(
+            'La IA quiere cambiar las fechas de «{0}». ¿Cambiarlas?',
+            [n.title]))) {
+          return _denied;
+        }
         _record(
             'alarm',
             trf('Fecha límite de «{0}»: {1}', [n.title, _iso(due)])
@@ -2178,6 +2213,13 @@ class AiTools {
         if (!n.isTemporal) return {'error': 'Esa nota no es una tarea.'};
         final done = a['done'] == true;
         if (n.done != done) {
+          if (!await confirm(done
+              ? trf(
+                  'La IA quiere marcar «{0}» como hecha. ¿Marcarla?', [n.title])
+              : trf('La IA quiere marcar «{0}» como pendiente. ¿Marcarla?',
+                  [n.title]))) {
+            return _denied;
+          }
           _record(
               'task_alt',
               done
@@ -2192,6 +2234,13 @@ class AiTools {
         final n = _note(a['id']);
         if (n == null) return {'error': 'No existe esa nota.'};
         final folder = '${a['folder'] ?? ''}'.trim();
+        if (!await confirm(folder.isEmpty
+            ? trf(
+                'La IA quiere sacar «{0}» de su carpeta. ¿Sacarla?', [n.title])
+            : trf('La IA quiere mover «{0}» a {1}. ¿Moverla?',
+                [n.title, folder]))) {
+          return _denied;
+        }
         _record(
             'folder',
             folder.isEmpty
@@ -2206,6 +2255,11 @@ class AiTools {
         if (n == null) return {'error': 'No existe esa nota.'};
         final pinned = a['pinned'] == true;
         if (n.pinned != pinned) {
+          if (!await confirm(pinned
+              ? trf('La IA quiere fijar «{0}». ¿Fijarla?', [n.title])
+              : trf('La IA quiere desfijar «{0}». ¿Desfijarla?', [n.title]))) {
+            return _denied;
+          }
           _record(
               'push_pin',
               pinned
@@ -2226,6 +2280,11 @@ class AiTools {
           if (m.isEmpty) return {'error': 'Color desconocido: $name'};
           color = m.first.$2;
         }
+        if (!await confirm(trf(
+            'La IA quiere cambiar el color de «{0}». ¿Cambiarlo?',
+            [n.title]))) {
+          return _denied;
+        }
         _record(
             'palette',
             trf('Color de «{0}»: {1}', [n.title, name.isEmpty ? '—' : name]),
@@ -2236,12 +2295,21 @@ class AiTools {
       case 'link_notes':
         final n = _note(a['id']);
         if (n == null) return {'error': 'No existe esa nota.'};
-        final targets = [
+        final valid = [
           for (final t in (a['targets'] as List?) ?? const [])
             if (_note(t) != null && '$t' != n.id) '$t'
         ];
-        if (targets.isEmpty)
+        if (valid.isEmpty)
           return {'error': 'No hay notas válidas que enlazar.'};
+        final targets = <String>[];
+        for (final t in valid) {
+          if (await confirm(trf(
+              'La IA quiere enlazar «{0}» con «{1}». ¿Enlazarlas?',
+              [n.title, _note(t)?.title ?? '']))) {
+            targets.add(t);
+          }
+        }
+        if (targets.isEmpty) return _denied;
         _record(
             'link',
             trf('«{0}» enlazada con {1} nota(s)', [n.title, targets.length]),
@@ -2258,9 +2326,7 @@ class AiTools {
             ? trf('La IA quiere archivar «{0}». ¿Archivarla?', [n.title])
             : trf('La IA quiere mover «{0}» a la papelera. ¿Eliminarla?',
                 [n.title]));
-        if (!ok) {
-          return {'ok': false, 'reason': 'El usuario no lo ha permitido.'};
-        }
+        if (!ok) return _denied;
         _record(
             archive ? 'archive' : 'delete',
             archive
@@ -2455,7 +2521,7 @@ Cómo trabajar:
 - Cada mensaje del usuario lleva al final un bloque <contexto> con la fecha y hora actuales y sus carpetas. Úsalo para entender "hoy", "mañana", "el viernes"… Las fechas que envíes van en ISO 8601 en hora local, sin zona.
 - Una tarea es una nota con fecha límite ("due"); "start" es el inicio de su periodo.
 - Si la petición es ambigua (varias notas encajan, falta la fecha…), pregunta antes de cambiar nada.
-- Archivar o borrar: la app pide confirmación al usuario; si dice que no, no insistas.
+- Cambiar una nota que ya existe (texto, archivos, fechas, hecha, carpeta, fijar, color, enlaces, archivar o borrar): la app pide confirmación de cada cambio, uno por uno. Haz una llamada por cada nota y no pidas tú la confirmación en el chat. Si rechaza uno, no insistas y sigue con los demás.
 - Las notas del Vault son privadas: no puedes verlas ni cambiarlas. Si te preguntan por ellas, dilo.
 - Si preguntan algo que pueda estar en sus notas, busca con list_notes (prueba varias palabras clave), lee con read_note las que encajen y responde solo con lo que digan. Si una nota tiene has_images y la respuesta puede estar en una imagen, míralas con read_note_images. Si no está en sus notas, dilo; no te lo inventes. La app enlaza debajo de tu respuesta las notas que hayas leído.
 - Archivos: el <contexto> trae un índice con el código F… de los más recientes, su tipo y su nota. Para meter uno en una nota, usa attach_files con su código. Si no lo ves, búscalo con find_files (prueba por tipo o por el título de su nota). Nunca digas que no puedes o que no lo encuentras sin haber buscado, y nunca inventes un código.

@@ -944,6 +944,30 @@ const enStrings = <String, String>{
   "¿Eliminar la pizarra?": "Delete the whiteboard?",
   "Podrás recuperarla desde el historial de versiones.":
       "You can bring it back from the version history.",
+  // 3.1
+  "La IA quiere añadir texto a «{0}». ¿Añadirlo?":
+      "The AI wants to add text to “{0}”. Add it?",
+  "La IA quiere añadir «{0}» a «{1}». ¿Añadirlo?":
+      "The AI wants to add “{0}” to “{1}”. Add it?",
+  "La IA quiere quitar las fechas de «{0}». ¿Quitarlas?":
+      "The AI wants to remove the dates from “{0}”. Remove them?",
+  "La IA quiere cambiar las fechas de «{0}». ¿Cambiarlas?":
+      "The AI wants to change the dates of “{0}”. Change them?",
+  "La IA quiere marcar «{0}» como hecha. ¿Marcarla?":
+      "The AI wants to mark “{0}” as done. Mark it?",
+  "La IA quiere marcar «{0}» como pendiente. ¿Marcarla?":
+      "The AI wants to mark “{0}” as pending. Mark it?",
+  "La IA quiere sacar «{0}» de su carpeta. ¿Sacarla?":
+      "The AI wants to take “{0}” out of its folder. Take it out?",
+  "La IA quiere mover «{0}» a {1}. ¿Moverla?":
+      "The AI wants to move “{0}” to {1}. Move it?",
+  "La IA quiere fijar «{0}». ¿Fijarla?": "The AI wants to pin “{0}”. Pin it?",
+  "La IA quiere desfijar «{0}». ¿Desfijarla?":
+      "The AI wants to unpin “{0}”. Unpin it?",
+  "La IA quiere cambiar el color de «{0}». ¿Cambiarlo?":
+      "The AI wants to change the color of “{0}”. Change it?",
+  "La IA quiere enlazar «{0}» con «{1}». ¿Enlazarlas?":
+      "The AI wants to link “{0}” with “{1}”. Link them?",
   // 2.18
   "Granate": "Maroon",
   "Mandarina": "Tangerine",

@@ -555,6 +555,48 @@ double _segDistance(Offset p, Offset a, Offset b) {
 
 /// Borra lo que toca la goma en el tramo [from]→[to]. Un trazo cortado por la
 /// mitad se queda en dos. Devuelve null si no ha tocado nada.
+/// ¿Es un garabato de ida y vuelta para tachar? Escribir normal no da tantos
+/// cambios de sentido con tanto recorrido en tan poco sitio.
+bool isScribble(List<Offset> points) {
+  if (points.length < 12) return false;
+  var length = 0.0;
+  var box = Rect.fromPoints(points.first, points.first);
+  for (var i = 1; i < points.length; i++) {
+    length += (points[i] - points[i - 1]).distance;
+    box = box.expandToInclude(Rect.fromPoints(points[i], points[i]));
+  }
+  final diagonal =
+      box.size.longestSide == 0 ? 0.0 : Offset(box.width, box.height).distance;
+  if (diagonal < 12 || length < diagonal * 4.5) return false;
+
+  int reversals(double Function(Offset) axis, double extent) {
+    final slack = math.max(4.0, extent * 0.3);
+    var count = 0, direction = 0;
+    var peak = axis(points.first);
+    for (final p in points) {
+      final v = axis(p);
+      final moved = v - peak;
+      if (direction == 0) {
+        if (moved.abs() >= slack) {
+          direction = moved.sign.toInt();
+          peak = v;
+        }
+      } else if (moved * direction > 0) {
+        peak = v;
+      } else if (moved.abs() >= slack) {
+        count++;
+        direction = -direction;
+        peak = v;
+      }
+    }
+    return count;
+  }
+
+  return math.max(reversals((p) => p.dx, box.width),
+          reversals((p) => p.dy, box.height)) >=
+      5;
+}
+
 List<BoardStroke>? eraseStrokes(
     List<BoardStroke> strokes, Offset from, Offset to, double radius) {
   var touched = false;

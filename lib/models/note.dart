@@ -119,14 +119,13 @@ class Note {
     return DateTime(d.year, d.month, d.day, 23, 59);
   }
 
-  /// Sin hora clave: vence a las 23:59 y, si tiene inicio, empieza a las 00:00.
+  /// Sin hora clave: vence a las 23:59, que la rueda de horas (de 5 en 5 min)
+  /// no permite elegir.
   /// shortcut: se deduce de las fechas para no necesitar otra migración; en
   /// otra zona horaria pasa a verse con hora.
   bool get isAllDay {
     final d = dueAt?.toLocal();
-    if (d == null || d.hour != 23 || d.minute != 59) return false;
-    final r = remindAt;
-    return r == null || r.isAtSameMomentAs(dayStart(r));
+    return d != null && d.hour == 23 && d.minute == 59;
   }
 
   /// Evento importado de un `.ics`: solo se ve en el calendario.

@@ -554,7 +554,8 @@ class _MonthGrid extends StatelessWidget {
               // La primera fila es la de abajo: las líneas crecen hacia arriba.
               for (var lane = _maxLanes - 1; lane >= 0; lane--)
                 _laneBar(context, day, slots.notes[lane], inMonth),
-              const SizedBox(height: 3),
+              // Por encima del borde del día seleccionado.
+              const SizedBox(height: 5),
             ],
           ),
           if (extra > 0)
@@ -572,32 +573,43 @@ class _MonthGrid extends StatelessWidget {
     );
   }
 
-  /// Línea recta: los días de una misma tarea van unidos y solo se redondean
-  /// y se separan de la siguiente en su inicio y su final.
+  /// Línea recta: los días de una tarea van unidos. Se redondea en su inicio,
+  /// su final y los bordes de la semana, para que todas acaben a la misma
+  /// altura, y se funde con suavidad al pasar a otro mes.
   Widget _laneBar(BuildContext context, DateTime day, Note? n, bool inMonth) {
     if (n == null) return const SizedBox(height: _barHeight + _barGap);
-    final isStart = day == _day(n.periodStart.toLocal());
-    final isEnd = day == _day(n.dueAt!.toLocal());
-    final fade = inMonth ? 1.0 : 0.45;
-    final color = n.done
-        ? Palette.secondary(context).withValues(alpha: 0.6 * fade)
+    final capLeft =
+        day == _day(n.periodStart.toLocal()) || day.weekday == DateTime.monday;
+    final capRight =
+        day == _day(n.dueAt!.toLocal()) || day.weekday == DateTime.sunday;
+    const outside = 0.45, border = (1 + outside) / 2;
+    final fade = inMonth ? 1.0 : outside;
+    bool inside(int offset) =>
+        DateTime(day.year, day.month, day.day + offset).month == month.month;
+    final fadeLeft = !capLeft && inside(-1) != inMonth ? border : fade;
+    final fadeRight = !capRight && inside(1) != inMonth ? border : fade;
+    final base = n.done
+        ? Palette.secondary(context)
         : (n.color != null
-                ? Color(n.color!)
-                : fuseForTheme(context, notePalette(n)).first)
-            .withValues(alpha: 0.95 * fade);
+            ? Color(n.color!)
+            : fuseForTheme(context, notePalette(n)).first);
+    final alpha = n.done ? 0.6 : 0.95;
     return Padding(
       padding: EdgeInsets.only(
-        left: isStart ? _dayGap : 0,
-        right: isEnd ? _dayGap : 0,
+        left: capLeft ? _dayGap : 0,
+        right: capRight ? _dayGap : 0,
         bottom: _barGap,
       ),
       child: Container(
         height: _barHeight,
         decoration: BoxDecoration(
-          color: color,
+          gradient: LinearGradient(colors: [
+            base.withValues(alpha: alpha * fadeLeft),
+            base.withValues(alpha: alpha * fadeRight),
+          ]),
           borderRadius: BorderRadius.horizontal(
-            left: Radius.circular(isStart ? _barHeight / 2 : 0),
-            right: Radius.circular(isEnd ? _barHeight / 2 : 0),
+            left: Radius.circular(capLeft ? _barHeight / 2 : 0),
+            right: Radius.circular(capRight ? _barHeight / 2 : 0),
           ),
         ),
       ),
