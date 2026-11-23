@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -13,6 +14,7 @@ import '../data/note_filters.dart';
 import '../data/note_ics.dart';
 import '../data/notes_repository.dart';
 import '../models/note.dart';
+import 'anim.dart';
 import 'format.dart';
 import 'i18n.dart';
 import 'theme.dart';
@@ -532,12 +534,14 @@ Future<void> importCalendarFile(
     final f = parseIcs(await file.readAsString());
     final r = repo.importEvents(f.events);
     if (!context.mounted) return;
-    var msg = trf('Importados: {0} · ya estaban: {1} · omitidos: {2}',
-        [r.added, r.existing, f.skipped]);
-    if (f.simplified > 0) {
-      msg += ' · ${trf('sin repetición: {0}', [f.simplified])}';
-    }
-    showToast(context, msg, icon: Icons.event_available_rounded);
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => _ImportResult(
+          added: r.added,
+          existing: r.existing,
+          skipped: f.skipped,
+          simplified: f.simplified),
+    );
   } on FormatException {
     if (context.mounted) {
       showToast(context, tr('Ese archivo no es un calendario válido'),
@@ -548,6 +552,70 @@ Future<void> importCalendarFile(
       showToast(context, tr('No se ha podido importar'),
           icon: Icons.error_outline);
     }
+  }
+}
+
+/// Resultado de importar un calendario, con el contador animado.
+class _ImportResult extends StatelessWidget {
+  const _ImportResult({
+    required this.added,
+    required this.existing,
+    required this.skipped,
+    required this.simplified,
+  });
+
+  final int added;
+  final int existing;
+  final int skipped;
+  final int simplified;
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = Palette.accent(context);
+    final rows = [
+      if (existing > 0) trf('Ya estaban: {0}', [existing]),
+      if (skipped > 0) trf('Pasados u omitidos: {0}', [skipped]),
+      if (simplified > 0) trf('sin repetición: {0}', [simplified]),
+    ];
+    return AlertDialog(
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.event_available_rounded, size: 52, color: accent)
+              .animate()
+              .scale(
+                  begin: const Offset(0.3, 0.3),
+                  duration: 650.ms,
+                  curve: Curves.elasticOut)
+              .fadeIn(duration: Anim.fast),
+          const SizedBox(height: 10),
+          TweenAnimationBuilder<double>(
+            tween: Tween(begin: 0, end: added.toDouble()),
+            duration: 800.ms,
+            curve: Curves.easeOutCubic,
+            builder: (_, v, __) => Text('${v.round()}',
+                style: TextStyle(
+                    fontSize: 38, fontWeight: FontWeight.w800, color: accent)),
+          ),
+          Text(tr('eventos añadidos al calendario'),
+                  textAlign: TextAlign.center)
+              .animate(delay: 120.ms)
+              .fadeIn(duration: Anim.medium),
+          const SizedBox(height: 10),
+          for (final (i, row) in rows.indexed)
+            Text(row,
+                    style: TextStyle(
+                        color: Palette.secondary(context), fontSize: 13))
+                .animate(delay: (220 + 70 * i).ms)
+                .fadeIn(duration: Anim.medium)
+                .slideY(begin: 0.3, curve: Anim.curve),
+        ],
+      ),
+      actions: [
+        FilledButton(
+            onPressed: () => Navigator.pop(context), child: Text(tr('Listo'))),
+      ],
+    );
   }
 }
 

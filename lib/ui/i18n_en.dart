@@ -811,6 +811,13 @@ const enStrings = <String, String>{
   "Te enviaremos un código para poner una contraseña nueva.":
       "We will send you a code to set a new password.",
   "Código del correo": "Code from the email",
+  "Tamaño de la imagen": "Image size",
+  "Cambiar tamaño": "Resize",
+  "Mirando las imágenes…": "Looking at the images…",
+  "Listo": "Done",
+  "eventos añadidos al calendario": "events added to the calendar",
+  "Ya estaban: {0}": "Already there: {0}",
+  "Pasados u omitidos: {0}": "Past or skipped: {0}",
   "Demasiados intentos. Espera unos minutos y vuelve a probar.":
       "Too many attempts. Wait a few minutes and try again.",
   "No se pudo enviar el código: {0}": "Could not send the code: {0}",

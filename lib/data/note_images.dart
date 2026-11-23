@@ -78,6 +78,27 @@ class NoteImages extends ChangeNotifier {
     return ui.Size(w, h);
   }
 
+  /// Tamaño en pantalla, en % (`z` en la fuente; sin él, 100).
+  static int scaleOf(String src) {
+    final q = src.indexOf('?');
+    if (q == -1) return 100;
+    final z = int.tryParse(Uri.splitQueryString(src.substring(q + 1))['z'] ?? '');
+    return (z ?? 100).clamp(20, 100);
+  }
+
+  /// La misma fuente con otro tamaño en pantalla. No toca la imagen guardada.
+  static String withScale(String src, int percent) {
+    final q = src.indexOf('?');
+    final base = q == -1 ? src : src.substring(0, q);
+    final params = q == -1
+        ? <String, String>{}
+        : Map.of(Uri.splitQueryString(src.substring(q + 1)));
+    params.remove('z');
+    if (percent < 100) params['z'] = '${percent.clamp(20, 100)}';
+    if (params.isEmpty) return base;
+    return '$base?${params.entries.map((e) => '${e.key}=${e.value}').join('&')}';
+  }
+
   /// Rutas de todas las imágenes de una nota (su Delta en JSON).
   static Set<String> pathsIn(String? rich) {
     if (rich == null || !rich.contains(scheme)) return const {};
@@ -293,6 +314,8 @@ class NoteImages extends ChangeNotifier {
     if (b.length > 11 && b[8] == 0x57 && b[9] == 0x45) return 'webp';
     return 'jpg';
   }
+
+  static String mimeOf(Uint8List b) => _mime(b);
 
   static String _mime(Uint8List b) => switch (extensionOf(b)) {
         'png' => 'image/png',

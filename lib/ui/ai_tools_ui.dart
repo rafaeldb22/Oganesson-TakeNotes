@@ -56,8 +56,8 @@ Future<T?> _withProgress<T>(
 Future<void> showNoteAiActions(
     BuildContext context, NotesRepository repo, String noteId) async {
   final n = repo.byId(noteId);
-  if (n == null || n.vault) return;
-  if (n.content.replaceAll('￼', '').trim().isEmpty) {
+  if (n == null || n.vault || repo.isForeign(n)) return;
+  if (n.content.replaceAll('￼', '').trim().isEmpty && !n.hasImages) {
     showToast(context, tr('La nota no tiene texto'),
         icon: Icons.info_outline_rounded);
     return;

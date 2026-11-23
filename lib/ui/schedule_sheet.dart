@@ -1,5 +1,6 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 
 import '../data/notes_repository.dart';
 import '../data/recurrence.dart';
@@ -252,15 +253,22 @@ class _ScheduleSheetState extends State<_ScheduleSheet> {
               onMonth: (m) => setState(() => _month = m),
               onPick: _pickDay,
             ),
-            if (!_allDay) ...[
-              const SizedBox(height: 10),
-              _TimeWheel(
-                key: ValueKey(_editing),
-                value: _current,
-                onChanged: (t) => _setCurrent(DateTime(_current.year,
-                    _current.month, _current.day, t.hour, t.minute)),
-              ),
-            ],
+            AnimatedSize(
+              duration: Anim.medium,
+              curve: Anim.curve,
+              alignment: Alignment.topCenter,
+              child: _allDay
+                  ? const SizedBox(width: double.infinity)
+                  : Padding(
+                      padding: const EdgeInsets.only(top: 10),
+                      child: _TimeWheel(
+                        key: ValueKey(_editing),
+                        value: _current,
+                        onChanged: (t) => _setCurrent(DateTime(_current.year,
+                            _current.month, _current.day, t.hour, t.minute)),
+                      ).animate().fadeIn(duration: Anim.medium),
+                    ),
+            ),
             if (!_oneDay) ...[
               const SizedBox(height: 14),
               _Preview(start: _savedStart, end: _savedEnd),
@@ -387,11 +395,15 @@ class _EdgeCard extends StatelessWidget {
               Text(fecha,
                   style: const TextStyle(
                       fontSize: 17, fontWeight: FontWeight.w800)),
-              Text(hora,
-                  style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: active ? color : Palette.secondary(context))),
+              AnimatedSwitcher(
+                duration: Anim.medium,
+                child: Text(hora,
+                    key: ValueKey(allDay),
+                    style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: active ? color : Palette.secondary(context))),
+              ),
             ],
           ),
         ),

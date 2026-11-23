@@ -56,14 +56,15 @@ class CalendarWidgetImage extends StatelessWidget {
       ..sort((a, b) => a.dueAt!.compareTo(b.dueAt!));
 
     // Días con alguna tarea activa → color de la más urgente ese día.
+    final byPriority = [...pending]..sort(Note.calendarOrder);
     Color? dayColor(DateTime day) {
-      for (final n in pending) {
+      for (final n in byPriority) {
         final s = _d(n.periodStart.toLocal());
         final e = _d(n.dueAt!.toLocal());
         if (!day.isBefore(s) && !day.isAfter(e)) {
           final total = e.difference(s).inDays;
           final t = total <= 0 ? 1.0 : day.difference(s).inDays / total;
-          return paletteAt(fusePalette(n.color), t);
+          return paletteAt(notePalette(n), t);
         }
       }
       return null;
@@ -161,7 +162,8 @@ class CalendarWidgetImage extends StatelessWidget {
       return !today.isBefore(st) && !today.isAfter(e);
     }
 
-    final todayTasks = pending.where(activeToday).toList();
+    final todayTasks = pending.where(activeToday).toList()
+      ..sort(Note.calendarOrder);
     final upcoming = pending.where((n) => !activeToday(n)).toList();
     final mes = tr(mesesNombre[now.month - 1]);
 
@@ -298,7 +300,7 @@ class WidgetTaskRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final stops = fusePalette(note.color);
+    final stops = notePalette(note);
     final p = note.progress();
     // Texto oscuro (fg) = widget en modo claro: color de aviso legible.
     final c = readableOn(note.isOverdue() ? stops.last : paletteAt(stops, p),

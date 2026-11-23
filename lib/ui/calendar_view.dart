@@ -80,7 +80,8 @@ class _CalendarViewState extends State<CalendarView> {
         final s = _day(n.periodStart.toLocal());
         final e = _day(n.dueAt!.toLocal());
         return !day.isBefore(s) && !day.isAfter(e);
-      }).toList();
+      }).toList()
+        ..sort(Note.calendarOrder);
 
   Widget _header(BuildContext context) {
     final month = _monthAt(_page);
@@ -351,19 +352,23 @@ class _MonthGrid extends StatelessWidget {
       final e = _day(n.dueAt!.toLocal());
       return !e.isBefore(gridStart) && !s.isAfter(gridEnd);
     }).toList()
-      ..sort((a, b) => a.periodStart.compareTo(b.periodStart));
-    final laneEnds = <DateTime>[];
+      // Las de un solo día eligen carril primero: son las que deben verse.
+      ..sort((a, b) {
+        if (a.isSingleDay != b.isSingleDay) return a.isSingleDay ? -1 : 1;
+        return a.periodStart.compareTo(b.periodStart);
+      });
+    final laneSpans = <List<(DateTime, DateTime)>>[];
     final lanes = <String, int>{};
     for (final n in visible) {
       final s = _day(n.periodStart.toLocal());
       final e = _day(n.dueAt!.toLocal());
-      var lane = laneEnds.indexWhere((end) => end.isBefore(s));
+      var lane = laneSpans.indexWhere(
+          (l) => l.every((x) => e.isBefore(x.$1) || s.isAfter(x.$2)));
       if (lane == -1) {
-        laneEnds.add(e);
-        lane = laneEnds.length - 1;
-      } else {
-        laneEnds[lane] = e;
+        laneSpans.add([]);
+        lane = laneSpans.length - 1;
       }
+      laneSpans[lane].add((s, e));
       lanes[n.id] = lane;
     }
 
@@ -485,7 +490,9 @@ class _MonthGrid extends StatelessWidget {
     for (final x in dayNotes) {
       if (lanes[x.id] == lane) n = x;
     }
-    if (n == null) return const SizedBox(height: 7);
+    if (n == null) return const SizedBox(height: 6);
+    final id = n.id;
+    final single = n.isSingleDay;
     final s = _day(n.periodStart.toLocal());
     final e = _day(n.dueAt!.toLocal());
     final isStart = day == s || day.weekday == DateTime.monday;
@@ -496,10 +503,19 @@ class _MonthGrid extends StatelessWidget {
     );
     final fade = inMonth ? 1.0 : 0.45;
 
+    // Las de un día son una píldora más corta que no toca los bordes.
+    final inset = single ? 8.0 : 4.0;
     Widget bar(Decoration d) => Padding(
           padding: EdgeInsets.only(
-              left: isStart ? 4 : 0, right: isEnd ? 4 : 0, bottom: 2),
-          child: Container(height: 5, decoration: d),
+              left: isStart ? inset : 0, right: isEnd ? inset : 0, bottom: 2),
+          child: Container(height: 4, decoration: d)
+              .animate(key: ValueKey('$id-$day'))
+              .fadeIn(duration: Anim.medium)
+              .scaleX(
+                  begin: 0.5,
+                  alignment: Alignment.centerLeft,
+                  duration: Anim.medium,
+                  curve: Anim.curve),
         );
 
     if (n.done) {
@@ -521,7 +537,7 @@ class _MonthGrid extends StatelessWidget {
     final dayStart = day;
     final dayEnd = day.add(const Duration(days: 1));
     final t0 = tAt(dayStart), t1 = tAt(dayEnd);
-    final stops = fuseForTheme(context, fusePalette(n.color));
+    final stops = fuseForTheme(context, notePalette(n));
     Color colorAt(double f) => paletteAt(stops, t0 + (t1 - t0) * f);
 
     // Lo que ya pasó, un poco más oscuro; hoy se parte en la hora actual.
@@ -532,6 +548,15 @@ class _MonthGrid extends StatelessWidget {
       return hsl
           .withLightness((hsl.lightness - 0.16).clamp(0.0, 1.0))
           .toColor();
+    }
+
+    // Un solo día: color liso, más oscuro solo si ya ha pasado.
+    if (single) {
+      final c = day.isBefore(_day(now)) ? darker(stops.first) : stops.first;
+      return bar(BoxDecoration(
+        color: c.withValues(alpha: 0.95 * fade),
+        borderRadius: radius,
+      ));
     }
 
     final colors = <Color>[];

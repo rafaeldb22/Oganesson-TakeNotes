@@ -150,6 +150,8 @@ that it still arrives. On Windows, check toasts are enabled first:
   current and future events, and ids are per account so re-importing never duplicates. Imported
   events have UUID v5 ids (`Note.isCalendarEvent`): `repo.notes` excludes them, `repo.calendarItems`
   includes them. All-day is stored as 00:00 to 23:59 local (`Note.isAllDay`).
+- Image display size is `z=<percent>` in the `sb://` source (`NoteImages.scaleOf/withScale`). The AI
+  sees images through the `read_note_images` tool, which reads each one with `aiReadMedia`.
 - Smooth wheel scrolling: use `SmoothScrollController` (`lib/ui/smooth_scroll.dart`) for new
   scroll views on desktop.
 - Completed tasks: `Note.doneAt` (column `notes.done_at`); done > 3 days → hidden from lists and

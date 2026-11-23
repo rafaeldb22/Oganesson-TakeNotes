@@ -142,6 +142,12 @@ class Note {
     return r != null && d != null && r.isAtSameMomentAs(dayStart(d));
   }
 
+  /// Orden en el calendario: primero las de un solo día, luego por fecha.
+  static int calendarOrder(Note a, Note b) {
+    if (a.isSingleDay != b.isSingleDay) return a.isSingleDay ? -1 : 1;
+    return a.dueAt!.compareTo(b.dueAt!);
+  }
+
   /// Las notas de un solo día no muestran la barra hasta ese día.
   bool showsBar([DateTime? now]) =>
       !isSingleDay || !(now ?? DateTime.now()).isBefore(remindAt!);

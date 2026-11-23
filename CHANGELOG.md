@@ -2,6 +2,20 @@
 
 All notable changes to Oganesson TakeNotes (formerly *Notas* / *BabuNotes*).
 
+## [2.11.0] — 2026-11-23
+
+### Added
+- **Resize images**: make any image in a note smaller, from 20 % to 100 %, with a live preview. The
+  original image is kept and the size syncs across devices.
+- **The AI can see images**: the assistant reads the images in your notes, and *Summarize* and
+  *Turn into tasks* use them too. Vault notes and notes shared with you are never sent.
+
+### Changed
+- **Single-day notes** have one solid color, a smaller line, and take priority in the calendar.
+- Thinner calendar lines.
+- New animations for calendar lines, calendar import results, all-day dates, image resizing and the
+  Settings button.
+
 ## [2.10.0] — 2026-11-23
 
 ### Added

@@ -275,7 +275,16 @@ class NoteImageEmbedBuilder extends EmbedBuilder {
               final newSrc = await NoteImages.instance.add(bytes);
               if (newSrc == null) return;
               final o = node.documentOffset;
-              controller.replaceText(o, 1, BlockEmbed.image(newSrc), null);
+              final sized =
+                  NoteImages.withScale(newSrc, NoteImages.scaleOf(src));
+              controller.replaceText(o, 1, BlockEmbed.image(sized), null);
+            },
+      onResize: !editable || !NoteImages.isOurs(src)
+          ? null
+          : (percent) {
+              final o = node.documentOffset;
+              controller.replaceText(o, 1,
+                  BlockEmbed.image(NoteImages.withScale(src, percent)), null);
             },
       onMoveUp: !editable
           ? null
@@ -298,6 +307,7 @@ class NoteImageView extends StatefulWidget {
     this.offsetOf,
     this.onDelete,
     this.onCropped,
+    this.onResize,
     this.onMoveUp,
     this.onMoveDown,
   });
@@ -307,6 +317,7 @@ class NoteImageView extends StatefulWidget {
   final int Function()? offsetOf;
   final VoidCallback? onDelete;
   final Future<void> Function(Uint8List cropped)? onCropped;
+  final void Function(int percent)? onResize;
   final bool Function()? onMoveUp;
   final bool Function()? onMoveDown;
 
@@ -325,13 +336,17 @@ class _NoteImageViewState extends State<NoteImageView> {
   bool _hover = false;
   late bool _animateIn;
 
+  /// Tamaño mientras se mueve el control (aún sin guardar en la nota).
+  int? _liveScale;
+
   bool get _ours => NoteImages.isOurs(widget.src);
   String get _path => NoteImages.pathOf(widget.src);
 
   @override
   void initState() {
     super.initState();
-    _animateIn = _seen.add(widget.src);
+    // Por ruta: cambiar el tamaño no debe repetir la animación de entrada.
+    _animateIn = _seen.add(_ours ? _path : widget.src);
     NoteImages.instance.addListener(_onImages);
     widget.controller?.addListener(_onSelection);
     _load();
@@ -344,7 +359,10 @@ class _NoteImageViewState extends State<NoteImageView> {
       old.controller?.removeListener(_onSelection);
       widget.controller?.addListener(_onSelection);
     }
-    if (old.src != widget.src) {
+    final sameImage = NoteImages.isOurs(old.src) &&
+        _ours &&
+        NoteImages.pathOf(old.src) == _path;
+    if (old.src != widget.src && !sameImage) {
       _bytes = null;
       _failed = false;
       _load();
@@ -440,6 +458,71 @@ class _NoteImageViewState extends State<NoteImageView> {
     if (cropped != null) await widget.onCropped!(cropped);
   }
 
+  /// Control de tamaño: la imagen cambia en directo y se guarda al cerrar.
+  Future<void> _pickSize() async {
+    final start = NoteImages.scaleOf(widget.src);
+    var value = start;
+    await showModalBottomSheet<void>(
+      context: context,
+      useSafeArea: true,
+      showDragHandle: true,
+      barrierColor: Colors.black12,
+      constraints: const BoxConstraints(maxWidth: 480),
+      builder: (ctx) => StatefulBuilder(builder: (ctx, setSheet) {
+        void pick(int v) {
+          setSheet(() => value = v);
+          if (mounted) setState(() => _liveScale = v);
+        }
+
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 18),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(children: [
+                Text(tr('Tamaño de la imagen'),
+                    style: const TextStyle(
+                        fontSize: 18, fontWeight: FontWeight.w800)),
+                const Spacer(),
+                AnimatedSwitcher(
+                  duration: Anim.fast,
+                  child: Text('$value %',
+                      key: ValueKey(value),
+                      style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          color: Palette.accent(ctx))),
+                ),
+              ]),
+              Slider(
+                min: 20,
+                max: 100,
+                divisions: 16,
+                value: value.toDouble(),
+                label: '$value %',
+                onChanged: (v) => pick(v.round()),
+              ),
+              Wrap(
+                spacing: 8,
+                children: [
+                  for (final p in const [25, 50, 75, 100])
+                    ChoiceChip(
+                      label: Text('$p %'),
+                      selected: value == p,
+                      showCheckmark: false,
+                      onSelected: (_) => pick(p),
+                    ),
+                ],
+              ),
+            ],
+          ),
+        );
+      }),
+    );
+    if (!mounted) return;
+    if (value != start) widget.onResize?.call(value);
+    setState(() => _liveScale = null);
+  }
+
   /// Miniatura que sigue al dedo / al ratón al mover la imagen.
   Widget _dragFeedback() {
     final p = _provider;
@@ -481,6 +564,9 @@ class _NoteImageViewState extends State<NoteImageView> {
       MenuEntry('ver', Icons.open_in_full_rounded, tr('Ver imagen')),
       if (widget.onCropped != null)
         MenuEntry('recortar', Icons.crop_rounded, tr('Recortar')),
+      if (widget.onResize != null)
+        MenuEntry('tamano', Icons.photo_size_select_large_rounded,
+            tr('Cambiar tamaño')),
       if (widget.onCropped != null)
         MenuEntry('dibujar', Icons.draw_outlined, tr('Dibujar encima')),
       if (NoteMediaScope.aiAllowed(context))
@@ -536,6 +622,8 @@ class _NoteImageViewState extends State<NoteImageView> {
         _open();
       case 'recortar':
         await _crop();
+      case 'tamano':
+        await _pickSize();
       case 'dibujar':
         final b = await _currentBytes();
         if (b == null || !mounted) return;
@@ -574,6 +662,7 @@ class _NoteImageViewState extends State<NoteImageView> {
       // Tamaño en pantalla: el natural (en píxeles lógicos), sin pasar del
       // ancho de la nota ni de una altura cómoda.
       var w = min(c.maxWidth, max(160.0, natural.width / max(1.0, dpr)));
+      w = max(72.0, w * (_liveScale ?? NoteImages.scaleOf(widget.src)) / 100);
       var h = w * natural.height / natural.width;
       const maxH = 560.0;
       if (h > maxH) {
@@ -688,6 +777,9 @@ class _NoteImageViewState extends State<NoteImageView> {
                         if (widget.onCropped != null)
                           _HoverBtn(Icons.crop_rounded, tr('Recortar'),
                               () => _action('recortar')),
+                        if (widget.onResize != null)
+                          _HoverBtn(Icons.photo_size_select_large_rounded,
+                              tr('Cambiar tamaño'), () => _action('tamano')),
                         _HoverBtn(Icons.content_copy_rounded,
                             tr('Copiar imagen'), () => _action('copiar')),
                         _HoverBtn(Icons.download_rounded, tr('Guardar como…'),
@@ -707,7 +799,8 @@ class _NoteImageViewState extends State<NoteImageView> {
       return Align(
         alignment: Alignment.centerLeft,
         child: AnimatedContainer(
-          duration: Anim.fast,
+          duration: Anim.medium,
+          curve: Anim.curve,
           width: w,
           height: h,
           margin: const EdgeInsets.symmetric(vertical: 6),

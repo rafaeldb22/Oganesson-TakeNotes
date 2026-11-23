@@ -1139,7 +1139,12 @@ class _NotesHomeState extends State<NotesHome> {
           Builder(
             builder: (btnContext) => IconButton(
               key: const ValueKey('boton-ajustes'),
-              icon: const Icon(Icons.settings_outlined),
+              icon: AnimatedRotation(
+                turns: _settingsTurns,
+                duration: Anim.slow,
+                curve: Anim.curve,
+                child: const Icon(Icons.settings_outlined),
+              ),
               tooltip: tr('Ajustes'),
               onPressed: () => _openSettings(btnContext),
             ),
@@ -1425,8 +1430,11 @@ class _NotesHomeState extends State<NotesHome> {
     await _runMenuChoice(choice);
   }
 
+  double _settingsTurns = 0;
+
   /// Ajustes: apariencia, datos, cuenta y opciones de la app.
   Future<void> _openSettings(BuildContext btnContext) async {
+    setState(() => _settingsTurns += 0.25);
     final box = btnContext.findRenderObject() as RenderBox;
     final at = box.localToGlobal(box.size.bottomRight(Offset.zero));
     final desktop = DesktopIntegration.instance;

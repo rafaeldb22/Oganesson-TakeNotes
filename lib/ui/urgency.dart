@@ -83,6 +83,13 @@ List<Color> fusePalette(int? color) {
   ];
 }
 
+/// Paleta de una nota: las de un solo día tienen un color fijo, sin degradado.
+List<Color> notePalette(Note n) {
+  if (!n.isSingleDay) return fusePalette(n.color);
+  final c = n.color == null ? fuseStops.first : Color(n.color!);
+  return [c, c];
+}
+
 /// Color de una paleta de mecha en el punto t (0 = recién encendida).
 Color paletteAt(List<Color> stops, double t) {
   final x = t.clamp(0.0, 1.0) * (stops.length - 1);
@@ -96,7 +103,7 @@ Color fuseColor(double t) => paletteAt(fuseStops, t);
 /// Color representativo de una nota temporal según su tiempo consumido.
 Color urgencyColor(BuildContext context, Note n) {
   if (n.done) return Palette.secondary(context);
-  final stops = fusePalette(n.color);
+  final stops = notePalette(n);
   final c = n.isOverdue() ? stops.last : paletteAt(stops, n.progress());
   return readableOn(c, light: Theme.of(context).brightness == Brightness.light);
 }
@@ -132,10 +139,10 @@ class TimeBar extends StatelessWidget {
         if (note.showsBar()) ...[
           FuseBar(
             progress: p,
-            height: compact ? 4 : 6,
+            height: compact || note.isSingleDay ? 4 : 6,
             spark: burning,
             dimmed: note.done,
-            colors: fusePalette(note.color),
+            colors: notePalette(note),
           ),
           if (!compact) const SizedBox(height: 6),
         ],

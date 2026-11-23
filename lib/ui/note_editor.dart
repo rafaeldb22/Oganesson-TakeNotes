@@ -337,7 +337,7 @@ class _NoteEditorState extends State<NoteEditor> {
                       height: 20,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        gradient: LinearGradient(colors: fusePalette(n!.color)),
+                        gradient: LinearGradient(colors: notePalette(n!)),
                       ),
                     ),
               onPressed: () => showNoteColorSheet(context, repo, widget.noteId),
