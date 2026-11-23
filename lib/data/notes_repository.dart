@@ -11,6 +11,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/note.dart';
+import '../ui/urgency.dart' show noteColors;
 import 'note_images.dart';
 import 'note_sharing.dart';
 import 'widget_bridge.dart';
@@ -436,11 +437,30 @@ class NotesRepository extends ChangeNotifier {
       folderId: folderId,
       dueAt: dueAt,
       remindAt: remindAt,
+      color: dueAt == null ? null : _nextTimelineColor(),
     );
     _notes[n.id] = n;
     _fresh.add(n.id);
     _notify();
     return n;
+  }
+
+  /// Color para una línea temporal nueva: el menos usado por las activas.
+  int _nextTimelineColor() {
+    final used = <int, int>{};
+    for (final n in _notes.values) {
+      if (n.isTemporal && !n.done && !n.deleted && !n.archived && !n.vault) {
+        final c = n.color;
+        if (c != null) used[c] = (used[c] ?? 0) + 1;
+      }
+    }
+    var best = noteColors.first.$2;
+    for (var i = 0; i < noteColors.length; i++) {
+      // La paleta va por tono: saltar 8 evita que las seguidas se parezcan.
+      final c = noteColors[i * 8 % noteColors.length].$2;
+      if ((used[c] ?? 0) < (used[best] ?? 0)) best = c;
+    }
+    return best;
   }
 
   void updateContent(String id, String content, {String? rich}) {
@@ -581,6 +601,10 @@ class NotesRepository extends ChangeNotifier {
 
   void setSchedule(String id, {DateTime? remindAt, DateTime? dueAt}) =>
       _edit(id, (n) {
+        // Solo al convertirse en línea: "Automático" elegido después se respeta.
+        if (n.dueAt == null && dueAt != null && n.color == null) {
+          n.color = _nextTimelineColor();
+        }
         n.remindAt = remindAt?.toUtc();
         n.dueAt = dueAt?.toUtc();
         if (dueAt == null) n.done = false;

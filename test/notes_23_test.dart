@@ -9,6 +9,7 @@ import 'package:notas/data/notes_repository.dart';
 import 'package:notas/data/recurrence.dart';
 import 'package:notas/models/note.dart';
 import 'package:notas/ui/i18n.dart';
+import 'package:notas/ui/urgency.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -70,6 +71,32 @@ void main() {
       expect(n.rich, contains('"unchecked"'));
       repo.dispose();
     });
+  });
+
+  test('las líneas nuevas no repiten color, salvo elección manual', () {
+    final repo = _repo();
+    final due = DateTime.now().toUtc().add(const Duration(days: 1));
+    final used = repo.notes
+        .where((n) => n.isTemporal && !n.done)
+        .map((n) => n.color)
+        .whereType<int>()
+        .toSet();
+    final free = noteColors.length - used.length;
+    final fresh = [for (var i = 0; i < free; i++) repo.createNote(dueAt: due)];
+    final colors = fresh.map((n) => n.color!).toSet();
+    expect(colors.length, free);
+    expect(colors.intersection(used), isEmpty);
+
+    // Con la paleta llena se repite, pero nunca queda sin color.
+    expect(repo.createNote(dueAt: due).color, isNotNull);
+
+    repo.setColor(fresh[1].id, fresh[0].color);
+    expect(fresh[1].color, fresh[0].color);
+
+    repo.setColor(fresh[2].id, null);
+    repo.setSchedule(fresh[2].id, dueAt: due.add(const Duration(days: 1)));
+    expect(fresh[2].color, isNull);
+    repo.dispose();
   });
 
   test('las subtareas antiguas pasan a casillas sin perderse', () async {
