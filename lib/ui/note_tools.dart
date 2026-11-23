@@ -10,6 +10,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../data/note_export.dart';
 import '../data/note_factory.dart';
 import '../data/note_filters.dart';
+import '../data/note_ics.dart';
 import '../data/notes_repository.dart';
 import '../models/note.dart';
 import 'format.dart';
@@ -460,6 +461,11 @@ Future<void> showExportAll(BuildContext context, NotesRepository repo) async {
             leading: const Icon(Icons.picture_as_pdf_outlined),
             title: const Text('PDF'),
             onTap: () => Navigator.pop(ctx, 'pdf')),
+        ListTile(
+            leading: const Icon(Icons.event_outlined),
+            title: Text(tr('Calendario (.ics)')),
+            subtitle: Text(tr('Notas con fecha pendientes. Sin el Vault.')),
+            onTap: () => Navigator.pop(ctx, 'ics')),
         const SizedBox(height: 8),
       ],
     ),
@@ -487,11 +493,62 @@ Future<void> showExportAll(BuildContext context, NotesRepository repo) async {
             'text/markdown',
             'Markdown',
             'md');
+      case 'ics':
+        if (calendarNotes(notes).isEmpty) {
+          if (context.mounted) {
+            showToast(context, tr('No hay notas con fecha pendientes'),
+                icon: Icons.event_busy_outlined);
+          }
+          return false;
+        }
+        return _deliver(
+            context,
+            Uint8List.fromList(utf8.encode(notesToIcs(notes))),
+            'oganesson-$day.ics',
+            'text/calendar',
+            'iCalendar',
+            'ics');
       default:
         return _deliver(context, await notesToPdf(notes), 'oganesson-$day.pdf',
             'application/pdf', 'PDF', 'pdf');
     }
   });
+}
+
+/// Importa un `.ics`: añade los eventos actuales y futuros sin borrar nada.
+Future<void> importCalendarFile(
+    BuildContext context, NotesRepository repo) async {
+  try {
+    final file = await openFile(acceptedTypeGroups: const [
+      XTypeGroup(
+          label: 'iCalendar',
+          extensions: ['ics'],
+          mimeTypes: ['text/calendar', 'application/ics'])
+    ]);
+    if (file == null) return;
+    if (await file.length() > 10 * 1024 * 1024) {
+      throw const FormatException('too large');
+    }
+    final f = parseIcs(await file.readAsString());
+    final r = repo.importEvents(f.events);
+    if (!context.mounted) return;
+    var msg = trf('Importados: {0} · ya estaban: {1} · omitidos: {2}',
+        [r.added, r.existing, f.skipped]);
+    if (f.simplified > 0) {
+      msg += ' · ${trf('sin repetición: {0}', [f.simplified])}';
+    }
+    showToast(context, msg, icon: Icons.event_available_rounded);
+  } on FormatException {
+    if (context.mounted) {
+      showToast(context, tr('Ese archivo no es un calendario válido'),
+          icon: Icons.error_outline);
+    }
+  } catch (_) {
+    if (context.mounted) {
+      showToast(context, tr('No se ha podido importar'),
+          icon: Icons.error_outline);
+    }
+  }
 }
 
 /// Importa una copia: añade lo que falta sin borrar nada.

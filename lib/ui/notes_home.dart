@@ -374,6 +374,8 @@ class _NotesHomeState extends State<NotesHome> {
             () => showExportAll(context, repo)),
         PaletteCommand(Icons.download_rounded, tr('Importar copia'),
             () => importBackupFile(context, repo)),
+        PaletteCommand(Icons.event_available_rounded, tr('Importar calendario'),
+            () => importCalendarFile(context, repo)),
         PaletteCommand(Icons.create_new_folder_outlined, tr('Nueva carpeta'),
             () async {
           final f = await editFolderDialog(context, repo);
@@ -1407,8 +1409,11 @@ class _NotesHomeState extends State<NotesHome> {
             hint: AppLanguage.supported[appLanguage.code]),
         MenuEntry.section(tr('Datos')),
         MenuEntry('exportar', Icons.ios_share_rounded, tr('Exportar notas'),
-            subtitle: tr('Copia, Markdown o PDF')),
+            subtitle: tr('Copia, Markdown, PDF o calendario')),
         MenuEntry('importar', Icons.download_rounded, tr('Importar copia')),
+        MenuEntry('importar-ics', Icons.event_available_rounded,
+            tr('Importar calendario'),
+            subtitle: tr('Archivo .ics')),
         MenuEntry.section(tr('Cuenta')),
         MenuEntry('sync', Icons.sync, tr('Sincronizar ahora')),
         MenuEntry('update', Icons.system_update_alt_rounded,
@@ -1451,6 +1456,8 @@ class _NotesHomeState extends State<NotesHome> {
         await showExportAll(context, repo);
       case 'importar':
         await importBackupFile(context, repo);
+      case 'importar-ics':
+        await importCalendarFile(context, repo);
       case 'tema':
         showThemePicker(context);
       case 'idioma':

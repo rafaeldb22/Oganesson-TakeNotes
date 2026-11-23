@@ -698,8 +698,19 @@ const enStrings = <String, String>{
   "No se ha podido importar": "Could not import",
   "Datos": "Data",
   "Exportar notas": "Export notes",
-  "Copia, Markdown o PDF": "Backup, Markdown or PDF",
+  "Copia, Markdown, PDF o calendario": "Backup, Markdown, PDF or calendar",
   "Importar copia": "Import backup",
+  "Importar calendario": "Import calendar",
+  "Archivo .ics": ".ics file",
+  "Calendario (.ics)": "Calendar (.ics)",
+  "Notas con fecha pendientes. Sin el Vault.":
+      "Pending notes with a date. Vault not included.",
+  "No hay notas con fecha pendientes": "No pending notes with a date",
+  "Importados: {0} · ya estaban: {1} · omitidos: {2}":
+      "Imported: {0} · already there: {1} · skipped: {2}",
+  "sin repetición: {0}": "without repeat: {0}",
+  "Ese archivo no es un calendario válido": "That file is not a valid calendar",
+  "Evento sin título": "Untitled event",
   "Repetir": "Repeat",
   "Nunca": "Never",
   "Cada día": "Every day",
@@ -781,6 +792,18 @@ const enStrings = <String, String>{
   "Falta activar las notas compartidas en Supabase (migración 010).":
       "Shared notes are not enabled in Supabase yet (migration 010).",
   "Ese correo no es válido.": "That email is not valid.",
+  "No hay ninguna cuenta de Oganesson con ese correo.":
+      "There is no Oganesson account with that email.",
+  "Escribe el correo de una cuenta de Oganesson.":
+      "Enter the email of an Oganesson account.",
+  "Recuperar contraseña": "Recover password",
+  "Si hay una cuenta con ese correo, te llegará un código. Mira también en spam.":
+      "If there is an account with that email, you will get a code. Check spam too.",
+  "Te enviaremos un código para poner una contraseña nueva.":
+      "We will send you a code to set a new password.",
+  "Código del correo": "Code from the email",
+  "La contraseña nueva debe ser distinta de la anterior":
+      "The new password must be different from the old one",
   "Esa es tu propia cuenta.": "That is your own account.",
   "Las notas del Vault o de la papelera no se pueden compartir.":
       "Vault and trashed notes cannot be shared.",

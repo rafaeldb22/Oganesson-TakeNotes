@@ -12,6 +12,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/note.dart';
 import '../ui/urgency.dart' show noteColors;
+import 'note_ics.dart';
 import 'note_images.dart';
 import 'note_sharing.dart';
 import 'widget_bridge.dart';
@@ -559,6 +560,39 @@ class NotesRepository extends ChangeNotifier {
       unawaited(sync());
     }
     return (notes: notes, folders: folders);
+  }
+
+  /// Añade los eventos de un calendario. Los que ya están, aunque se hayan
+  /// editado o estén en la papelera, no se tocan.
+  ({int added, int existing}) importEvents(List<IcsEvent> events) {
+    var added = 0, existing = 0;
+    final now = DateTime.now().toUtc();
+    for (final e in events) {
+      final id = icsNoteId(userId, e.uid);
+      if (_notes.containsKey(id)) {
+        existing++;
+        continue;
+      }
+      _notes[id] = Note(
+        id: id,
+        content: e.content,
+        createdAt: now,
+        updatedAt: now,
+        remindAt: e.remindAt,
+        dueAt: e.dueAt,
+        repeat: e.repeat,
+        color: _nextTimelineColor(),
+        ownerId: userId,
+      );
+      _dirty.add(id);
+      added++;
+    }
+    if (added > 0) {
+      _notify();
+      _schedulePersist();
+      unawaited(sync());
+    }
+    return (added: added, existing: existing);
   }
 
   /// Enlaza dos notas (enlace manual, se ve en la red y en el panel).
