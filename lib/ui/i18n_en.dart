@@ -933,4 +933,9 @@ const enStrings = <String, String>{
   "A otro idioma": "Into another language",
   "Lo que hay que hacer": "What needs doing",
   "¿A qué idioma?": "Which language?",
+  // 2.15
+  "Analizar archivos": "Analyze files",
+  "PDF, documentos, audio e imágenes": "PDFs, documents, audio and images",
+  "Leyendo los archivos…": "Reading the files…",
+  "No se puede leer este tipo de archivo.": "This file type can't be read.",
 };

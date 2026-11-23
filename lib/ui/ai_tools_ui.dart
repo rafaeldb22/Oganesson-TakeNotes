@@ -7,6 +7,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 
 import '../data/ai_actions.dart';
 import '../data/ai_assistant.dart';
+import '../data/note_attachments.dart';
 import '../data/note_board.dart';
 import '../data/note_factory.dart';
 import '../data/note_images.dart';
@@ -51,8 +52,10 @@ Future<void> showNoteAiActions(
     BuildContext context, NotesRepository repo, String noteId) async {
   final n = repo.byId(noteId);
   if (n == null || n.vault || repo.isForeign(n)) return;
+  final hasFiles = allMediaOf(n).isNotEmpty;
   if (n.content.replaceAll('￼', '').trim().isEmpty &&
       !n.hasImages &&
+      !hasFiles &&
       !(n.rich?.contains(BoardData.embedType) ?? false)) {
     showToast(context, tr('La nota no tiene texto'),
         icon: Icons.info_outline_rounded);
@@ -64,12 +67,16 @@ Future<void> showNoteAiActions(
     isScrollControlled: true,
     constraints: BoxConstraints(
         maxWidth: 540, maxHeight: MediaQuery.sizeOf(context).height * 0.88),
-    builder: (_) => _AiActionsSheet(title: n.title),
+    builder: (_) => _AiActionsSheet(title: n.title, hasFiles: hasFiles),
   );
   if (picked == null || !context.mounted) return;
   final (action, language) = picked;
 
-  final reply = await _withProgress(context, tr('La IA está trabajando…'),
+  final reply = await _withProgress(
+      context,
+      action == NoteAiAction.analyze
+          ? tr('Leyendo los archivos…')
+          : tr('La IA está trabajando…'),
       () => runNoteAction(n, action, language: language));
   if (reply == null || !context.mounted) return;
 
@@ -84,7 +91,8 @@ Future<void> showNoteAiActions(
     return;
   }
   await _showResult(context, repo, n, reply,
-      canReplace: action != NoteAiAction.summarize);
+      canReplace:
+          action == NoteAiAction.fix || action == NoteAiAction.translate);
 }
 
 /// Esfera de la IA: un anillo de luz que gira alrededor del destello.
@@ -210,8 +218,9 @@ class AiWorkingDialog extends StatelessWidget {
 
 /// Panel de acciones de la IA sobre una nota.
 class _AiActionsSheet extends StatefulWidget {
-  const _AiActionsSheet({required this.title});
+  const _AiActionsSheet({required this.title, required this.hasFiles});
   final String title;
+  final bool hasFiles;
 
   @override
   State<_AiActionsSheet> createState() => _AiActionsSheetState();
@@ -241,6 +250,13 @@ class _AiActionsSheetState extends State<_AiActionsSheet> {
   Widget build(BuildContext context) {
     final p = Palette.of(context);
     final actions = [
+      if (widget.hasFiles)
+        (
+          NoteAiAction.analyze,
+          Icons.plagiarism_outlined,
+          tr('Analizar archivos'),
+          tr('PDF, documentos, audio e imágenes')
+        ),
       (
         NoteAiAction.summarize,
         Icons.short_text_rounded,
@@ -306,7 +322,7 @@ class _AiActionsSheetState extends State<_AiActionsSheet> {
               children: [
                 for (final (i, (a, icon, label, hint)) in actions.indexed)
                   SizedBox(
-                    width: width,
+                    width: a == NoteAiAction.analyze ? c.maxWidth : width,
                     child: _AiActionCard(
                       icon: icon,
                       label: label,
@@ -530,7 +546,11 @@ Future<void> _showResult(
                 },
                 child: Text(tr('Añadir al final')),
               ),
-              if (canReplace && !n.hasImages && !n.hasFiles)
+              // Reemplazar reescribe el Delta: borraría adjuntos y pizarra.
+              if (canReplace &&
+                  !n.hasImages &&
+                  !n.hasFiles &&
+                  !(n.rich?.contains(BoardData.embedType) ?? false))
                 FilledButton(
                   onPressed: () {
                     final oldText = n.content, oldRich = n.rich;

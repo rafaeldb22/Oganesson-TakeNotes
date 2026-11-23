@@ -173,6 +173,9 @@ that it still arrives. On Windows, check toasts are enabled first:
   `fileEmbedOffset`, and remove embeds with `removeEmbedLine`.
 - Whiteboard to text only sends strokes with `read == false` and stores the result in
   `BoardData.readText`.
+- The AI reads attachments through `readMediaItem` (`lib/data/note_file_reader.dart`): local text
+  for PDF, Office and text files, the provider for audio, images and scanned PDFs. Results are cached
+  in memory by path. Tool: `read_note_files`; panel action: `NoteAiAction.analyze`.
 - Android keyboard: use `autoKeyboard` (`lib/ui/anim.dart`) instead of `autofocus: true` on text
   fields.
 - `lib/data/updater.dart` — checks GitHub Releases (`AppConfig.githubRepo`) and installs the

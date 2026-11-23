@@ -2,6 +2,20 @@
 
 All notable changes to Oganesson TakeNotes (formerly *Notas* / *BabuNotes*).
 
+## [2.15.0] — 2026-11-23
+
+### Added
+- **The AI can analyze the files in a note**: PDFs (including scanned ones), Word, Excel,
+  PowerPoint, text files, audio and images, whether they are inside the note or connected to it.
+- **Analyze files** in the note's AI panel, and the assistant can open files when you ask about them.
+
+### Changed
+- *Summarize* and *Turn into tasks* now also use the note's files.
+
+### Fixed
+- Notes that only contain files can now use the AI panel.
+- *Replace* is no longer offered on whiteboard notes, where it would have removed the whiteboard.
+
 ## [2.14.0] — 2026-11-23
 
 ### Added
