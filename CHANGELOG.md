@@ -2,6 +2,22 @@
 
 All notable changes to Oganesson TakeNotes (formerly *Notas* / *BabuNotes*).
 
+## [2.9.0] — 2026-11-23
+
+### Added
+- **Calendar files**: import an `.ics` file from ⋯ → *Import calendar*, or export your pending dated
+  notes from *Export notes*. Only current and future events are imported, and importing the same
+  file again creates no duplicates.
+- **Password recovery**: *Forgot your password?* on the sign-in screen sends a code by email.
+
+### Changed
+- **Sharing**: notes are shared with an existing account, and access follows that account.
+- Creating an account no longer needs a confirmation email.
+
+### Setup
+- Run `supabase/migrations/011_share_by_account.sql` **before** turning off *Confirm email*, and add
+  `{{ .Token }}` to the *Reset Password* email template.
+
 ## [2.8.0] — 2026-11-23
 
 ### Added

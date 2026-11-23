@@ -146,6 +146,8 @@ that it still arrives. On Windows, check toasts are enabled first:
 - Shared notes (2.7): migration 010 (`note_shares`, RPCs, RLS, a trigger that lets non-owners change
   only text), `lib/data/note_sharing.dart`, `lib/ui/share_sheet.dart`. `repo.isForeign(n)` = another
   account's note: never upsert it (`_pushForeign`), never send it to an AI.
+- Calendar files: `lib/data/note_ics.dart` (`notesToIcs`, `parseIcs`, `icsNoteId`). Import keeps only
+  current and future events, and ids are per account so re-importing never duplicates.
 - Smooth wheel scrolling: use `SmoothScrollController` (`lib/ui/smooth_scroll.dart`) for new
   scroll views on desktop.
 - Completed tasks: `Note.doneAt` (column `notes.done_at`); done > 3 days → hidden from lists and
@@ -207,8 +209,11 @@ that it still arrives. On Windows, check toasts are enabled first:
 - Migrations 005 (Vault, links, done_at) and 006 (archived, position) were applied to the
   production Supabase project on 2026-11-21 (via the Management API). New migrations still
   have to be run by hand (SQL Editor) or with a personal access token.
-- Migrations 007 to 010 were applied to production on 2026-11-23, with *Confirm email* on and
-  custom SMTP (Brevo). Shared file access goes through `note_shared_files`, never a path alone.
+- Migrations 007 to 010 were applied to production on 2026-11-23, with custom SMTP (Brevo). Shared
+  file access goes through `note_shared_files`, never a path alone.
+- Migration 011 ties shares to an existing account id, so sign-up needs no confirmation email. Run
+  it **before** turning off *Confirm email*. Password recovery needs `{{ .Token }}` in the Supabase
+  *Reset Password* email template.
 - Images: not yet verified on a real phone (Android paste via pasteboard, camera, saving to the
   gallery on Android < 10).
 - Vault password reset by email code needs the Supabase *Magic Link* email template to include
