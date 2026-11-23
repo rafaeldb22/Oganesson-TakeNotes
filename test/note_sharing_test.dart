@@ -106,6 +106,8 @@ void main() {
         contains('010'));
     expect(shareError(const PostgrestException(message: 'self')).message,
         contains('propia'));
+    expect(shareError(const PostgrestException(message: 'no_account')).message,
+        contains('ninguna cuenta'));
     expect(shareError(StateError('x')).message, contains('conexión'));
   });
 

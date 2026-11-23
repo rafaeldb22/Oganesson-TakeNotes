@@ -160,7 +160,7 @@ class _ShareSheetState extends State<_ShareSheet> {
           Text(
               foreign
                   ? tr('Otra persona te ha dado acceso a esta nota.')
-                  : tr('La verá al entrar con ese correo en Oganesson.'),
+                  : tr('Escribe el correo de una cuenta de Oganesson.'),
               style: TextStyle(color: p.secondary, fontSize: 13)),
           const SizedBox(height: 14),
           if (canInvite) ...[

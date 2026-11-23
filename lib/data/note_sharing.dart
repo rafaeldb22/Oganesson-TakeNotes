@@ -40,6 +40,10 @@ ShareException shareError(Object e) {
     if (m.contains('invalid_email')) {
       return ShareException(tr('Ese correo no es válido.'));
     }
+    if (m.contains('no_account')) {
+      return ShareException(
+          tr('No hay ninguna cuenta de Oganesson con ese correo.'));
+    }
     if (m.contains('self')) {
       return ShareException(tr('Esa es tu propia cuenta.'));
     }

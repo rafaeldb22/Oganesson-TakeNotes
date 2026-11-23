@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'account_dialogs.dart';
 import 'anim.dart';
 import 'text_menu.dart';
 import 'theme.dart';
@@ -210,6 +211,14 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                       ),
                       const SizedBox(height: 8),
+                      if (!_register)
+                        TextButton(
+                          onPressed: _busy
+                              ? null
+                              : () => recoverAccountPassword(
+                                  context, _email.text.trim()),
+                          child: Text(tr('¿Has olvidado la contraseña?')),
+                        ),
                       TextButton(
                         onPressed: _busy
                             ? null
