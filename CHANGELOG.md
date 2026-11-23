@@ -2,6 +2,23 @@
 
 All notable changes to Oganesson TakeNotes (formerly *Notas* / *BabuNotes*).
 
+## [2.8.0] — 2026-11-23
+
+### Added
+- **Single-day notes**: turn on *Only that day* in Dates to pick just a day and time. The bar stays
+  hidden until 00:00 that day, the calendar shows only that day, and there is one reminder an hour
+  before instead of the 7, 3 and 1-day ones.
+
+### Changed
+- **Timeline colors**: a new timeline gets the least used color. Colors you pick are always kept.
+
+### Security
+- **Shared files**: a file path written in a note no longer gives access to that file. Only the
+  account that owns a file can share it, and removing it from the note removes the access.
+
+### Setup
+- Run the updated `supabase/migrations/010_note_sharing.sql` and keep *Confirm email* enabled.
+
 ## [2.7.0] — 2026-11-23
 
 ### Added

@@ -207,8 +207,8 @@ that it still arrives. On Windows, check toasts are enabled first:
 - Migrations 005 (Vault, links, done_at) and 006 (archived, position) were applied to the
   production Supabase project on 2026-11-21 (via the Management API). New migrations still
   have to be run by hand (SQL Editor) or with a personal access token.
-- Migration 007 (images bucket) is **pending** as of 2026-11-22: until it runs, images stay on
-  the device that added them ("Waiting to upload") and other devices show "Image not available".
+- Migrations 007 to 010 were applied to production on 2026-11-23, with *Confirm email* on and
+  custom SMTP (Brevo). Shared file access goes through `note_shared_files`, never a path alone.
 - Images: not yet verified on a real phone (Android paste via pasteboard, camera, saving to the
   gallery on Android < 10).
 - Vault password reset by email code needs the Supabase *Magic Link* email template to include
