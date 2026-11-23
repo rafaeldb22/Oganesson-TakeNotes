@@ -62,18 +62,22 @@ class _ScheduleSheetState extends State<_ScheduleSheet> {
   _Edge _editing = _Edge.end;
   late DateTime _month;
   String? _repeat;
+  bool _oneDay = false;
 
   @override
   void initState() {
     super.initState();
     final n = widget.repo.byId(widget.noteId);
     _repeat = n?.repeat;
+    _oneDay = n?.isSingleDay ?? false;
     final now = DateTime.now();
     _start = _round5(n?.remindAt?.toLocal() ?? now);
     _end = _round5(n?.dueAt?.toLocal() ??
         widget.initialDue ??
         DateTime(now.year, now.month, now.day + 1, 20));
     if (_end.isBefore(_start)) _end = _start.add(const Duration(hours: 1));
+    // Redondear puede pasar la hora al día siguiente.
+    if (_oneDay) _start = _d(_end);
     _month = DateTime(_end.year, _end.month);
   }
 
@@ -86,7 +90,25 @@ class _ScheduleSheetState extends State<_ScheduleSheet> {
         if (_end.isBefore(_start)) _end = _start.add(const Duration(hours: 1));
       } else {
         _end = v;
-        if (_end.isBefore(_start)) _start = _end;
+        if (_oneDay) {
+          _start = _d(_end);
+        } else if (_end.isBefore(_start)) {
+          _start = _end;
+        }
+      }
+    });
+  }
+
+  void _setOneDay(bool on) {
+    setState(() {
+      _oneDay = on;
+      if (on) {
+        _editing = _Edge.end;
+        _start = _d(_end);
+        _month = DateTime(_end.year, _end.month);
+      } else {
+        final now = _round5(DateTime.now());
+        _start = now.isBefore(_end) ? now : _end;
       }
     });
   }
@@ -126,31 +148,42 @@ class _ScheduleSheetState extends State<_ScheduleSheet> {
           children: [
             Text(tr('Fechas'),
                 style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800)),
-            const SizedBox(height: 14),
+            const SizedBox(height: 6),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: Text(tr('Solo ese día')),
+              subtitle: Text(
+                  tr('Sin barra hasta ese día y un solo aviso una hora antes')),
+              value: _oneDay,
+              onChanged: _setOneDay,
+            ),
+            const SizedBox(height: 6),
             // Inicio / fin: tocar uno para editarlo.
             Row(
               children: [
-                Expanded(
-                  child: _EdgeCard(
-                    label: tr('Empieza'),
-                    icon: Icons.play_arrow_rounded,
-                    value: _start,
-                    active: _editing == _Edge.start,
-                    color: fuseStops.first,
-                    onTap: () => setState(() {
-                      _editing = _Edge.start;
-                      _month = DateTime(_start.year, _start.month);
-                    }),
+                if (!_oneDay) ...[
+                  Expanded(
+                    child: _EdgeCard(
+                      label: tr('Empieza'),
+                      icon: Icons.play_arrow_rounded,
+                      value: _start,
+                      active: _editing == _Edge.start,
+                      color: fuseStops.first,
+                      onTap: () => setState(() {
+                        _editing = _Edge.start;
+                        _month = DateTime(_start.year, _start.month);
+                      }),
+                    ),
                   ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  child: Icon(Icons.arrow_forward_rounded,
-                      size: 18, color: Palette.secondary(context)),
-                ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    child: Icon(Icons.arrow_forward_rounded,
+                        size: 18, color: Palette.secondary(context)),
+                  ),
+                ],
                 Expanded(
                   child: _EdgeCard(
-                    label: tr('Termina'),
+                    label: _oneDay ? tr('Día') : tr('Termina'),
                     icon: Icons.flag_rounded,
                     value: _end,
                     active: _editing == _Edge.end,
@@ -187,8 +220,10 @@ class _ScheduleSheetState extends State<_ScheduleSheet> {
               onChanged: (t) => _setCurrent(DateTime(_current.year,
                   _current.month, _current.day, t.hour, t.minute)),
             ),
-            const SizedBox(height: 14),
-            _Preview(start: _start, end: _end),
+            if (!_oneDay) ...[
+              const SizedBox(height: 14),
+              _Preview(start: _start, end: _end),
+            ],
             const SizedBox(height: 12),
             Text(tr('Repetir'),
                 style: TextStyle(

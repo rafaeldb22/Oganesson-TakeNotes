@@ -129,15 +129,17 @@ class TimeBar extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        FuseBar(
-          progress: p,
-          height: compact ? 4 : 6,
-          spark: burning,
-          dimmed: note.done,
-          colors: fusePalette(note.color),
-        ),
+        if (note.showsBar()) ...[
+          FuseBar(
+            progress: p,
+            height: compact ? 4 : 6,
+            spark: burning,
+            dimmed: note.done,
+            colors: fusePalette(note.color),
+          ),
+          if (!compact) const SizedBox(height: 6),
+        ],
         if (!compact) ...[
-          const SizedBox(height: 6),
           Row(
             children: [
               Icon(

@@ -483,8 +483,12 @@ class NotesRepository extends ChangeNotifier {
           final due = n.dueAt!;
           final next = rule.next(due.toLocal(), after: DateTime.now());
           final shift = next.toUtc().difference(due);
+          final singleDay = n.isSingleDay;
           n.dueAt = next.toUtc();
-          n.remindAt = n.remindAt?.add(shift);
+          // Con cambio de hora, sumar el desfase movería las 00:00.
+          n.remindAt = singleDay
+              ? Note.dayStart(next).toUtc()
+              : n.remindAt?.add(shift);
           n.rich = uncheckAll(n.rich);
           return;
         }

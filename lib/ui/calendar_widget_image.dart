@@ -322,25 +322,28 @@ class WidgetTaskRow extends StatelessWidget {
         ),
         const SizedBox(height: 3),
         // Mecha estática: degradado hasta el punto actual.
-        ClipRRect(
-          borderRadius: BorderRadius.circular(3),
-          child: SizedBox(
-            height: 3.5,
-            child: Stack(
-              children: [
-                Container(color: colors.secondary.withValues(alpha: 0.18)),
-                FractionallySizedBox(
-                  widthFactor: p.clamp(0.04, 1.0),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(colors: stops),
+        if (note.showsBar())
+          ClipRRect(
+            borderRadius: BorderRadius.circular(3),
+            child: SizedBox(
+              height: 3.5,
+              child: Stack(
+                children: [
+                  Container(color: colors.secondary.withValues(alpha: 0.18)),
+                  FractionallySizedBox(
+                    widthFactor: p.clamp(0.04, 1.0),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(colors: stops),
+                      ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-        ),
+          )
+        else
+          const SizedBox(height: 3.5),
         const SizedBox(height: 2),
         Text(tiempoRestante(note.dueAt!),
             style: TextStyle(

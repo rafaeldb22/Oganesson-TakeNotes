@@ -101,7 +101,7 @@ class Reminders {
         .where((n) => n.isTemporal && !n.done && !n.deleted && !n.isEmpty)
         .toList();
     final sig = relevant
-        .map((n) => '${n.id}|${n.dueAt}|${n.title}|${n.vault}')
+        .map((n) => '${n.id}|${n.dueAt}|${n.isSingleDay}|${n.title}|${n.vault}')
         .join(';');
     if (sig == _lastSignature) return;
     _lastSignature = sig;
@@ -134,10 +134,24 @@ class Reminders {
       final base = (n.id.hashCode & 0x0fffffff) * 4;
       final due = n.dueAt!;
       // Avisos solo cuando quedan menos de 7 días, menos de 3 y menos de 1.
+      final hourBefore = due.subtract(const Duration(hours: 1));
       final avisos = <(int, DateTime, String)>[
-        (base, due.subtract(const Duration(days: 7)), tr('Quedan 7 días')),
-        (base + 1, due.subtract(const Duration(days: 3)), tr('Quedan 3 días')),
-        (base + 2, due.subtract(const Duration(days: 1)), tr('Queda 1 día')),
+        // Un solo día: un único aviso, una hora antes y sin salirse de ese día.
+        if (n.isSingleDay)
+          (
+            base,
+            hourBefore.isBefore(n.remindAt!) ? n.remindAt! : hourBefore,
+            tr('Es hoy')
+          )
+        else ...[
+          (base, due.subtract(const Duration(days: 7)), tr('Quedan 7 días')),
+          (
+            base + 1,
+            due.subtract(const Duration(days: 3)),
+            tr('Quedan 3 días')
+          ),
+          (base + 2, due.subtract(const Duration(days: 1)), tr('Queda 1 día')),
+        ],
       ].map((a) {
         final title = n.vault ? tr('Nota del Vault') : n.title;
         return (a.$1, a.$2, trf('Recordatorio: {0}', [title]), a.$3);

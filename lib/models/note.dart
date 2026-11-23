@@ -107,6 +107,24 @@ class Note {
 
   bool get isTemporal => dueAt != null;
 
+  /// 00:00 (hora local) del día de [due].
+  static DateTime dayStart(DateTime due) {
+    final d = due.toLocal();
+    return DateTime(d.year, d.month, d.day);
+  }
+
+  /// Nota de un solo día: empieza a las 00:00 locales del día en que vence.
+  /// shortcut: se guarda en `remindAt` para no necesitar otra migración; si se
+  /// abre en otra zona horaria pasa a verse como periodo normal.
+  bool get isSingleDay {
+    final r = remindAt, d = dueAt;
+    return r != null && d != null && r.isAtSameMomentAs(dayStart(d));
+  }
+
+  /// Las notas de un solo día no muestran la barra hasta ese día.
+  bool showsBar([DateTime? now]) =>
+      !isSingleDay || !(now ?? DateTime.now()).isBefore(remindAt!);
+
   /// Inicio del periodo para el calendario y la barra de progreso.
   DateTime get periodStart {
     final s = remindAt ?? createdAt;

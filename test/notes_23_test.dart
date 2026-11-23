@@ -73,6 +73,39 @@ void main() {
     });
   });
 
+  group('notas de un solo día', () {
+    final due = DateTime(2030, 5, 10, 17, 30);
+
+    test('sin barra hasta ese día y con barra desde las 00:00', () {
+      final n = _note('p', 'Peluquería')
+        ..dueAt = due.toUtc()
+        ..remindAt = Note.dayStart(due).toUtc();
+      expect(n.isSingleDay, isTrue);
+      expect(n.showsBar(DateTime(2030, 5, 9, 23, 59)), isFalse);
+      expect(n.showsBar(DateTime(2030, 5, 10)), isTrue);
+    });
+
+    test('un periodo normal sigue mostrando la barra', () {
+      final n = _note('p', 'Proyecto')
+        ..dueAt = due.toUtc()
+        ..remindAt = DateTime(2030, 5, 1, 9).toUtc();
+      expect(n.isSingleDay, isFalse);
+      expect(n.showsBar(DateTime(2030, 4, 1)), isTrue);
+    });
+
+    test('al repetirse sigue siendo de un solo día', () {
+      final repo = _repo();
+      final n = repo.notes.firstWhere((x) => !x.isEmpty);
+      final next = DateTime.now().add(const Duration(hours: 2));
+      repo.setSchedule(n.id, remindAt: Note.dayStart(next), dueAt: next);
+      repo.setRepeat(n.id, 'daily');
+      repo.toggleDone(n.id);
+      expect(n.dueAt!.isAfter(next.toUtc()), isTrue);
+      expect(n.isSingleDay, isTrue);
+      repo.dispose();
+    });
+  });
+
   test('las líneas nuevas no repiten color, salvo elección manual', () {
     final repo = _repo();
     final due = DateTime.now().toUtc().add(const Duration(days: 1));

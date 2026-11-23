@@ -1889,7 +1889,8 @@ class AiTools {
         }
         final due = _date(a['due']);
         if (due == null) return {'error': 'Falta una fecha límite válida.'};
-        final start = _date(a['start']) ?? n.remindAt?.toLocal();
+        final start = _date(a['start']) ??
+            (n.isSingleDay ? Note.dayStart(due) : n.remindAt?.toLocal());
         _record(
             'alarm',
             trf('Fecha límite de «{0}»: {1}', [n.title, _iso(due)])
@@ -1897,9 +1898,11 @@ class AiTools {
             n);
         repo.setSchedule(n.id,
             dueAt: due,
-            remindAt: start == null || !start.isBefore(due)
-                ? (DateTime.now().isBefore(due) ? DateTime.now() : due)
-                : start);
+            remindAt: start != null &&
+                    (start.isBefore(due) ||
+                        start.isAtSameMomentAs(Note.dayStart(due)))
+                ? start
+                : (DateTime.now().isBefore(due) ? DateTime.now() : due));
         return {'ok': true};
 
       case 'set_done':

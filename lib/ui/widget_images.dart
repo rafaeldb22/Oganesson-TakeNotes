@@ -270,8 +270,10 @@ class NextTaskWidgetImage extends StatelessWidget {
                   color: color,
                   fontSize: wide ? 16 : 20,
                   fontWeight: FontWeight.w800)),
-          SizedBox(height: wide ? 5 : 8),
-          bar,
+          if (n.showsBar()) ...[
+            SizedBox(height: wide ? 5 : 8),
+            bar,
+          ],
         ],
       ),
     );

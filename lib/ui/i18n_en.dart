@@ -269,6 +269,11 @@ const enStrings = <String, String>{
   'Quedan 7 días': '7 days left',
   'Quedan 3 días': '3 days left',
   'Queda 1 día': '1 day left',
+  'Es hoy': "It's today",
+  'Día': 'Day',
+  'Solo ese día': 'That day only',
+  'Sin barra hasta ese día y un solo aviso una hora antes':
+      'No bar until that day and a single reminder one hour before',
   'Recordatorio: {0}': 'Reminder: {0}',
   'Nota del Vault': 'Vault note',
   'enero': 'January',
