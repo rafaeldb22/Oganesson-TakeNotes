@@ -280,7 +280,9 @@ class NotesRepository extends ChangeNotifier {
 
   List<Note> get notes {
     if (_sortedCache != null && _sortedVersion == version) return _sortedCache!;
-    final list = _notes.values.where((n) => !n.deleted && _visible(n)).toList()
+    final list = _notes.values
+        .where((n) => !n.deleted && _visible(n) && !n.isCalendarEvent)
+        .toList()
       ..sort((a, b) {
         if (a.pinned != b.pinned) return a.pinned ? -1 : 1;
         return b.updatedAt.compareTo(a.updatedAt);
@@ -289,6 +291,12 @@ class NotesRepository extends ChangeNotifier {
     _sortedVersion = version;
     return list;
   }
+
+  /// Lo que sale en el calendario: notas con fecha y eventos importados.
+  List<Note> get calendarItems => _notes.values
+      .where((n) => !n.deleted && _visible(n) && n.isTemporal && !n.isEmpty)
+      .toList()
+    ..sort((a, b) => a.dueAt!.compareTo(b.dueAt!));
 
   /// Notas temporales ordenadas por fecha límite.
   List<Note> get temporales =>
@@ -562,17 +570,18 @@ class NotesRepository extends ChangeNotifier {
     return (notes: notes, folders: folders);
   }
 
-  /// Añade los eventos de un calendario. Los que ya están, aunque se hayan
-  /// editado o estén en la papelera, no se tocan.
+  /// Añade los eventos de un calendario. Los que ya están no se tocan, aunque
+  /// se hayan editado; los que están en la papelera vuelven.
   ({int added, int existing}) importEvents(List<IcsEvent> events) {
     var added = 0, existing = 0;
     final now = DateTime.now().toUtc();
     for (final e in events) {
       final id = icsNoteId(userId, e.uid);
-      if (_notes.containsKey(id)) {
+      if (_notes[id]?.deleted == false) {
         existing++;
         continue;
       }
+      _purge.remove(id);
       _notes[id] = Note(
         id: id,
         content: e.content,
@@ -697,6 +706,27 @@ class NotesRepository extends ChangeNotifier {
     n.deleted = true;
     n.updatedAt = DateTime.now().toUtc();
     _touch(id);
+  }
+
+  /// Manda a la papelera todas las notas y eventos propios. El Vault y las
+  /// notas de otras cuentas no se tocan. Devuelve los ids para poder deshacer.
+  List<String> deleteAllNotes() {
+    if (_disposed) return const [];
+    final now = DateTime.now().toUtc();
+    final ids = <String>[];
+    for (final n in _notes.values.toList()) {
+      if (n.deleted || n.vault || isForeign(n)) continue;
+      if (_fresh.remove(n.id)) {
+        _notes.remove(n.id);
+        continue;
+      }
+      n.deleted = true;
+      n.updatedAt = now;
+      _dirty.add(n.id);
+      ids.add(n.id);
+    }
+    _changed();
+    return ids;
   }
 
   /// Deshace un borrado (botón "Deshacer").
@@ -1106,7 +1136,7 @@ class NotesRepository extends ChangeNotifier {
     if (_disposed) return;
     version++;
     notifyListeners();
-    WidgetBridge.schedule(notes);
+    WidgetBridge.schedule(notes, calendarItems);
   }
 
   // --------------------------------------------------------------- demo

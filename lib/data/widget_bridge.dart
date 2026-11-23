@@ -19,18 +19,22 @@ class WidgetBridge {
   static bool _initialHandled = false;
 
   static List<Note> _last = const [];
+  static List<Note> _lastCalendar = const [];
 
   /// Vuelve a pintar el widget (p. ej. al cambiar de tema).
-  static void refresh() => schedule(_last);
+  static void refresh() => schedule(_last, _lastCalendar);
 
-  static void schedule(List<Note> notes) {
+  /// [calendar] incluye los eventos importados, que solo van al calendario.
+  static void schedule(List<Note> notes, List<Note> calendar) {
     if (!supported) return;
     _last = notes;
+    _lastCalendar = calendar;
     _debounce?.cancel();
-    _debounce = Timer(const Duration(milliseconds: 700), () => _push(notes));
+    _debounce =
+        Timer(const Duration(milliseconds: 700), () => _push(notes, calendar));
   }
 
-  static Future<void> _push(List<Note> notes) async {
+  static Future<void> _push(List<Note> notes, List<Note> calendar) async {
     // Las notas del Vault nunca salen en la pantalla de inicio.
     final real = notes
         .where((n) => !n.isEmpty && !n.deleted && !n.vault)
@@ -60,7 +64,7 @@ class WidgetBridge {
     } catch (e) {
       debugPrint('Widget: $e');
     }
-    await _pushImages(real);
+    await _pushImages(real, calendar.where((n) => !n.done).toList());
   }
 
   /// Widgets dibujados como imagen (Calendario, Tareas, Próxima tarea,
@@ -88,7 +92,7 @@ class WidgetBridge {
     }
   }
 
-  static Future<void> _pushImages(List<Note> notes) async {
+  static Future<void> _pushImages(List<Note> notes, List<Note> calendar) async {
     final temporales = notes.where((n) => n.isTemporal && !n.done).toList()
       ..sort((a, b) => a.dueAt!.compareTo(b.dueAt!));
     final pinned = notes.where((n) => n.pinned).toList();
@@ -108,7 +112,7 @@ class WidgetBridge {
       appLanguage.code,
       installed.join(','),
       '${now.year}-${now.month}-${now.day}-${now.hour}-${now.minute}',
-      for (final n in temporales)
+      for (final n in calendar)
         '${n.id}${n.title}${n.dueAt}${n.remindAt}${n.color}',
       for (final n in listNotes) '${n.id}${n.title}${n.updatedAt}${n.color}',
     ].join('|');
@@ -134,7 +138,7 @@ class WidgetBridge {
         for (final size in CalendarWidgetSize.values) {
           await render(
               CalendarWidgetImage(
-                  notes: temporales, colors: colors, dark: dark, size: size),
+                  notes: calendar, colors: colors, dark: dark, size: size),
               size.key,
               size.logicalSize);
         }

@@ -66,6 +66,12 @@ class _RecoverPasswordDialogState extends State<_RecoverPasswordDialog> {
     try {
       await Supabase.instance.client.auth.resetPasswordForEmail(email);
       if (mounted) setState(() => _sent = true);
+    } on AuthException catch (e) {
+      if (mounted) {
+        setState(() => _error = e.statusCode == '429'
+            ? tr('Demasiados intentos. Espera unos minutos y vuelve a probar.')
+            : trf('No se pudo enviar el código: {0}', [e.message]));
+      }
     } catch (_) {
       if (mounted) {
         setState(() =>

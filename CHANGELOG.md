@@ -2,6 +2,21 @@
 
 All notable changes to Oganesson TakeNotes (formerly *Notas* / *BabuNotes*).
 
+## [2.10.0] — 2026-11-23
+
+### Added
+- **Settings button** next to ⋯, with appearance, data, account and app options.
+- **Delete all notes** in Settings. Notes go to the trash, and you can undo it. The Vault and notes
+  shared with you are not affected.
+
+### Changed
+- **Imported calendar events** now appear only in the calendar, not in the note list or the network.
+- **New dates are all-day by default**. Turn off *All day* to set an exact time. All-day reminders
+  arrive at 9:00.
+
+### Fixed
+- Password recovery now shows why an email could not be sent.
+
 ## [2.9.0] — 2026-11-23
 
 ### Added

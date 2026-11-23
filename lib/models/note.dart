@@ -113,6 +113,27 @@ class Note {
     return DateTime(d.year, d.month, d.day);
   }
 
+  /// Último minuto (hora local) del día de [due]: así se guarda "todo el día".
+  static DateTime dayEnd(DateTime due) {
+    final d = due.toLocal();
+    return DateTime(d.year, d.month, d.day, 23, 59);
+  }
+
+  /// Sin hora clave: vence a las 23:59 y, si tiene inicio, empieza a las 00:00.
+  /// shortcut: se deduce de las fechas para no necesitar otra migración; en
+  /// otra zona horaria pasa a verse con hora.
+  bool get isAllDay {
+    final d = dueAt?.toLocal();
+    if (d == null || d.hour != 23 || d.minute != 59) return false;
+    final r = remindAt;
+    return r == null || r.isAtSameMomentAs(dayStart(r));
+  }
+
+  /// Evento importado de un `.ics`: solo se ve en el calendario.
+  /// shortcut: se reconoce por su id (UUID v5 de `icsNoteId`, las notas usan
+  /// v4); añadir una columna si algún día se puede convertir en nota normal.
+  bool get isCalendarEvent => id.length == 36 && id[14] == '5';
+
   /// Nota de un solo día: empieza a las 00:00 locales del día en que vence.
   /// shortcut: se guarda en `remindAt` para no necesitar otra migración; si se
   /// abre en otra zona horaria pasa a verse como periodo normal.

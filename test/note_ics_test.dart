@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:notas/data/note_ics.dart';
 import 'package:notas/data/notes_repository.dart';
 import 'package:notas/models/note.dart';
+import 'package:notas/ui/format.dart';
 import 'package:notas/ui/i18n.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -170,6 +171,66 @@ void main() {
       expect(r.importEvents(f.events), (added: 0, existing: 1));
       expect(r.allActive.single.content, 'Cita editada');
       r.dispose();
+    });
+
+    test('los eventos solo salen en el calendario', () {
+      final r = repo('demo');
+      final future = DateTime.now().add(const Duration(days: 2));
+      final day = '${future.year}${future.month.toString().padLeft(2, '0')}'
+          '${future.day.toString().padLeft(2, '0')}';
+      final f = parseIcs(_cal(_ev('clase', 'DTSTART:${day}T100000\r\nSUMMARY:Clase')));
+      r.importEvents(f.events);
+      final normal = r.createNote(dueAt: future.toUtc());
+      r.updateContent(normal.id, 'Tarea');
+      final event = r.allActive.firstWhere((n) => n.isCalendarEvent);
+      expect(r.notes.map((n) => n.id), [normal.id]);
+      expect(r.temporales.map((n) => n.id), [normal.id]);
+      expect(r.calendarItems.map((n) => n.id), containsAll([event.id, normal.id]));
+      expect(normal.isCalendarEvent, isFalse);
+      r.dispose();
+    });
+
+    test('borrar todo va a la papelera, se deshace y respeta el Vault', () {
+      final r = repo('demo');
+      final a = r.createNote();
+      final v = r.createNote();
+      r.updateContent(a.id, 'Normal');
+      r.updateContent(v.id, 'Secreta');
+      r.setVault(v.id, true);
+      final f = parseIcs(
+          _cal(_ev('e', 'DTSTART:20300401T100000\r\nSUMMARY:Clase')),
+          now: _now);
+      r.importEvents(f.events);
+      final ids = r.deleteAllNotes();
+      expect(ids, hasLength(2));
+      expect(r.notes, isEmpty);
+      expect(r.calendarItems, isEmpty);
+      expect(r.byId(v.id)!.deleted, isFalse);
+      // Reimportar devuelve los eventos que estaban en la papelera.
+      expect(r.importEvents(f.events), (added: 1, existing: 0));
+      for (final id in ids) {
+        r.restore(id);
+      }
+      expect(r.byId(a.id)!.deleted, isFalse);
+      r.dispose();
+    });
+
+    test('todo el día: sin hora y conserva el día al exportar', () {
+      final day = DateTime(2030, 3, 15);
+      final n = _note('a', 'Examen', Note.dayStart(day), Note.dayEnd(day));
+      expect(n.isAllDay, isTrue);
+      expect(n.isSingleDay, isTrue);
+      expect(fechaNota(n), isNot(contains(':')));
+      final ics = notesToIcs([n]);
+      expect(ics, contains('DTSTART;VALUE=DATE:20300315'));
+      expect(ics, contains('DTEND;VALUE=DATE:20300316'));
+      final e = parseIcs(ics, now: _now).events.single;
+      expect(e.dueAt, n.dueAt);
+      expect(e.remindAt, n.remindAt);
+      final timed =
+          _note('b', 'Cita', Note.dayStart(day), DateTime(2030, 3, 15, 10));
+      expect(timed.isAllDay, isFalse);
+      expect(fechaNota(timed), contains('10:00'));
     });
 
     test('el mismo evento tiene otro id en otra cuenta', () {

@@ -147,7 +147,9 @@ that it still arrives. On Windows, check toasts are enabled first:
   only text), `lib/data/note_sharing.dart`, `lib/ui/share_sheet.dart`. `repo.isForeign(n)` = another
   account's note: never upsert it (`_pushForeign`), never send it to an AI.
 - Calendar files: `lib/data/note_ics.dart` (`notesToIcs`, `parseIcs`, `icsNoteId`). Import keeps only
-  current and future events, and ids are per account so re-importing never duplicates.
+  current and future events, and ids are per account so re-importing never duplicates. Imported
+  events have UUID v5 ids (`Note.isCalendarEvent`): `repo.notes` excludes them, `repo.calendarItems`
+  includes them. All-day is stored as 00:00 to 23:59 local (`Note.isAllDay`).
 - Smooth wheel scrolling: use `SmoothScrollController` (`lib/ui/smooth_scroll.dart`) for new
   scroll views on desktop.
 - Completed tasks: `Note.doneAt` (column `notes.done_at`); done > 3 days → hidden from lists and

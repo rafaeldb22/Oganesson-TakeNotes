@@ -75,15 +75,26 @@ String notesToIcs(Iterable<Note> notes) {
   ];
   for (final n in calendarNotes(notes)) {
     final due = n.dueAt!;
-    final punctual = n.isSingleDay || n.remindAt == null;
-    final start = punctual ? due : n.periodStart;
-    var end = due;
-    if (punctual || !end.isAfter(start)) {
-      // Sin pasar de medianoche, para que al reimportar siga siendo de un día.
-      final d = start.toLocal();
-      final midnight = DateTime(d.year, d.month, d.day + 1).toUtc();
-      final hour = start.add(const Duration(hours: 1));
-      end = hour.isAfter(midnight) ? midnight : hour;
+    final String from, to;
+    if (n.isAllDay) {
+      final last = due.toLocal();
+      from = 'DTSTART;VALUE=DATE:${_date((n.remindAt ?? due).toLocal())}';
+      // En los `.ics` el fin de un día completo es exclusivo.
+      to = 'DTEND;VALUE=DATE:'
+          '${_date(DateTime(last.year, last.month, last.day + 1))}';
+    } else {
+      final punctual = n.isSingleDay || n.remindAt == null;
+      final start = punctual ? due : n.periodStart;
+      var end = due;
+      if (punctual || !end.isAfter(start)) {
+        // Sin pasar de medianoche, para que al reimportar siga siendo de un día.
+        final d = start.toLocal();
+        final midnight = DateTime(d.year, d.month, d.day + 1).toUtc();
+        final hour = start.add(const Duration(hours: 1));
+        end = hour.isAfter(midnight) ? midnight : hour;
+      }
+      from = 'DTSTART:${_stamp(start)}';
+      to = 'DTEND:${_stamp(end)}';
     }
     final text = n.content.replaceAll('￼', '').trim();
     final cut = text.indexOf('\n');
@@ -93,8 +104,8 @@ String notesToIcs(Iterable<Note> notes) {
       'BEGIN:VEVENT',
       'UID:${n.id}@oganesson',
       'DTSTAMP:${_stamp(n.updatedAt)}',
-      'DTSTART:${_stamp(start)}',
-      'DTEND:${_stamp(end)}',
+      from,
+      to,
       'SUMMARY:${_escape(n.title)}',
       if (details.isNotEmpty) 'DESCRIPTION:${_escape(details)}',
       if (rule != null) 'RRULE:$rule',
@@ -120,6 +131,9 @@ String _stamp(DateTime t) {
   return '${p(u.year, 4)}${p(u.month)}${p(u.day)}'
       'T${p(u.hour)}${p(u.minute)}${p(u.second)}Z';
 }
+
+String _date(DateTime d) => '${d.year.toString().padLeft(4, '0')}'
+    '${d.month.toString().padLeft(2, '0')}${d.day.toString().padLeft(2, '0')}';
 
 String _escape(String s) => s
     .replaceAll(r'\', r'\\')

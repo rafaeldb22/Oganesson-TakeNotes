@@ -161,7 +161,7 @@ class TimeBar extends StatelessWidget {
                       fontSize: 12, color: color, fontWeight: FontWeight.w600),
                 ),
               ),
-              Text(fechaMedia(note.dueAt!),
+              Text(fechaNota(note),
                   style: TextStyle(
                       fontSize: 12, color: Palette.secondary(context))),
             ],

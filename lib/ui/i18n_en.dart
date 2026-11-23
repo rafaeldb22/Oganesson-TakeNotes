@@ -272,8 +272,17 @@ const enStrings = <String, String>{
   'Es hoy': "It's today",
   'Día': 'Day',
   'Solo ese día': 'That day only',
-  'Sin barra hasta ese día y un solo aviso una hora antes':
-      'No bar until that day and a single reminder one hour before',
+  'Sin barra hasta ese día y con un solo aviso':
+      'No bar until that day and a single reminder',
+  'Todo el día': 'All day',
+  'Desactívalo para poner una hora exacta': 'Turn it off to set an exact time',
+  'Aplicación': 'App',
+  'Borrar todas las notas': 'Delete all notes',
+  '¿Borrar todas las notas?': 'Delete all notes?',
+  'Borrar todo': 'Delete all',
+  'No hay notas que borrar': 'There are no notes to delete',
+  '{0} notas y eventos irán a la papelera y se borrarán del todo en 3 días, también en tus otros dispositivos. El Vault y las notas que te han compartido no se tocan.':
+      '{0} notes and events will go to the trash and be permanently deleted in 3 days, on your other devices too. The Vault and notes shared with you are not affected.',
   'Recordatorio: {0}': 'Reminder: {0}',
   'Nota del Vault': 'Vault note',
   'enero': 'January',
@@ -802,6 +811,9 @@ const enStrings = <String, String>{
   "Te enviaremos un código para poner una contraseña nueva.":
       "We will send you a code to set a new password.",
   "Código del correo": "Code from the email",
+  "Demasiados intentos. Espera unos minutos y vuelve a probar.":
+      "Too many attempts. Wait a few minutes and try again.",
+  "No se pudo enviar el código: {0}": "Could not send the code: {0}",
   "La contraseña nueva debe ser distinta de la anterior":
       "The new password must be different from the old one",
   "Esa es tu propia cuenta.": "That is your own account.",

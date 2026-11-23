@@ -249,7 +249,7 @@ class NextTaskWidgetImage extends StatelessWidget {
                         letterSpacing: 0.8,
                         fontWeight: FontWeight.w800)),
               ),
-              Text(fechaMedia(n.dueAt!),
+              Text(fechaNota(n),
                   style: TextStyle(color: colors.secondary, fontSize: 9)),
             ],
           ),

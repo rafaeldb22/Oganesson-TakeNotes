@@ -1,3 +1,4 @@
+import '../models/note.dart';
 import 'i18n.dart';
 
 const _monthsEn = [
@@ -93,6 +94,12 @@ String fechaMedia(DateTime utc) {
   }
   return '${d.day} ${_meses[d.month - 1].substring(0, 3)}, '
       '${d.hour}:${_two(d.minute)}';
+}
+
+/// Fecha límite de una nota: sin hora si es de todo el día.
+String fechaNota(Note n) {
+  final text = fechaMedia(n.dueAt!);
+  return n.isAllDay ? text.substring(0, text.lastIndexOf(',')) : text;
 }
 
 /// Duración legible con minutos redondeados y sin partes a cero:

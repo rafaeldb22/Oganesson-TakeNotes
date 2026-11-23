@@ -566,12 +566,9 @@ class _NotesHomeState extends State<NotesHome> {
 
   /// Nueva nota temporal que vence el día elegido en el calendario.
   void _newOnDay(DateTime day) {
-    final due = DateTime(day.year, day.month, day.day, 20);
     final n = repo.createNote(
-      dueAt: due.toUtc(),
-      remindAt: DateTime.now().toUtc().isBefore(due.toUtc())
-          ? DateTime.now().toUtc()
-          : due.toUtc(),
+      dueAt: Note.dayEnd(day).toUtc(),
+      remindAt: Note.dayStart(day).toUtc(),
     );
     _open(n.id, autofocus: true);
   }
@@ -1141,6 +1138,14 @@ class _NotesHomeState extends State<NotesHome> {
           _SyncIndicator(repo: repo),
           Builder(
             builder: (btnContext) => IconButton(
+              key: const ValueKey('boton-ajustes'),
+              icon: const Icon(Icons.settings_outlined),
+              tooltip: tr('Ajustes'),
+              onPressed: () => _openSettings(btnContext),
+            ),
+          ),
+          Builder(
+            builder: (btnContext) => IconButton(
               icon: const Icon(Icons.more_horiz),
               tooltip: tr('Más opciones'),
               onPressed: () => _openMainMenu(btnContext),
@@ -1373,7 +1378,6 @@ class _NotesHomeState extends State<NotesHome> {
     final email = Supabase.instance.client.auth.currentUser?.email;
     final v = await Updater.instance.currentVersion().catchError((_) => '');
     final desktop = DesktopIntegration.instance;
-    final withWindows = desktop.supported && await desktop.startsWithWindows();
     if (!mounted) return;
     final choice = await showContextMenu(
       context,
@@ -1403,6 +1407,38 @@ class _NotesHomeState extends State<NotesHome> {
         if (vault.unlocked)
           MenuEntry(
               'vault-lock', Icons.lock_outline_rounded, tr('Bloquear Vault')),
+        null,
+        MenuEntry('coffee', Icons.coffee_outlined, tr('Invítame a un café'),
+            subtitle: tr('Apoya el proyecto (open source)')),
+        MenuEntry('github', Icons.code_rounded, tr('Código en GitHub')),
+        if (desktop.supported) ...[
+          null,
+          MenuEntry('salir', Icons.power_settings_new_rounded,
+              tr('Salir de Oganesson'),
+              subtitle: tr('Cerrar la ventana solo la oculta')),
+        ],
+        null,
+        MenuEntry('logout', Icons.logout, tr('Cerrar sesión'), danger: true),
+      ],
+    );
+    if (!mounted || choice == null) return;
+    await _runMenuChoice(choice);
+  }
+
+  /// Ajustes: apariencia, datos, cuenta y opciones de la app.
+  Future<void> _openSettings(BuildContext btnContext) async {
+    final box = btnContext.findRenderObject() as RenderBox;
+    final at = box.localToGlobal(box.size.bottomRight(Offset.zero));
+    final desktop = DesktopIntegration.instance;
+    final withWindows = desktop.supported && await desktop.startsWithWindows();
+    if (!mounted) return;
+    final choice = await showContextMenu(
+      context,
+      position: at + const Offset(0, 4),
+      alignRight: true,
+      width: 290,
+      title: tr('Ajustes'),
+      entries: [
         MenuEntry.section(tr('Apariencia')),
         MenuEntry('tema', Icons.palette_outlined, tr('Tema y colores')),
         MenuEntry('idioma', Icons.translate_rounded, tr('Idioma'),
@@ -1414,21 +1450,17 @@ class _NotesHomeState extends State<NotesHome> {
         MenuEntry('importar-ics', Icons.event_available_rounded,
             tr('Importar calendario'),
             subtitle: tr('Archivo .ics')),
-        MenuEntry.section(tr('Cuenta')),
         MenuEntry('sync', Icons.sync, tr('Sincronizar ahora')),
-        MenuEntry('update', Icons.system_update_alt_rounded,
-            tr('Buscar actualizaciones')),
+        MenuEntry.section(tr('Cuenta')),
         MenuEntry('cuenta-pass', Icons.manage_accounts_outlined,
             tr('Cambiar contraseña de la cuenta')),
         if (vault.state == VaultState.locked || vault.unlocked)
           MenuEntry('vault-pass', Icons.password_rounded,
               tr('Cambiar contraseña del Vault')),
-        null,
-        MenuEntry('coffee', Icons.coffee_outlined, tr('Invítame a un café'),
-            subtitle: tr('Apoya el proyecto (open source)')),
-        MenuEntry('github', Icons.code_rounded, tr('Código en GitHub')),
-        if (desktop.supported) ...[
-          null,
+        MenuEntry.section(tr('Aplicación')),
+        MenuEntry('update', Icons.system_update_alt_rounded,
+            tr('Buscar actualizaciones')),
+        if (desktop.supported)
           MenuEntry(
               'arranque',
               withWindows
@@ -1436,16 +1468,65 @@ class _NotesHomeState extends State<NotesHome> {
                   : Icons.check_box_outline_blank_rounded,
               tr('Abrir al iniciar Windows'),
               subtitle: tr('En segundo plano · Ctrl+Alt+N crea una nota')),
-          MenuEntry('salir', Icons.power_settings_new_rounded,
-              tr('Salir de Oganesson'),
-              subtitle: tr('Cerrar la ventana solo la oculta')),
-        ],
         null,
-        MenuEntry('logout', Icons.logout, tr('Cerrar sesión'), danger: true),
+        MenuEntry('borrar-todo', Icons.delete_sweep_outlined,
+            tr('Borrar todas las notas'),
+            danger: true),
       ],
     );
     if (!mounted || choice == null) return;
+    await _runMenuChoice(choice, withWindows: withWindows);
+  }
+
+  /// Manda todo a la papelera tras confirmarlo. Se puede deshacer.
+  Future<void> _confirmDeleteAll() async {
+    final count = repo.allActive
+        .where((n) => !n.vault && !n.isEmpty && !repo.isForeign(n))
+        .length;
+    if (count == 0) {
+      showToast(context, tr('No hay notas que borrar'),
+          icon: Icons.info_outline_rounded);
+      return;
+    }
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        icon: const Icon(Icons.delete_sweep_outlined),
+        title: Text(tr('¿Borrar todas las notas?')),
+        content: Text(trf(
+            '{0} notas y eventos irán a la papelera y se borrarán del todo en 3 días, también en tus otros dispositivos. El Vault y las notas que te han compartido no se tocan.',
+            [count])),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: Text(tr('Cancelar'))),
+          FilledButton(
+              style: FilledButton.styleFrom(
+                  backgroundColor: Theme.of(ctx).colorScheme.error,
+                  foregroundColor: Theme.of(ctx).colorScheme.onError),
+              onPressed: () => Navigator.pop(ctx, true),
+              child: Text(tr('Borrar todo'))),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    _close();
+    _clearPicked();
+    final ids = repo.deleteAllNotes();
+    showToast(context, trf('{0} notas en la papelera', [ids.length]),
+        icon: Icons.delete_outline_rounded,
+        actionLabel: tr('Deshacer'), onAction: () {
+      for (final id in ids) {
+        repo.restore(id);
+      }
+    });
+  }
+
+  Future<void> _runMenuChoice(String choice, {bool withWindows = false}) async {
+    final desktop = DesktopIntegration.instance;
     switch (choice) {
+      case 'borrar-todo':
+        await _confirmDeleteAll();
       case 'resumen':
         await showDailyBrief(context, repo, onOpen: _open);
       case 'foto-tareas':

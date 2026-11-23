@@ -197,7 +197,7 @@ class _CalendarViewState extends State<CalendarView> {
     return ListenableBuilder(
       listenable: widget.repo,
       builder: (context, _) {
-        final notes = widget.repo.temporales;
+        final notes = widget.repo.calendarItems;
         final accent = Palette.accent(context);
 
         Widget grid({required double cellHeight}) => SizedBox(

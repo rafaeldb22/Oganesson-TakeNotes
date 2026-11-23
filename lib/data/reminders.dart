@@ -135,22 +135,35 @@ class Reminders {
       final due = n.dueAt!;
       // Avisos solo cuando quedan menos de 7 días, menos de 3 y menos de 1.
       final hourBefore = due.subtract(const Duration(hours: 1));
+      // Sin hora clave se avisa a las 9, no a las 23:59.
+      final local = due.toLocal();
+      final anchor = n.isAllDay
+          ? DateTime(local.year, local.month, local.day, 9).toUtc()
+          : due;
       final avisos = <(int, DateTime, String)>[
         // Un solo día: un único aviso, una hora antes y sin salirse de ese día.
         if (n.isSingleDay)
           (
             base,
-            hourBefore.isBefore(n.remindAt!) ? n.remindAt! : hourBefore,
+            n.isAllDay
+                ? anchor
+                : (hourBefore.isBefore(n.remindAt!)
+                    ? n.remindAt!
+                    : hourBefore),
             tr('Es hoy')
           )
         else ...[
-          (base, due.subtract(const Duration(days: 7)), tr('Quedan 7 días')),
+          (base, anchor.subtract(const Duration(days: 7)), tr('Quedan 7 días')),
           (
             base + 1,
-            due.subtract(const Duration(days: 3)),
+            anchor.subtract(const Duration(days: 3)),
             tr('Quedan 3 días')
           ),
-          (base + 2, due.subtract(const Duration(days: 1)), tr('Queda 1 día')),
+          (
+            base + 2,
+            anchor.subtract(const Duration(days: 1)),
+            tr('Queda 1 día')
+          ),
         ],
       ].map((a) {
         final title = n.vault ? tr('Nota del Vault') : n.title;

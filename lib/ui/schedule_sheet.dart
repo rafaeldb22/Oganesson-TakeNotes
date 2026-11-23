@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../data/notes_repository.dart';
 import '../data/recurrence.dart';
 import '../data/reminders.dart';
+import '../models/note.dart';
 import 'anim.dart';
 import 'format.dart';
 import 'smooth_scroll.dart';
@@ -63,6 +64,7 @@ class _ScheduleSheetState extends State<_ScheduleSheet> {
   late DateTime _month;
   String? _repeat;
   bool _oneDay = false;
+  bool _allDay = true;
 
   @override
   void initState() {
@@ -70,12 +72,20 @@ class _ScheduleSheetState extends State<_ScheduleSheet> {
     final n = widget.repo.byId(widget.noteId);
     _repeat = n?.repeat;
     _oneDay = n?.isSingleDay ?? false;
+    // Sin hora clave salvo que la nota ya tenga una hora exacta.
+    _allDay = n?.dueAt == null || n!.isAllDay;
     final now = DateTime.now();
-    _start = _round5(n?.remindAt?.toLocal() ?? now);
-    _end = _round5(n?.dueAt?.toLocal() ??
-        widget.initialDue ??
-        DateTime(now.year, now.month, now.day + 1, 20));
-    if (_end.isBefore(_start)) _end = _start.add(const Duration(hours: 1));
+    if (_allDay) {
+      _start = _d(n?.remindAt?.toLocal() ?? now);
+      _end = _d(n?.dueAt?.toLocal() ??
+          widget.initialDue ??
+          DateTime(now.year, now.month, now.day + 1));
+      if (_end.isBefore(_start)) _start = _end;
+    } else {
+      _start = _round5(n?.remindAt?.toLocal() ?? now);
+      _end = _round5(n!.dueAt!.toLocal());
+      if (_end.isBefore(_start)) _end = _start.add(const Duration(hours: 1));
+    }
     // Redondear puede pasar la hora al día siguiente.
     if (_oneDay) _start = _d(_end);
     _month = DateTime(_end.year, _end.month);
@@ -87,7 +97,9 @@ class _ScheduleSheetState extends State<_ScheduleSheet> {
     setState(() {
       if (_editing == _Edge.start) {
         _start = v;
-        if (_end.isBefore(_start)) _end = _start.add(const Duration(hours: 1));
+        if (_end.isBefore(_start)) {
+          _end = _allDay ? _start : _start.add(const Duration(hours: 1));
+        }
       } else {
         _end = v;
         if (_oneDay) {
@@ -107,11 +119,28 @@ class _ScheduleSheetState extends State<_ScheduleSheet> {
         _start = _d(_end);
         _month = DateTime(_end.year, _end.month);
       } else {
-        final now = _round5(DateTime.now());
+        final now = _allDay ? _d(DateTime.now()) : _round5(DateTime.now());
         _start = now.isBefore(_end) ? now : _end;
       }
     });
   }
+
+  void _setAllDay(bool on) {
+    setState(() {
+      _allDay = on;
+      if (on) {
+        _start = _d(_start);
+        _end = _d(_end);
+        if (_end.isBefore(_start)) _start = _end;
+      } else {
+        // Hora por defecto al pasar a una hora exacta.
+        _end = DateTime(_end.year, _end.month, _end.day, 20);
+      }
+    });
+  }
+
+  DateTime get _savedStart => _allDay ? _d(_start) : _start;
+  DateTime get _savedEnd => _allDay ? Note.dayEnd(_end) : _end;
 
   void _pickDay(DateTime day) {
     final c = _current;
@@ -121,7 +150,8 @@ class _ScheduleSheetState extends State<_ScheduleSheet> {
   }
 
   void _save() {
-    widget.repo.setSchedule(widget.noteId, remindAt: _start, dueAt: _end);
+    widget.repo
+        .setSchedule(widget.noteId, remindAt: _savedStart, dueAt: _savedEnd);
     widget.repo.setRepeat(widget.noteId, _repeat);
     Reminders.instance.askPermission();
     Navigator.pop(context);
@@ -152,10 +182,17 @@ class _ScheduleSheetState extends State<_ScheduleSheet> {
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
               title: Text(tr('Solo ese día')),
-              subtitle: Text(
-                  tr('Sin barra hasta ese día y un solo aviso una hora antes')),
+              subtitle: Text(tr('Sin barra hasta ese día y con un solo aviso')),
               value: _oneDay,
               onChanged: _setOneDay,
+            ),
+            SwitchListTile(
+              key: const ValueKey('todo-el-dia'),
+              contentPadding: EdgeInsets.zero,
+              title: Text(tr('Todo el día')),
+              subtitle: Text(tr('Desactívalo para poner una hora exacta')),
+              value: _allDay,
+              onChanged: _setAllDay,
             ),
             const SizedBox(height: 6),
             // Inicio / fin: tocar uno para editarlo.
@@ -167,6 +204,7 @@ class _ScheduleSheetState extends State<_ScheduleSheet> {
                       label: tr('Empieza'),
                       icon: Icons.play_arrow_rounded,
                       value: _start,
+                      allDay: _allDay,
                       active: _editing == _Edge.start,
                       color: fuseStops.first,
                       onTap: () => setState(() {
@@ -186,6 +224,7 @@ class _ScheduleSheetState extends State<_ScheduleSheet> {
                     label: _oneDay ? tr('Día') : tr('Termina'),
                     icon: Icons.flag_rounded,
                     value: _end,
+                    allDay: _allDay,
                     active: _editing == _Edge.end,
                     color: fuseStops.last,
                     onTap: () => setState(() {
@@ -213,16 +252,18 @@ class _ScheduleSheetState extends State<_ScheduleSheet> {
               onMonth: (m) => setState(() => _month = m),
               onPick: _pickDay,
             ),
-            const SizedBox(height: 10),
-            _TimeWheel(
-              key: ValueKey(_editing),
-              value: _current,
-              onChanged: (t) => _setCurrent(DateTime(_current.year,
-                  _current.month, _current.day, t.hour, t.minute)),
-            ),
+            if (!_allDay) ...[
+              const SizedBox(height: 10),
+              _TimeWheel(
+                key: ValueKey(_editing),
+                value: _current,
+                onChanged: (t) => _setCurrent(DateTime(_current.year,
+                    _current.month, _current.day, t.hour, t.minute)),
+              ),
+            ],
             if (!_oneDay) ...[
               const SizedBox(height: 14),
-              _Preview(start: _start, end: _end),
+              _Preview(start: _savedStart, end: _savedEnd),
             ],
             const SizedBox(height: 12),
             Text(tr('Repetir'),
@@ -290,6 +331,7 @@ class _EdgeCard extends StatelessWidget {
     required this.label,
     required this.icon,
     required this.value,
+    required this.allDay,
     required this.active,
     required this.color,
     required this.onTap,
@@ -298,6 +340,7 @@ class _EdgeCard extends StatelessWidget {
   final String label;
   final IconData icon;
   final DateTime value;
+  final bool allDay;
   final bool active;
   final Color color;
   final VoidCallback onTap;
@@ -306,7 +349,9 @@ class _EdgeCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final d = value;
     final fecha = '${d.day} ${tr(mesesNombre[d.month - 1]).substring(0, 3)}';
-    final hora = '${d.hour}:${d.minute.toString().padLeft(2, '0')}';
+    final hora = allDay
+        ? tr('Todo el día')
+        : '${d.hour}:${d.minute.toString().padLeft(2, '0')}';
     return Bouncy(
       pressedScale: 0.97,
       child: GestureDetector(
