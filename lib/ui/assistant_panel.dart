@@ -356,7 +356,7 @@ class _AssistantPanelState extends State<AssistantPanel> {
                     child: TextField(
                       controller: _input,
                       focusNode: _focus,
-                      autofocus: true,
+                      autofocus: autoKeyboard,
                       minLines: 1,
                       maxLines: 5,
                       contextMenuBuilder: textFieldMenu,
@@ -732,6 +732,7 @@ class _ActionChip extends StatelessWidget {
 
   static const _icons = <String, IconData>{
     'note_add': Icons.note_add_outlined,
+    'attach_file': Icons.attach_file_rounded,
     'edit': Icons.edit_note_rounded,
     'alarm': Icons.alarm_on_rounded,
     'event_busy': Icons.event_busy_outlined,

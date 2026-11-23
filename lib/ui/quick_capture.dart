@@ -81,7 +81,7 @@ class _QuickCaptureState extends State<QuickCapture> {
                 child: TextField(
                   key: const ValueKey('captura'),
                   controller: _text,
-                  autofocus: true,
+                  autofocus: autoKeyboard,
                   expands: true,
                   maxLines: null,
                   minLines: null,

@@ -77,6 +77,14 @@ Future<bool> pasteImagesFromClipboard(
   try {
     if (await Clipboard.hasStrings()) return false;
   } catch (_) {}
+  final images = await readClipboardImages();
+  if (images.isEmpty || !context.mounted) return false;
+  await insertImages(context, controller, images);
+  return true;
+}
+
+/// Imágenes del portapapeles (una captura o archivos copiados en Windows).
+Future<List<Uint8List>> readClipboardImages() async {
   final images = <Uint8List>[];
   try {
     final b = await Pasteboard.image;
@@ -89,21 +97,27 @@ Future<bool> pasteImagesFromClipboard(
       }
     } catch (_) {}
   }
-  if (images.isEmpty || !context.mounted) return false;
-  await insertImages(context, controller, images);
-  return true;
+  return images;
 }
 
 /// Botón de imagen: en Android elige entre galería y cámara; en Windows
 /// abre el selector de archivos (varias a la vez).
 Future<void> pickAndInsertImages(
     BuildContext context, QuillController controller) async {
+  final bytes = await pickImageBytes(context);
+  if (bytes.isNotEmpty && context.mounted) {
+    await insertImages(context, controller, bytes);
+  }
+}
+
+/// Elige imágenes y devuelve sus bytes (vacío si se cancela).
+Future<List<Uint8List>> pickImageBytes(BuildContext context) async {
   final picker = ImagePicker();
   var files = <XFile>[];
   try {
     if (Platform.isAndroid) {
       final source = await _chooseSource(context);
-      if (source == null) return;
+      if (source == null) return const [];
       // En Android la reducción la hace el sistema (rápido y sin memoria).
       if (source == ImageSource.camera) {
         final f = await picker.pickImage(
@@ -127,11 +141,9 @@ Future<void> pickAndInsertImages(
       showToast(context, tr('No se pudo abrir la imagen'),
           icon: Icons.error_outline_rounded);
     }
-    return;
+    return const [];
   }
-  if (files.isEmpty) return;
-  final bytes = [for (final f in files) await f.readAsBytes()];
-  if (context.mounted) await insertImages(context, controller, bytes);
+  return [for (final f in files) await f.readAsBytes()];
 }
 
 Future<ImageSource?> _chooseSource(BuildContext context) =>

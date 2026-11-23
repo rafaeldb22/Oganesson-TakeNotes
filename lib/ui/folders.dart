@@ -38,7 +38,7 @@ Future<Folder?> editFolderDialog(BuildContext context, NotesRepository repo,
               TextField(
                 contextMenuBuilder: textFieldMenu,
                 controller: name,
-                autofocus: true,
+                autofocus: autoKeyboard,
                 textCapitalization: TextCapitalization.sentences,
                 decoration: InputDecoration(
                   labelText: tr('Nombre'),

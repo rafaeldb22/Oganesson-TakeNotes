@@ -1,13 +1,21 @@
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 
+import '../data/note_attachments.dart';
+import '../data/note_images.dart';
 import '../data/note_links.dart';
 import '../data/notes_repository.dart';
 import '../models/note.dart';
+import 'context_menu.dart';
+import 'link_picker.dart';
+import 'note_image.dart';
+import 'note_media.dart';
 import 'theme.dart';
+import 'toast.dart';
 import 'i18n.dart';
 
 /// Red de notas (como la vista de grafo de Obsidian): cada nota es un nodo
@@ -35,9 +43,154 @@ class _Node {
   bool pinned = false;
 }
 
+/// Una bola de archivo conectada a una nota.
+class _GraphMedia {
+  const _GraphMedia(this.noteId, this.item);
+  final String noteId;
+  final MediaItem item;
+}
+
 class _GraphViewState extends State<GraphView> with TickerProviderStateMixin {
   late final Ticker _ticker;
   final _nodes = <String, _Node>{};
+
+  /// Bolas de archivo (id de nodo → adjunto) y las de cada nota.
+  final _media = <String, _GraphMedia>{};
+  final _mediaOfNote = <String, Set<String>>{};
+
+  /// Miniaturas ya decodificadas, por ruta.
+  final _thumbs = <String, ui.Image>{};
+  final _thumbsLoading = <String>{};
+  static const _mediaRadius = 17.0;
+
+  Set<String> _links(String id) {
+    final m = _media[id];
+    if (m != null) return {m.noteId};
+    final own = _mediaOfNote[id];
+    final notes = _graph!.neighbors(id);
+    return own == null ? notes : {...notes, ...own};
+  }
+
+  Future<void> _loadThumb(String path) async {
+    if (_thumbs.containsKey(path) || !_thumbsLoading.add(path)) return;
+    try {
+      final bytes = await NoteImages.instance.load(path);
+      if (bytes == null) return;
+      final codec = await ui.instantiateImageCodec(bytes, targetWidth: 120);
+      final image = (await codec.getNextFrame()).image;
+      codec.dispose();
+      if (!mounted) return image.dispose();
+      setState(() => _thumbs[path] = image);
+    } catch (_) {
+      // Sin miniatura se ve el icono de imagen.
+    } finally {
+      _thumbsLoading.remove(path);
+    }
+  }
+
+  Future<void> _openMedia(_GraphMedia m) async {
+    final item = m.item;
+    if (item.kind == MediaKind.image) {
+      final bytes = await NoteImages.instance.load(item.path);
+      if (!mounted) return;
+      if (bytes == null) {
+        showToast(context, tr('No se pudo abrir la imagen'),
+            icon: Icons.error_outline_rounded);
+        return;
+      }
+      await openImageViewer(context,
+          image: MemoryImage(bytes),
+          heroTag: 'red-${m.noteId}-${item.path}',
+          bytes: () async => bytes);
+      return;
+    }
+    final file = item.file;
+    if (file == null) return;
+    if (item.kind == MediaKind.file) return openNoteFile(context, file);
+    await showModalBottomSheet<void>(
+      context: context,
+      useSafeArea: true,
+      constraints: const BoxConstraints(maxWidth: 480),
+      builder: (_) => Padding(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
+        child: NoteFileCard(file: file, autoplay: true),
+      ),
+    );
+  }
+
+  Future<void> _connectFiles(String noteId, String kind) async {
+    final repo = widget.repo;
+    switch (kind) {
+      case 'imagen':
+        for (final bytes in await pickImageBytes(context)) {
+          final src = await NoteImages.instance.add(bytes);
+          if (src != null) connectMedia(repo, noteId, {'image': src});
+        }
+      case 'voz':
+        final f = await recordVoiceFile(context);
+        if (f != null) connectMedia(repo, noteId, fileEmbed(f));
+      case 'archivo':
+        await pickNoteFiles(
+            context, (f) => connectMedia(repo, noteId, fileEmbed(f)));
+    }
+  }
+
+  /// Clic derecho o pulsación larga sobre una bola.
+  Future<void> _nodeMenu(Offset local, Offset global) async {
+    final id = _hit(local);
+    if (id == null) return;
+    final media = _media[id];
+    if (media != null) {
+      final owner = widget.repo.byId(media.noteId);
+      final canEdit = owner != null && widget.repo.canEdit(owner);
+      final choice = await showContextMenu(context,
+          position: global,
+          title: media.item.name,
+          entries: [
+            MenuEntry('abrir', Icons.open_in_full_rounded, tr('Abrir')),
+            if (canEdit)
+              MenuEntry(
+                  'quitar', Icons.link_off_rounded, tr('Quitar de la red'),
+                  subtitle: tr('Sigue dentro de la nota'), danger: true),
+          ]);
+      if (!mounted) return;
+      if (choice == 'abrir') await _openMedia(media);
+      if (choice == 'quitar') {
+        disconnectMedia(widget.repo, media.noteId, media.item.path);
+      }
+      return;
+    }
+    final note = widget.repo.byId(id);
+    if (note == null) return;
+    final foreign = widget.repo.isForeign(note);
+    final canAttach = widget.repo.canEdit(note);
+    final choice = await showContextMenu(context,
+        position: global,
+        title: note.title,
+        entries: [
+          MenuEntry('abrir', Icons.open_in_new_rounded, tr('Abrir nota')),
+          if (!foreign)
+            MenuEntry(
+                'enlazar', Icons.hub_outlined, tr('Conectar con otras notas…')),
+          if (canAttach) ...[
+            MenuEntry.section(tr('Conectar con archivos')),
+            MenuEntry('imagen', Icons.image_outlined, tr('Imagen')),
+            MenuEntry('voz', Icons.mic_none_rounded, tr('Mensaje de voz')),
+            MenuEntry(
+                'archivo', Icons.insert_drive_file_outlined, tr('Archivo')),
+          ],
+        ]);
+    if (!mounted || choice == null) return;
+    switch (choice) {
+      case 'abrir':
+        widget.onOpenNote(id);
+      case 'enlazar':
+        await showLinkNotesPicker(context, widget.repo, id);
+      default:
+        await _connectFiles(id, choice);
+    }
+  }
+
   final _rnd = math.Random(7);
   NoteGraph? _graph;
   int _graphVersion = -1;
@@ -159,6 +312,9 @@ class _GraphViewState extends State<GraphView> with TickerProviderStateMixin {
     _ticker.dispose();
     _intro.dispose();
     _hoverCtrl.dispose();
+    for (final t in _thumbs.values) {
+      t.dispose();
+    }
     super.dispose();
   }
 
@@ -172,23 +328,35 @@ class _GraphViewState extends State<GraphView> with TickerProviderStateMixin {
     final g = _graph!;
     return _showOrphans
         ? g.nodes
-        : g.nodes.where((n) => g.degree(n.id) > 0).toList();
+        : g.nodes
+            .where((n) => g.degree(n.id) > 0 || _mediaOfNote.containsKey(n.id))
+            .toList();
   }
 
   /// Ajusta los nodos a las notas actuales conservando las posiciones.
   void _sync() {
     _graph = NoteGraph.of(widget.repo);
     _graphVersion = widget.repo.version;
-    final ids = _visible.map((n) => n.id).toSet();
+    _media.clear();
+    _mediaOfNote.clear();
+    for (final n in _graph!.nodes) {
+      for (final item in mediaIn(n.rich)) {
+        if (!item.inGraph) continue;
+        final id = 'm|${n.id}|${item.path}';
+        _media[id] = _GraphMedia(n.id, item);
+        (_mediaOfNote[n.id] ??= {}).add(id);
+        if (item.kind == MediaKind.image) _loadThumb(item.path);
+      }
+    }
+    // Las notas primero: así una bola de archivo nace junto a la suya.
+    final ids = {..._visible.map((n) => n.id)};
+    ids.addAll(_media.keys.where((m) => ids.contains(_media[m]!.noteId)));
     _nodes.removeWhere((id, _) => !ids.contains(id));
     for (final id in ids) {
       if (_nodes.containsKey(id)) continue;
       // Las nuevas aparecen junto a una vecina si la tienen.
-      final near = _graph!
-          .neighbors(id)
-          .map((n) => _nodes[n])
-          .whereType<_Node>()
-          .firstOrNull;
+      final near =
+          _links(id).map((n) => _nodes[n]).whereType<_Node>().firstOrNull;
       final base = near?.pos ?? Offset.zero;
       final spread = near == null ? 160.0 : 40.0;
       _nodes[id] = _Node(
@@ -254,7 +422,7 @@ class _GraphViewState extends State<GraphView> with TickerProviderStateMixin {
         if (dist2 > 250000) continue; // muy lejos: no influye
         f += d / math.sqrt(dist2) * (repulsion / dist2);
       }
-      for (final nId in g.neighbors(a.id)) {
+      for (final nId in _links(a.id)) {
         final b = _nodes[nId];
         if (b == null) continue;
         final d = b.pos - a.pos;
@@ -326,8 +494,9 @@ class _GraphViewState extends State<GraphView> with TickerProviderStateMixin {
 
   Offset _toWorld(Offset screen) => (screen - _offset) / _scale;
 
-  double _radius(String id) =>
-      5 + 2.2 * math.sqrt(_graph!.degree(id).toDouble());
+  double _radius(String id) => _media.containsKey(id)
+      ? _mediaRadius
+      : 5 + 2.2 * math.sqrt(_graph!.degree(id).toDouble());
 
   String? _hit(Offset screen) {
     final w = _toWorld(screen);
@@ -359,7 +528,9 @@ class _GraphViewState extends State<GraphView> with TickerProviderStateMixin {
     final g = _graph!;
     final p = Palette.of(context);
     final onSurface = Theme.of(context).colorScheme.onSurface;
-    final orphans = g.nodes.where((n) => g.degree(n.id) == 0).length;
+    final orphans = g.nodes
+        .where((n) => g.degree(n.id) == 0 && !_mediaOfNote.containsKey(n.id))
+        .length;
     final notesById = {for (final n in g.nodes) n.id: n};
 
     // La cabecera es una barra propia y el lienzo empieza debajo y se
@@ -435,6 +606,10 @@ class _GraphViewState extends State<GraphView> with TickerProviderStateMixin {
                           onExit: (_) => _setHover(null),
                           child: GestureDetector(
                             behavior: HitTestBehavior.opaque,
+                            onSecondaryTapUp: (d) =>
+                                _nodeMenu(d.localPosition, d.globalPosition),
+                            onLongPressStart: (d) =>
+                                _nodeMenu(d.localPosition, d.globalPosition),
                             onScaleStart: (d) {
                               _downPos = d.localFocalPoint;
                               _lastFocal = d.localFocalPoint;
@@ -483,7 +658,13 @@ class _GraphViewState extends State<GraphView> with TickerProviderStateMixin {
                               final tapped = !_moved ? _hit(_downPos) : null;
                               _dragging = null;
                               _lastFocal = null;
-                              if (tapped != null) widget.onOpenNote(tapped);
+                              if (tapped == null) return;
+                              final media = _media[tapped];
+                              if (media != null) {
+                                _openMedia(media);
+                              } else {
+                                widget.onOpenNote(tapped);
+                              }
                             },
                             child: CustomPaint(
                               size: size,
@@ -491,6 +672,9 @@ class _GraphViewState extends State<GraphView> with TickerProviderStateMixin {
                                 nodes: _nodes,
                                 graph: g,
                                 notes: notesById,
+                                media: _media,
+                                thumbs: _thumbs,
+                                links: _links,
                                 scale: _scale,
                                 offset: _offset,
                                 hover: _dragging ?? _shownHover,
@@ -607,6 +791,9 @@ class _GraphPainter extends CustomPainter {
     required this.nodes,
     required this.graph,
     required this.notes,
+    required this.media,
+    required this.thumbs,
+    required this.links,
     required this.scale,
     required this.offset,
     required this.hover,
@@ -623,6 +810,9 @@ class _GraphPainter extends CustomPainter {
   final Map<String, _Node> nodes;
   final NoteGraph graph;
   final Map<String, Note> notes;
+  final Map<String, _GraphMedia> media;
+  final Map<String, ui.Image> thumbs;
+  final Set<String> Function(String id) links;
   final double scale;
   final Offset offset;
   final String? hover;
@@ -652,41 +842,101 @@ class _GraphPainter extends CustomPainter {
 
   Offset _s(Offset world) => world * scale + offset;
 
+  /// Bola de archivo: borde, y dentro la imagen o el icono de su tipo.
+  void _paintMedia(Canvas canvas, Offset c, double r, _GraphMedia m,
+      double alpha, bool isHover, double t) {
+    final accent = colors.accent;
+    if (isHover) {
+      canvas.drawCircle(
+          c, r + 7 * t, Paint()..color = accent.withValues(alpha: 0.2 * t));
+    }
+    canvas.drawCircle(
+        c, r, Paint()..color = colors.background.withValues(alpha: alpha));
+    final thumb = m.item.kind == MediaKind.image ? thumbs[m.item.path] : null;
+    if (thumb != null) {
+      final w = thumb.width.toDouble(), h = thumb.height.toDouble();
+      final side = math.min(w, h);
+      canvas.save();
+      canvas.clipPath(Path()..addOval(Rect.fromCircle(center: c, radius: r)));
+      canvas.drawImageRect(
+          thumb,
+          Rect.fromCenter(
+              center: Offset(w / 2, h / 2), width: side, height: side),
+          Rect.fromCircle(center: c, radius: r),
+          Paint()
+            ..filterQuality = FilterQuality.medium
+            ..color = Colors.white.withValues(alpha: alpha));
+      canvas.restore();
+    } else {
+      final icon = switch (m.item.kind) {
+        MediaKind.image => Icons.image_outlined,
+        MediaKind.audio => Icons.graphic_eq_rounded,
+        MediaKind.file => Icons.insert_drive_file_outlined,
+      };
+      final tp = TextPainter(
+        text: TextSpan(
+          text: String.fromCharCode(icon.codePoint),
+          style: TextStyle(
+            fontFamily: icon.fontFamily,
+            package: icon.fontPackage,
+            fontSize: r * 1.1,
+            color: accent.withValues(alpha: alpha),
+          ),
+        ),
+        textDirection: textDirection,
+      )..layout();
+      tp.paint(canvas, c - Offset(tp.width / 2, tp.height / 2));
+    }
+    canvas.drawCircle(
+        c,
+        r,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = isHover ? 2.6 : 2
+          ..color = accent.withValues(alpha: alpha));
+  }
+
   @override
   void paint(Canvas canvas, Size size) {
     // t: progreso de la animación de resaltado (0 = nada, 1 = completo).
     final t = Curves.easeOutCubic.transform(hoverT.clamp(0.0, 1.0));
-    final focus = hover == null ? null : {hover!, ...graph.neighbors(hover!)};
+    final focus = hover == null || !nodes.containsKey(hover)
+        ? null
+        : {hover!, ...links(hover!)};
     double lerp(double a, double b) => a + (b - a) * t;
 
     // Enlaces.
     final edge = Paint()..style = PaintingStyle.stroke;
+    void drawEdge(String from, String to) {
+      final a = nodes[from], b = nodes[to];
+      if (a == null || b == null) return;
+      final lit = focus != null && (from == hover || to == hover);
+      // En la entrada, el enlace aparece cuando ya se ven sus dos notas.
+      final show = math.min(appear(from), appear(to));
+      if (show <= 0.01) return;
+      final color = lit
+          ? Color.lerp(colors.secondary.withValues(alpha: 0.35),
+              colors.accent.withValues(alpha: 0.95), t)!
+          : colors.secondary
+              .withValues(alpha: focus == null ? 0.35 : lerp(0.35, 0.1));
+      edge
+        ..color = color.withValues(alpha: color.a * show)
+        ..strokeWidth = lit ? lerp(1.2, 2.4) : 1.2;
+      canvas.drawLine(_s(a.pos), _s(b.pos), edge);
+    }
+
     graph.outgoing.forEach((from, targets) {
-      final a = nodes[from];
-      if (a == null) return;
       for (final to in targets) {
-        final b = nodes[to];
-        if (b == null) continue;
-        final lit = focus != null && (from == hover || to == hover);
-        // En la entrada, el enlace aparece cuando ya se ven sus dos notas.
-        final show = math.min(appear(from), appear(to));
-        if (show <= 0.01) continue;
-        final color = lit
-            ? Color.lerp(colors.secondary.withValues(alpha: 0.35),
-                colors.accent.withValues(alpha: 0.95), t)!
-            : colors.secondary
-                .withValues(alpha: focus == null ? 0.35 : lerp(0.35, 0.1));
-        edge
-          ..color = color.withValues(alpha: color.a * show)
-          ..strokeWidth = lit ? lerp(1.2, 2.4) : 1.2;
-        canvas.drawLine(_s(a.pos), _s(b.pos), edge);
+        drawEdge(from, to);
       }
     });
+    media.forEach((id, m) => drawEdge(m.noteId, id));
 
     // Nodos.
     for (final n in nodes.values) {
       final note = notes[n.id];
-      if (note == null) continue;
+      final file = media[n.id];
+      if (note == null && file == null) continue;
       final c = _s(n.pos);
       final isHover = n.id == hover;
       final inFocus = focus?.contains(n.id) ?? false;
@@ -695,8 +945,13 @@ class _GraphPainter extends CustomPainter {
       final grow = (isHover ? lerp(1, 1.4) : (inFocus ? lerp(1, 1.12) : 1.0)) *
           (0.6 + 0.4 * a0);
       final r = radius(n.id) * scale.clamp(0.6, 1.6) * grow;
+      if (file != null) {
+        final alpha = focus != null && !inFocus ? lerp(a0, 0.2) : a0;
+        _paintMedia(canvas, c, r, file, alpha, isHover, t);
+        continue;
+      }
       final base = colors.accent; // el color de la nota es solo de su mecha
-      final orphan = graph.degree(n.id) == 0;
+      final orphan = links(n.id).isEmpty;
       final alpha = (orphan ? 0.55 : 1.0) * a0;
       final fill = Paint()
         ..color = (orphan ? colors.secondary : base).withValues(
@@ -718,8 +973,8 @@ class _GraphPainter extends CustomPainter {
 
     // Etiquetas: con zoom suficiente, o para la nota resaltada y vecinas.
     for (final n in nodes.values) {
-      final note = notes[n.id];
-      if (note == null) continue;
+      final label = notes[n.id]?.title ?? media[n.id]?.item.name;
+      if (label == null) continue;
       final isHover = n.id == hover;
       final inFocus = focus?.contains(n.id) ?? false;
       final big = graph.degree(n.id) >= 3;
@@ -737,9 +992,7 @@ class _GraphPainter extends CustomPainter {
       final labelIn = Curves.easeOut
           .transform(((appear(n.id) - 0.4) / 0.6).clamp(0.0, 1.0));
       if (visible * labelIn <= 0.01) continue;
-      final title = note.title.length > 28
-          ? '${note.title.substring(0, 27)}…'
-          : note.title;
+      final title = label.length > 28 ? '${label.substring(0, 27)}…' : label;
       final tp = TextPainter(
         text: TextSpan(
           text: title,

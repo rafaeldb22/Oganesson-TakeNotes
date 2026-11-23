@@ -29,6 +29,7 @@ import 'assistant_panel.dart';
 import 'calendar_view.dart';
 import 'command_palette.dart';
 import 'completed_sheet.dart';
+import 'friends_sheet.dart';
 import 'context_menu.dart';
 import 'folders.dart';
 import 'folder_group.dart';
@@ -1460,6 +1461,7 @@ class _NotesHomeState extends State<NotesHome> {
             subtitle: tr('Archivo .ics')),
         MenuEntry('sync', Icons.sync, tr('Sincronizar ahora')),
         MenuEntry.section(tr('Cuenta')),
+        MenuEntry('amigos', Icons.group_outlined, tr('Tu @nombre y amigos')),
         MenuEntry('cuenta-pass', Icons.manage_accounts_outlined,
             tr('Cambiar contraseña de la cuenta')),
         if (vault.state == VaultState.locked || vault.unlocked)
@@ -1569,6 +1571,8 @@ class _NotesHomeState extends State<NotesHome> {
         repo.sync();
       case 'update':
         checkForUpdatesManually(context);
+      case 'amigos':
+        await showFriendsSheet(context, repo);
       case 'cuenta-pass':
         changeAccountPassword(context);
       case 'coffee':

@@ -319,6 +319,77 @@ class _CalendarViewState extends State<CalendarView> {
   }
 }
 
+/// Qué se pinta en un día: una nota (o nada) por fila y cuántas no caben.
+class DaySlots {
+  DaySlots(int lanes) : notes = List<Note?>.filled(lanes, null);
+  final List<Note?> notes;
+  int extra = 0;
+}
+
+/// Reparte las notas de una semana en filas. Una barra mantiene su fila
+/// mientras puede, pero si no cabe y ese día hay un hueco, lo ocupa: "+N"
+/// solo aparece cuando de verdad hay más notas que filas.
+Map<DateTime, DaySlots> layoutWeek(DateTime monday, List<Note> notes,
+    {int lanes = 3}) {
+  final days = [
+    for (var i = 0; i < 7; i++)
+      DateTime(monday.year, monday.month, monday.day + i)
+  ];
+  final spans = <(Note, int, int)>[];
+  for (final n in notes) {
+    final s = _day(n.periodStart.toLocal());
+    final e = _day(n.dueAt!.toLocal());
+    if (e.isBefore(days.first) || s.isAfter(days.last)) continue;
+    final a = s.isBefore(days.first) ? 0 : days.indexOf(s);
+    final b = e.isAfter(days.last) ? 6 : days.indexOf(e);
+    spans.add((n, a, b));
+  }
+  // Las de un día primero (son las que deben verse) y luego las más largas.
+  spans.sort((x, y) {
+    if (x.$1.isSingleDay != y.$1.isSingleDay) {
+      return x.$1.isSingleDay ? -1 : 1;
+    }
+    if (x.$2 != y.$2) return x.$2.compareTo(y.$2);
+    return (y.$3 - y.$2).compareTo(x.$3 - x.$2);
+  });
+
+  final used = <List<bool>>[];
+  final overflow = List.generate(7, (_) => <Note>[]);
+  final out = {for (final d in days) d: DaySlots(lanes)};
+  for (final (n, a, b) in spans) {
+    var lane = used.indexWhere((l) {
+      for (var d = a; d <= b; d++) {
+        if (l[d]) return false;
+      }
+      return true;
+    });
+    if (lane == -1) {
+      used.add(List.filled(7, false));
+      lane = used.length - 1;
+    }
+    for (var d = a; d <= b; d++) {
+      used[lane][d] = true;
+      if (lane < lanes) {
+        out[days[d]]!.notes[lane] = n;
+      } else {
+        overflow[d].add(n);
+      }
+    }
+  }
+  for (var d = 0; d < 7; d++) {
+    final slots = out[days[d]]!;
+    for (final n in overflow[d]) {
+      final free = slots.notes.indexOf(null);
+      if (free == -1) {
+        slots.extra++;
+      } else {
+        slots.notes[free] = n;
+      }
+    }
+  }
+  return out;
+}
+
 class _MonthGrid extends StatelessWidget {
   const _MonthGrid({
     required this.month,
@@ -341,36 +412,17 @@ class _MonthGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final first = DateTime(month.year, month.month, 1);
-    final gridStart = first.subtract(Duration(days: first.weekday - 1));
-    final gridEnd = gridStart.add(const Duration(days: 41));
+    // Por calendario, no restando horas: un cambio de hora movería el día.
+    final gridStart =
+        DateTime(first.year, first.month, 1 - (first.weekday - 1));
     final today = _day(DateTime.now());
-
-    // Carriles: cada nota ocupa siempre la misma fila para que su barra
-    // se vea continua de un día a otro.
-    final visible = notes.where((n) {
-      final s = _day(n.periodStart.toLocal());
-      final e = _day(n.dueAt!.toLocal());
-      return !e.isBefore(gridStart) && !s.isAfter(gridEnd);
-    }).toList()
-      // Las de un solo día eligen carril primero: son las que deben verse.
-      ..sort((a, b) {
-        if (a.isSingleDay != b.isSingleDay) return a.isSingleDay ? -1 : 1;
-        return a.periodStart.compareTo(b.periodStart);
-      });
-    final laneSpans = <List<(DateTime, DateTime)>>[];
-    final lanes = <String, int>{};
-    for (final n in visible) {
-      final s = _day(n.periodStart.toLocal());
-      final e = _day(n.dueAt!.toLocal());
-      var lane = laneSpans.indexWhere(
-          (l) => l.every((x) => e.isBefore(x.$1) || s.isAfter(x.$2)));
-      if (lane == -1) {
-        laneSpans.add([]);
-        lane = laneSpans.length - 1;
-      }
-      laneSpans[lane].add((s, e));
-      lanes[n.id] = lane;
-    }
+    final weeks = [
+      for (var w = 0; w < 6; w++)
+        layoutWeek(
+            DateTime(gridStart.year, gridStart.month, gridStart.day + w * 7),
+            notes,
+            lanes: _maxLanes),
+    ];
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -383,14 +435,11 @@ class _MonthGrid extends StatelessWidget {
                 children: [
                   for (var d = 0; d < 7; d++)
                     Expanded(
-                      child: _cell(
-                        context,
-                        DateTime(gridStart.year, gridStart.month,
-                            gridStart.day + w * 7 + d),
-                        today,
-                        visible,
-                        lanes,
-                      ),
+                      child: Builder(builder: (context) {
+                        final day = DateTime(gridStart.year, gridStart.month,
+                            gridStart.day + w * 7 + d);
+                        return _cell(context, day, today, weeks[w][day]!);
+                      }),
                     ),
                 ],
               ),
@@ -400,13 +449,12 @@ class _MonthGrid extends StatelessWidget {
     );
   }
 
-  Widget _cell(BuildContext context, DateTime day, DateTime today,
-      List<Note> visible, Map<String, int> lanes) {
+  Widget _cell(
+      BuildContext context, DateTime day, DateTime today, DaySlots slots) {
     final inMonth = day.month == month.month;
     final isToday = day == today;
     final isSel = day == selected;
-    final dayNotes = _CalendarViewState.activeOn(visible, day);
-    final extra = dayNotes.where((n) => (lanes[n.id] ?? 0) >= _maxLanes).length;
+    final extra = slots.extra;
 
     // Las barras de las tareas van de borde a borde de la celda (sin el
     // margen de la selección), así se unen con el día anterior y el
@@ -465,7 +513,7 @@ class _MonthGrid extends StatelessWidget {
               ),
               const Spacer(),
               for (var lane = 0; lane < _maxLanes; lane++)
-                _laneBar(context, day, dayNotes, lanes, lane, inMonth),
+                _laneBar(context, day, slots.notes[lane], inMonth),
               SizedBox(
                 height: 12,
                 child: extra > 0
@@ -484,12 +532,7 @@ class _MonthGrid extends StatelessWidget {
     );
   }
 
-  Widget _laneBar(BuildContext context, DateTime day, List<Note> dayNotes,
-      Map<String, int> lanes, int lane, bool inMonth) {
-    Note? n;
-    for (final x in dayNotes) {
-      if (lanes[x.id] == lane) n = x;
-    }
+  Widget _laneBar(BuildContext context, DateTime day, Note? n, bool inMonth) {
     if (n == null) return const SizedBox(height: 6);
     final id = n.id;
     final single = n.isSingleDay;

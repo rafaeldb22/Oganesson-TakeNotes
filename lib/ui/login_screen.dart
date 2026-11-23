@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../data/accounts.dart';
 import 'account_dialogs.dart';
 import 'anim.dart';
 import 'text_menu.dart';
@@ -18,6 +19,7 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   final _email = TextEditingController();
+  final _username = TextEditingController();
   final _pass = TextEditingController();
   bool _register = false;
   bool _busy = false;
@@ -27,6 +29,7 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   void dispose() {
     _email.dispose();
+    _username.dispose();
     _pass.dispose();
     super.dispose();
   }
@@ -34,7 +37,7 @@ class _LoginScreenState extends State<LoginScreen> {
   String _traducir(String m) {
     final l = m.toLowerCase();
     if (l.contains('invalid login')) {
-      return tr('Correo o contraseña incorrectos.');
+      return tr('Usuario o contraseña incorrectos.');
     }
     if (l.contains('not confirmed')) {
       return tr('Tienes que confirmar el correo antes de entrar.');
@@ -49,11 +52,21 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _submit() async {
-    final email = _email.text.trim();
+    final login = _email.text.trim();
     final pass = _pass.text;
-    if (email.isEmpty || pass.isEmpty) {
+    if (login.isEmpty || pass.isEmpty) {
       setState(() {
-        _msg = tr('Escribe tu correo y tu contraseña.');
+        _msg = _register
+            ? tr('Escribe tu correo y tu contraseña.')
+            : tr('Escribe tu @nombre o correo y tu contraseña.');
+        _msgIsError = true;
+      });
+      return;
+    }
+    final username = cleanUsername(_username.text);
+    if (_register && !validUsername(username)) {
+      setState(() {
+        _msg = tr('Usa de 3 a 20 letras, números o guiones bajos.');
         _msgIsError = true;
       });
       return;
@@ -62,10 +75,15 @@ class _LoginScreenState extends State<LoginScreen> {
       _busy = true;
       _msg = null;
     });
-    final auth = Supabase.instance.client.auth;
+    final client = Supabase.instance.client;
+    final auth = client.auth;
     try {
       if (_register) {
-        final res = await auth.signUp(email: email, password: pass);
+        if (await Accounts(client).usernameAvailable(username) == false) {
+          throw AccountException(tr('Ese @nombre ya está cogido.'));
+        }
+        final res = await auth
+            .signUp(email: login, password: pass, data: {'username': username});
         if (res.session == null && mounted) {
           setState(() {
             _msg = tr('Cuenta creada. Confirma el correo que te ha llegado '
@@ -75,7 +93,22 @@ class _LoginScreenState extends State<LoginScreen> {
           });
         }
       } else {
+        var email = login;
+        if (isUsernameLogin(login)) {
+          final found = await Accounts(client).loginEmail(login, pass);
+          if (found == null) {
+            throw AccountException(tr('Usuario o contraseña incorrectos.'));
+          }
+          email = found;
+        }
         await auth.signInWithPassword(email: email, password: pass);
+      }
+    } on AccountException catch (e) {
+      if (mounted) {
+        setState(() {
+          _msg = e.message;
+          _msgIsError = true;
+        });
       }
     } on AuthException catch (e) {
       if (mounted) {
@@ -144,14 +177,43 @@ class _LoginScreenState extends State<LoginScreen> {
                         style: TextStyle(color: Palette.secondary(context)),
                       ),
                       const SizedBox(height: 28),
+                      AnimatedSize(
+                        duration: Anim.medium,
+                        curve: Anim.curve,
+                        child: !_register
+                            ? const SizedBox(width: double.infinity)
+                            : Padding(
+                                padding: const EdgeInsets.only(bottom: 12),
+                                child: TextField(
+                                  key: const ValueKey('registro-nombre'),
+                                  contextMenuBuilder: textFieldMenu,
+                                  controller: _username,
+                                  autocorrect: false,
+                                  autofillHints: const [
+                                    AutofillHints.newUsername
+                                  ],
+                                  textInputAction: TextInputAction.next,
+                                  decoration: _deco(context, tr('@nombre'),
+                                      Icons.person_outline_rounded),
+                                ),
+                              ),
+                      ),
                       TextField(
+                        key: const ValueKey('login-usuario'),
                         contextMenuBuilder: textFieldMenu,
                         controller: _email,
                         keyboardType: TextInputType.emailAddress,
-                        autofillHints: const [AutofillHints.email],
+                        autocorrect: false,
+                        autofillHints: [
+                          _register
+                              ? AutofillHints.email
+                              : AutofillHints.username
+                        ],
                         textInputAction: TextInputAction.next,
-                        decoration:
-                            _deco(context, tr('Correo'), Icons.alternate_email),
+                        decoration: _deco(
+                            context,
+                            _register ? tr('Correo') : tr('@nombre o correo'),
+                            Icons.alternate_email),
                       ),
                       const SizedBox(height: 12),
                       TextField(
@@ -216,7 +278,10 @@ class _LoginScreenState extends State<LoginScreen> {
                           onPressed: _busy
                               ? null
                               : () => recoverAccountPassword(
-                                  context, _email.text.trim()),
+                                  context,
+                                  isUsernameLogin(_email.text)
+                                      ? ''
+                                      : _email.text.trim()),
                           child: Text(tr('¿Has olvidado la contraseña?')),
                         ),
                       TextButton(

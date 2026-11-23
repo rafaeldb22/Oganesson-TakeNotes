@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'anim.dart';
+
 import 'toast.dart';
 import 'text_menu.dart';
 import 'i18n.dart';
@@ -167,7 +169,7 @@ class _RecoverPasswordDialogState extends State<_RecoverPasswordDialog> {
                 TextField(
                   contextMenuBuilder: textFieldMenu,
                   controller: _code,
-                  autofocus: true,
+                  autofocus: autoKeyboard,
                   enabled: !_busy && !_verified,
                   keyboardType: TextInputType.number,
                   autofillHints: const [AutofillHints.oneTimeCode],
@@ -323,7 +325,7 @@ class _AccountPasswordDialogState extends State<_AccountPasswordDialog> {
             TextField(
               contextMenuBuilder: textFieldMenu,
               controller: _old,
-              autofocus: true,
+              autofocus: autoKeyboard,
               obscureText: !_show,
               enabled: !_busy,
               decoration: _deco(tr('Contraseña actual')).copyWith(

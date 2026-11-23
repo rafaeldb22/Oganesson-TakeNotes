@@ -851,4 +851,55 @@ const enStrings = <String, String>{
   "Compartir": "Share",
   "Propietario": "Owner",
   "Dejar de ver esta nota": "Stop seeing this note",
+  // 2.12
+  "Falta activar los @nombres en Supabase (migración 012).":
+      "@usernames need to be enabled in Supabase (migration 012).",
+  "Ese @nombre ya está cogido.": "That @username is taken.",
+  "Usa de 3 a 20 letras, números o guiones bajos.":
+      "Use 3 to 20 letters, numbers or underscores.",
+  "Has llegado al máximo de amigos.": "You've reached the friends limit.",
+  "No hay ninguna cuenta con ese @nombre.":
+      "There's no account with that @username.",
+  "{0} archivo(s) añadidos a «{1}»": "{0} file(s) added to “{1}”",
+  "No hay ninguna cuenta con ese @nombre o correo.":
+      "There's no account with that @username or email.",
+  "Las tareas completadas llegan aquí a los {0} minutos y se guardan {1} días.":
+      "Completed tasks arrive here after {0} minutes and are kept for {1} days.",
+  "Selector": "Selection",
+  "Boli": "Pen",
+  "Nota de pizarra": "Whiteboard note",
+  "Los amigos necesitan una cuenta.": "Friends need an account.",
+  "Ahora eres @{0}": "You're now @{0}",
+  "Añadir": "Add",
+  "Tu @nombre y amigos": "Your @username and friends",
+  "Entra con tu @nombre y comparte sin enseñar tu correo.":
+      "Sign in with your @username and share without showing your email.",
+  "Tu @nombre": "Your @username",
+  "Buscar por @nombre": "Search by @username",
+  "Todavía no tienes amigos añadidos.": "You haven't added any friends yet.",
+  "Quitar de la red": "Remove from network",
+  "Sigue dentro de la nota": "It stays in the note",
+  "Abrir nota": "Open note",
+  "Conectar con otras notas…": "Connect to other notes…",
+  "Conectar con archivos": "Connect files",
+  "Mensaje de voz": "Voice message",
+  "Archivo": "File",
+  "Usuario o contraseña incorrectos.": "Wrong username or password.",
+  "Escribe tu @nombre o correo y tu contraseña.":
+      "Enter your @username or email and your password.",
+  "@nombre": "@username",
+  "@nombre o correo": "@username or email",
+  "Volver al texto": "Back to text",
+  "Modo pizarra": "Whiteboard mode",
+  "Elige un amigo o escribe su @nombre o correo.":
+      "Pick a friend or type their @username or email.",
+  "No hay nada que pegar": "Nothing to paste",
+  "¿Borrar toda la pizarra?": "Clear the whole whiteboard?",
+  "Puedes recuperarla con Deshacer.": "You can bring it back with Undo.",
+  "Duplicar": "Duplicate",
+  "Insertar imagen": "Insert image",
+  "Restablecer vista": "Reset view",
+  "Borrar pizarra": "Clear whiteboard",
+  "Tamaño": "Size",
+  "Fuerza": "Pressure",
 };

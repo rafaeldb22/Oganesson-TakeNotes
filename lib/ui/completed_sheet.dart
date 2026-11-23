@@ -8,7 +8,7 @@ import 'format.dart';
 import 'i18n.dart';
 import 'theme.dart';
 
-/// Completadas: tareas terminadas hace más de 3 días (salen solas de la
+/// Completadas: tareas terminadas hace 10 minutos o más (salen solas de la
 /// lista de notas). Se guardan 30 días y luego van a la papelera.
 Future<void> showCompleted(BuildContext context, NotesRepository repo) {
   return showModalBottomSheet<void>(
@@ -47,10 +47,10 @@ Future<void> showCompleted(BuildContext context, NotesRepository repo) {
                 padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
                 child: Text(
                   trf(
-                      'Las tareas completadas llegan aquí a los {0} días y se '
-                      'guardan {1} días.',
+                      'Las tareas completadas llegan aquí a los {0} minutos y '
+                      'se guardan {1} días.',
                       [
-                        NotesRepository.completedAfterDays,
+                        NotesRepository.completedAfterMinutes,
                         NotesRepository.completedKeepDays
                       ]),
                   style: TextStyle(color: p.secondary),

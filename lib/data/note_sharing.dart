@@ -42,7 +42,7 @@ ShareException shareError(Object e) {
     }
     if (m.contains('no_account')) {
       return ShareException(
-          tr('No hay ninguna cuenta de Oganesson con ese correo.'));
+          tr('No hay ninguna cuenta con ese @nombre o correo.'));
     }
     if (m.contains('self')) {
       return ShareException(tr('Esa es tu propia cuenta.'));

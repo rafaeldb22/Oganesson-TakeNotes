@@ -71,7 +71,12 @@ void _insertTextAtCursor(QuillController c, String text) {
       TextSelection.collapsed(offset: index + text.length + 1));
 }
 
-Future<void> pickAndAttachFiles(BuildContext context, QuillController c) async {
+Future<void> pickAndAttachFiles(BuildContext context, QuillController c) =>
+    pickNoteFiles(context, (f) => insertFileBlock(c, f));
+
+/// Elige archivos, los sube y llama a [onFile] con cada uno.
+Future<void> pickNoteFiles(
+    BuildContext context, void Function(NoteFile) onFile) async {
   try {
     final files = await openFiles();
     for (final x in files) {
@@ -84,13 +89,42 @@ Future<void> pickAndAttachFiles(BuildContext context, QuillController c) async {
         continue;
       }
       final f = await NoteFiles.instance.add(await x.readAsBytes(), x.name);
-      if (f != null) insertFileBlock(c, f);
+      if (f != null) onFile(f);
     }
   } catch (_) {
     if (context.mounted) {
       showToast(context, tr('No se pudo adjuntar el archivo'),
           icon: Icons.error_outline_rounded);
     }
+  }
+}
+
+/// Abre un adjunto con su programa (en Android, con el menú de compartir).
+Future<void> openNoteFile(BuildContext context, NoteFile file) async {
+  void missing() {
+    if (context.mounted) {
+      showToast(context, tr('No se pudo abrir el archivo'),
+          icon: Icons.error_outline_rounded);
+    }
+  }
+
+  final local = await NoteFiles.instance.local(file.path);
+  if (local == null) return missing();
+  try {
+    if (Platform.isAndroid) {
+      await SharePlus.instance.share(ShareParams(
+          files: [XFile(local.path, mimeType: file.mime, name: file.name)],
+          fileNameOverrides: [file.name]));
+    } else {
+      // Copia temporal con su nombre real, para abrirla con su programa.
+      final dir = await getTemporaryDirectory();
+      final safe = file.name.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
+      final copy =
+          await local.copy('${dir.path}${Platform.pathSeparator}$safe');
+      if (!await launchUrl(Uri.file(copy.path))) missing();
+    }
+  } catch (_) {
+    missing();
   }
 }
 
@@ -222,6 +256,12 @@ Future<void> readImageText(
 
 /// Graba una nota de voz y la añade a la nota.
 Future<void> showVoiceRecorder(BuildContext context, QuillController c) async {
+  final f = await recordVoiceFile(context);
+  if (f != null) insertFileBlock(c, f);
+}
+
+/// Graba una nota de voz y la sube. null si se cancela o falla.
+Future<NoteFile?> recordVoiceFile(BuildContext context) async {
   final bytes = await showModalBottomSheet<Uint8List>(
     context: context,
     useSafeArea: true,
@@ -230,18 +270,17 @@ Future<void> showVoiceRecorder(BuildContext context, QuillController c) async {
     constraints: const BoxConstraints(maxWidth: 480),
     builder: (_) => const _Recorder(),
   );
-  if (bytes == null) return;
+  if (bytes == null) return null;
   final stamp = DateTime.now();
   final name = '${tr('Nota de voz')} '
       '${stamp.day}-${stamp.month} ${stamp.hour}.'
       '${stamp.minute.toString().padLeft(2, '0')}.m4a';
   final f = await NoteFiles.instance.add(bytes, name, mime: 'audio/mp4');
-  if (f != null) {
-    insertFileBlock(c, f);
-  } else if (context.mounted) {
+  if (f == null && context.mounted) {
     showToast(context, tr('No se pudo guardar la grabación'),
         icon: Icons.error_outline_rounded);
   }
+  return f;
 }
 
 class _Recorder extends StatefulWidget {
@@ -410,11 +449,15 @@ class NoteFileCard extends StatefulWidget {
     this.controller,
     this.allowAi = false,
     this.onDelete,
+    this.autoplay = false,
   });
   final NoteFile file;
   final QuillController? controller;
   final bool allowAi;
   final VoidCallback? onDelete;
+
+  /// Empieza a sonar al aparecer (al abrirla desde la red de notas).
+  final bool autoplay;
 
   @override
   State<NoteFileCard> createState() => _NoteFileCardState();
@@ -429,6 +472,16 @@ class _NoteFileCardState extends State<NoteFileCard> {
   Duration _total = Duration.zero;
 
   NoteFile get _f => widget.file;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.autoplay && _f.isAudio) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _togglePlay();
+      });
+    }
+  }
 
   @override
   void dispose() {
@@ -495,26 +548,7 @@ class _NoteFileCardState extends State<NoteFileCard> {
     }
   }
 
-  Future<void> _openFile() async {
-    final local = await NoteFiles.instance.local(_f.path);
-    if (local == null) return _missing();
-    try {
-      if (Platform.isAndroid) {
-        await SharePlus.instance.share(ShareParams(
-            files: [XFile(local.path, mimeType: _f.mime, name: _f.name)],
-            fileNameOverrides: [_f.name]));
-      } else {
-        // Copia temporal con su nombre real, para abrirla con su programa.
-        final dir = await getTemporaryDirectory();
-        final safe = _f.name.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
-        final copy =
-            await local.copy('${dir.path}${Platform.pathSeparator}$safe');
-        if (!await launchUrl(Uri.file(copy.path))) _missing();
-      }
-    } catch (_) {
-      _missing();
-    }
-  }
+  Future<void> _openFile() => openNoteFile(context, _f);
 
   Future<void> _saveAs() async {
     final local = await NoteFiles.instance.local(_f.path);

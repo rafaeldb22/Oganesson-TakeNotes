@@ -4,6 +4,7 @@ import 'package:flutter_quill/flutter_quill.dart';
 
 import 'anim.dart';
 import 'theme.dart';
+import 'whiteboard.dart';
 import 'i18n.dart';
 
 /// Barra de formato propia: limpia, con estados activos claros y una paleta
@@ -276,6 +277,184 @@ class EditorToolbar extends StatelessWidget {
           );
         });
       },
+    );
+  }
+}
+
+/// Barra del modo pizarra: deshacer, lazo, boli y goma; compartir e IA se
+/// quedan donde estaban. Pulsar la herramienta activa abre sus opciones.
+class BoardToolbar extends StatelessWidget {
+  const BoardToolbar(
+      {super.key,
+      required this.controller,
+      this.readOnly = false,
+      this.onShare,
+      this.onAi});
+  final BoardController controller;
+  final bool readOnly;
+  final VoidCallback? onShare;
+  final VoidCallback? onAi;
+
+  void _pick(BuildContext button, BoardTool tool) {
+    if (controller.tool != tool) {
+      controller.tool = tool;
+      return;
+    }
+    if (tool == BoardTool.lasso) return;
+    final box = button.findRenderObject() as RenderBox;
+    showBoardToolPanel(button, controller,
+        box.localToGlobal(box.size.bottomCenter(Offset.zero)));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final p = Palette.of(context);
+    return ListenableBuilder(
+      listenable: controller,
+      builder: (context, _) {
+        final c = controller;
+        final ink = Theme.of(context).colorScheme.onSurface;
+        return Container(
+          height: 50,
+          margin: const EdgeInsets.fromLTRB(12, 4, 12, 8),
+          decoration: BoxDecoration(
+            color: p.background,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: p.separator.withValues(alpha: 0.55)),
+            boxShadow: [
+              BoxShadow(
+                color: Theme.of(context).shadowColor.withValues(alpha: 0.07),
+                blurRadius: 12,
+                offset: const Offset(0, 3),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              const SizedBox(width: 4),
+              if (!readOnly) ...[
+                _Btn(
+                    icon: Icons.undo_rounded,
+                    tooltip: tr('Deshacer'),
+                    onTap: c.canUndo ? c.undo : null),
+                _Btn(
+                    icon: Icons.redo_rounded,
+                    tooltip: tr('Rehacer'),
+                    onTap: c.canRedo ? c.redo : null),
+              ],
+              Expanded(
+                child: readOnly
+                    ? const SizedBox.shrink()
+                    : Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          _BoardTile(
+                            tooltip: tr('Selector'),
+                            active: c.tool == BoardTool.lasso,
+                            onTap: (b) => _pick(b, BoardTool.lasso),
+                            builder: (color) => Icon(
+                                Icons.highlight_alt_rounded,
+                                size: 22,
+                                color: color),
+                          ),
+                          const _GroupGap(),
+                          _BoardTile(
+                            tooltip: tr('Boli'),
+                            active: c.tool == BoardTool.pen,
+                            onTap: (b) => _pick(b, BoardTool.pen),
+                            builder: (color) => Icon(Icons.edit_rounded,
+                                size: 21,
+                                color: c.tool == BoardTool.pen
+                                    ? (c.color == 0 ? ink : Color(c.color))
+                                    : color),
+                          ),
+                          _BoardTile(
+                            tooltip: tr('Goma'),
+                            active: c.tool == BoardTool.eraser,
+                            onTap: (b) => _pick(b, BoardTool.eraser),
+                            builder: (color) => EraserIcon(color: color),
+                          ),
+                        ],
+                      ),
+              ),
+              if (onShare != null)
+                _Btn(
+                    icon: Icons.group_add_outlined,
+                    tooltip: tr('Compartir'),
+                    onTap: onShare),
+              if (onAi != null) _AiButton(onTap: onAi!),
+              const SizedBox(width: 7),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _BoardTile extends StatefulWidget {
+  const _BoardTile({
+    required this.tooltip,
+    required this.active,
+    required this.onTap,
+    required this.builder,
+  });
+  final String tooltip;
+  final bool active;
+  final void Function(BuildContext button) onTap;
+  final Widget Function(Color color) builder;
+
+  @override
+  State<_BoardTile> createState() => _BoardTileState();
+}
+
+class _BoardTileState extends State<_BoardTile> {
+  bool _hover = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = Palette.of(context);
+    final fg = Theme.of(context).colorScheme.onSurface;
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hover = true),
+      onExit: (_) => setState(() => _hover = false),
+      child: Tooltip(
+        message: widget.tooltip,
+        waitDuration: const Duration(milliseconds: 500),
+        child: Semantics(
+          button: true,
+          selected: widget.active,
+          label: widget.tooltip,
+          child: Bouncy(
+            pressedScale: 0.88,
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => widget.onTap(context),
+              child: AnimatedContainer(
+                duration: Anim.fast,
+                curve: Anim.curve,
+                width: 42,
+                height: 40,
+                margin: const EdgeInsets.symmetric(horizontal: 2, vertical: 4),
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: widget.active
+                      ? fg.withValues(alpha: 0.13)
+                      : (_hover ? p.hover : Colors.transparent),
+                  borderRadius: BorderRadius.circular(11),
+                ),
+                child: AnimatedScale(
+                  scale: widget.active ? 1.08 : 1,
+                  duration: Anim.medium,
+                  curve: Curves.easeOutBack,
+                  child: widget.builder(fg),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

@@ -196,7 +196,7 @@ class _PaletteState extends State<_Palette> {
                 children: [
                   TextField(
                     controller: _input,
-                    autofocus: true,
+                    autofocus: autoKeyboard,
                     contextMenuBuilder: textFieldMenu,
                     textInputAction: TextInputAction.go,
                     onChanged: (_) => setState(() => _index = 0),

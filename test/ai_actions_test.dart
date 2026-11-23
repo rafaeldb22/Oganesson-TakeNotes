@@ -109,6 +109,17 @@ void main() {
     repo.dispose();
   });
 
+  test('una tarea pasa a Completadas a los 10 minutos', () {
+    final repo = _repo();
+    final n = repo.temporales.first;
+    repo.toggleDone(n.id);
+    n.doneAt = DateTime.now().toUtc().subtract(const Duration(minutes: 9));
+    expect(repo.isArchived(n), isFalse);
+    n.doneAt = DateTime.now().toUtc().subtract(const Duration(minutes: 10));
+    expect(repo.isArchived(n), isTrue);
+    repo.dispose();
+  });
+
   test('las fuentes se guardan con el mensaje', () {
     final m = AiMessage(AiRole.assistant, 'hola', sources: ['a', 'b']);
     final back = AiMessage.fromJson(jsonDecode(jsonEncode(m.toJson())))!;

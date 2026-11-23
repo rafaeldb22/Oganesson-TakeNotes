@@ -154,8 +154,20 @@ that it still arrives. On Windows, check toasts are enabled first:
   sees images through the `read_note_images` tool, which reads each one with `aiReadMedia`.
 - Smooth wheel scrolling: use `SmoothScrollController` (`lib/ui/smooth_scroll.dart`) for new
   scroll views on desktop.
-- Completed tasks: `Note.doneAt` (column `notes.done_at`); done > 3 days → hidden from lists and
+- Completed tasks: `Note.doneAt` (column `notes.done_at`); done ≥ 10 minutes → hidden from lists and
   shown in ⋯ → Completadas (`lib/ui/completed_sheet.dart`); > 30 days → trash.
+- Whiteboard (2.12): `lib/data/note_board.dart` (model, lasso, eraser) and `lib/ui/whiteboard.dart`.
+  It is a Quill custom embed `oga-board` inside `Note.rich`, so sync, sharing and image cleanup work
+  unchanged. While it is open, `_ctrl` is stale: save through `BoardData.store`, never `_onEdit`.
+- Attachments as data: `lib/data/note_attachments.dart` (`mediaIn`, `withEmbeds`, `withText`). Append
+  through these helpers: inserting before the last newline moves that line's header to the new text.
+  Network file nodes are attachments marked `net` (`net=1` in image sources).
+- Accounts (2.12): migration 012, `lib/data/accounts.dart`, `lib/ui/friends_sheet.dart`. Friends are
+  one-way. `note_shares.email` now holds `u:<account id>`, and the `email` / `owner_email` columns
+  of `note_people` / `my_shared_notes` carry the @username. `login_email` returns the address only
+  for the right password and locks after 8 failures in 15 minutes.
+- Android keyboard: use `autoKeyboard` (`lib/ui/anim.dart`) instead of `autofocus: true` on text
+  fields.
 - `lib/data/updater.dart` — checks GitHub Releases (`AppConfig.githubRepo`) and installs the
   update (Windows: silent Inno Setup install that reopens the app; Android: APK + system
   installer). Needs the repository to be public.
@@ -218,6 +230,8 @@ that it still arrives. On Windows, check toasts are enabled first:
 - Migration 011 ties shares to an existing account id, so sign-up needs no confirmation email. Run
   it **before** turning off *Confirm email*. Password recovery needs `{{ .Token }}` in the Supabase
   *Reset Password* email template.
+- Migration 012 (@usernames, friends) must be run by hand in the SQL Editor. Until then the app
+  keeps working with email sign-in and email sharing.
 - Images: not yet verified on a real phone (Android paste via pasteboard, camera, saving to the
   gallery on Android < 10).
 - Vault password reset by email code needs the Supabase *Magic Link* email template to include

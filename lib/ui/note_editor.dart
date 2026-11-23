@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 
@@ -6,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_quill/flutter_quill.dart';
 
+import '../data/note_board.dart';
 import '../data/note_links.dart';
 import '../data/notes_repository.dart';
 import '../models/note.dart';
@@ -27,6 +29,7 @@ import 'smooth_scroll.dart';
 import 'text_menu.dart';
 import 'theme.dart';
 import 'urgency.dart';
+import 'whiteboard.dart';
 import 'i18n.dart';
 
 /// Editor de una nota con formato (negrita, títulos, listas, casillas,
@@ -82,7 +85,74 @@ class _NoteEditorState extends State<NoteEditor> {
   bool _caretByImage = false;
   String _lastSaved = '';
 
+  /// Modo pizarra: mientras existe, `_ctrl` no se toca y se guarda el Delta
+  /// de la nota directamente.
+  BoardController? _board;
+  Timer? _boardSave;
+
   NotesRepository get repo => widget.repo;
+
+  void _enterBoard() {
+    final n = repo.byId(widget.noteId);
+    if (n == null || _board != null) return;
+    _focus.unfocus();
+    setState(() {
+      _board = BoardController(BoardData.of(n.rich) ?? BoardData(),
+          onChanged: _queueBoardSave);
+    });
+    _saveBoard();
+  }
+
+  void _leaveBoard() {
+    _boardSave?.cancel();
+    _saveBoard(active: false);
+    final n = repo.byId(widget.noteId);
+    final old = _board;
+    // Sin pizarra guardada el texto no ha cambiado (y conserva su formato).
+    if (n != null && BoardData.of(n.rich) != null) {
+      _applyingRemote = true;
+      _ctrl.document = _docFor(n);
+      _ctrl.updateSelection(
+          const TextSelection.collapsed(offset: 0), ChangeSource.local);
+      _lastSaved = _richJson();
+      _applyingRemote = false;
+      // Mismo Delta que Quill: si no, cada aviso lo volvería a aplicar.
+      if (repo.canEdit(n) && n.rich != _lastSaved) {
+        repo.updateContent(widget.noteId, _plain(), rich: _lastSaved);
+      }
+    }
+    setState(() => _board = null);
+    WidgetsBinding.instance.addPostFrameCallback((_) => old?.dispose());
+  }
+
+  void _queueBoardSave() {
+    _boardSave?.cancel();
+    _boardSave = Timer(const Duration(milliseconds: 500), _saveBoard);
+  }
+
+  void _saveBoard({bool active = true}) {
+    final c = _board;
+    final n = repo.byId(widget.noteId);
+    if (c == null || n == null || !repo.canEdit(n)) return;
+    // Abrir la pizarra sin dibujar no convierte una nota vacía en nota real.
+    if (c.isEmpty && BoardData.of(n.rich) == null) return;
+    final (content, rich) = BoardData.store(
+        n.content, n.rich ?? _richJson(), c.toData(active: active));
+    if (rich == n.rich) return;
+    _lastSaved = rich;
+    _lastTyped = DateTime.now();
+    repo.updateContent(widget.noteId, content, rich: rich);
+  }
+
+  /// Cambios de la pizarra que llegan desde otro dispositivo.
+  void _syncBoard(Note n) {
+    final c = _board;
+    if (c == null || c.busy) return;
+    final remote = BoardData.of(n.rich);
+    if (remote == null) return;
+    remote.active = true;
+    if (remote.encode() != c.toData().encode()) c.load(remote);
+  }
 
   static Document _docFor(Note? n) {
     if (n?.rich != null) {
@@ -133,18 +203,31 @@ class _NoteEditorState extends State<NoteEditor> {
       _ctrl.formatSelection(Attribute.h1);
     }
     _lastSaved = _richJson();
+    // Va antes que el listener del editor: en el móvil, los cambios que no
+    // vienen de tocar el texto no deben abrir el teclado.
+    _ctrl.addListener(_guardKeyboard);
+    _guardKeyboard();
     _ctrl.addListener(_onEdit);
     _ctrl.addListener(_onCaret);
     repo.addListener(_onRepo);
     _focus.addListener(_onFocus);
+    final saved = BoardData.of(n?.rich);
+    if (saved?.active == true) {
+      _board = BoardController(saved!, onChanged: _queueBoardSave);
+    }
+  }
+
+  void _guardKeyboard() {
+    if (!autoKeyboard) _ctrl.ignoreFocusOnTextChange = !_focus.hasFocus;
   }
 
   void _onFocus() {
+    _guardKeyboard();
     if (mounted) setState(() {});
   }
 
   void _onEdit() {
-    if (_applyingRemote || _closing) return;
+    if (_applyingRemote || _closing || _board != null) return;
     final rich = _richJson();
     if (rich == _lastSaved) return; // solo cambió el cursor
     _lastSaved = rich;
@@ -183,6 +266,14 @@ class _NoteEditorState extends State<NoteEditor> {
       return;
     }
     final remoteRich = n.rich ?? jsonEncode(_docFor(n).toDelta().toJson());
+    if (_board != null) {
+      if (!recentlyTyped && remoteRich != _lastSaved) {
+        _lastSaved = remoteRich;
+        _syncBoard(n);
+      }
+      setState(() {});
+      return;
+    }
     if (!recentlyTyped && remoteRich != _lastSaved) {
       _applyingRemote = true;
       final sel = _ctrl.selection.baseOffset;
@@ -199,7 +290,13 @@ class _NoteEditorState extends State<NoteEditor> {
 
   @override
   void dispose() {
+    if (_boardSave?.isActive ?? false) {
+      _boardSave!.cancel();
+      _saveBoard();
+    }
+    _board?.dispose();
     repo.removeListener(_onRepo);
+    _ctrl.removeListener(_guardKeyboard);
     _ctrl.removeListener(_onEdit);
     _ctrl.removeListener(_onCaret);
     _focus.removeListener(_onFocus);
@@ -326,6 +423,22 @@ class _NoteEditorState extends State<NoteEditor> {
               ),
               onPressed: () => showScheduleSheet(context, repo, widget.noteId),
             ),
+          // Modo pizarra, junto al reloj.
+          if (n != null)
+            _iconAction(
+              tooltip:
+                  _board != null ? tr('Volver al texto') : tr('Modo pizarra'),
+              icon: AnimatedSwitcher(
+                duration: Anim.medium,
+                transitionBuilder: (c, a) =>
+                    ScaleTransition(scale: a, child: c),
+                child: Icon(
+                  _board != null ? Icons.notes_rounded : Icons.gesture_rounded,
+                  key: ValueKey(_board != null),
+                ),
+              ),
+              onPressed: _board != null ? _leaveBoard : _enterBoard,
+            ),
           // Color de la nota (y de su mecha)
           if (!foreign && n?.isTemporal == true)
             _iconAction(
@@ -381,12 +494,15 @@ class _NoteEditorState extends State<NoteEditor> {
                   ),
                 ),
               ),
-            _iconAction(
-              tooltip:
-                  _toolbarOpen ? tr('Ocultar formato') : tr('Mostrar formato'),
-              icon: Icon(_toolbarOpen ? Icons.text_format : Icons.text_fields),
-              onPressed: () => setState(() => _toolbarOpen = !_toolbarOpen),
-            ),
+            if (_board == null)
+              _iconAction(
+                tooltip: _toolbarOpen
+                    ? tr('Ocultar formato')
+                    : tr('Mostrar formato'),
+                icon:
+                    Icon(_toolbarOpen ? Icons.text_format : Icons.text_fields),
+                onPressed: () => setState(() => _toolbarOpen = !_toolbarOpen),
+              ),
             PopupMenuButton<String>(
               tooltip: tr('Más'),
               icon: const Icon(Icons.more_horiz_rounded),
@@ -471,22 +587,25 @@ class _NoteEditorState extends State<NoteEditor> {
                               : Icons.push_pin_outlined),
                           title: Text(
                               pinned ? tr('Desfijar') : tr('Fijar arriba')))),
-                PopupMenuItem(
-                    value: 'formato',
-                    child: ListTile(
-                        dense: true,
-                        contentPadding: EdgeInsets.zero,
-                        leading: const Icon(Icons.text_format),
-                        title: Text(_toolbarOpen
-                            ? tr('Ocultar formato')
-                            : tr('Mostrar formato')))),
-                PopupMenuItem(
-                    value: 'imagen',
-                    child: ListTile(
-                        dense: true,
-                        contentPadding: EdgeInsets.zero,
-                        leading: const Icon(Icons.add_photo_alternate_outlined),
-                        title: Text(tr('Añadir imagen')))),
+                if (_board == null)
+                  PopupMenuItem(
+                      value: 'formato',
+                      child: ListTile(
+                          dense: true,
+                          contentPadding: EdgeInsets.zero,
+                          leading: const Icon(Icons.text_format),
+                          title: Text(_toolbarOpen
+                              ? tr('Ocultar formato')
+                              : tr('Mostrar formato')))),
+                if (_board == null && writable)
+                  PopupMenuItem(
+                      value: 'imagen',
+                      child: ListTile(
+                          dense: true,
+                          contentPadding: EdgeInsets.zero,
+                          leading:
+                              const Icon(Icons.add_photo_alternate_outlined),
+                          title: Text(tr('Añadir imagen')))),
                 PopupMenuItem(
                     value: 'historial',
                     child: ListTile(
@@ -565,161 +684,190 @@ class _NoteEditorState extends State<NoteEditor> {
                     child: c,
                   ),
                 ),
-                child: _toolbarOpen
-                    ? EditorToolbar(
-                        key: const ValueKey('barra-formato'),
-                        controller: _ctrl,
+                child: _board != null
+                    ? BoardToolbar(
+                        key: const ValueKey('barra-pizarra'),
+                        controller: _board!,
                         readOnly: !writable,
-                        onImage: !writable
-                            ? null
-                            : () => pickAndInsertImages(context, _ctrl),
-                        onLink: foreign
-                            ? null
-                            : () => showLinkNotesPicker(
-                                context, repo, widget.noteId),
-                        onVoice: !writable
-                            ? null
-                            : () => showVoiceRecorder(context, _ctrl),
-                        onAttach: !writable
-                            ? null
-                            : () => pickAndAttachFiles(context, _ctrl),
-                        onDraw: !writable ? null : _draw,
                         onShare: n == null || n.vault
                             ? null
                             : () => showShareSheet(context, repo, n.id),
-                        // Ni las del Vault ni las de otra persona van a la IA.
                         onAi: n == null || n.vault || foreign
                             ? null
                             : () => showNoteAiActions(context, repo, n.id),
                       )
-                    : const SizedBox(
-                        key: ValueKey('sin-barra'), width: double.infinity),
+                    : _toolbarOpen
+                        ? EditorToolbar(
+                            key: const ValueKey('barra-formato'),
+                            controller: _ctrl,
+                            readOnly: !writable,
+                            onImage: !writable
+                                ? null
+                                : () => pickAndInsertImages(context, _ctrl),
+                            onLink: foreign
+                                ? null
+                                : () => showLinkNotesPicker(
+                                    context, repo, widget.noteId),
+                            onVoice: !writable
+                                ? null
+                                : () => showVoiceRecorder(context, _ctrl),
+                            onAttach: !writable
+                                ? null
+                                : () => pickAndAttachFiles(context, _ctrl),
+                            onDraw: !writable ? null : _draw,
+                            onShare: n == null || n.vault
+                                ? null
+                                : () => showShareSheet(context, repo, n.id),
+                            // Ni las del Vault ni las de otra persona van a la IA.
+                            onAi: n == null || n.vault || foreign
+                                ? null
+                                : () => showNoteAiActions(context, repo, n.id),
+                          )
+                        : const SizedBox(
+                            key: ValueKey('sin-barra'), width: double.infinity),
               ),
             ),
-            Expanded(
-              child: Center(
-                child: ConstrainedBox(
-                  // En ventanas muy anchas el texto no se estira de lado a lado.
-                  constraints: const BoxConstraints(maxWidth: 860),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
-                    child: Column(
-                      children: [
-                        const SizedBox(height: 8),
-                        if (n != null && n.isTemporal)
-                          _TemporalBanner(
-                            note: n,
-                            onToggleDone:
-                                foreign ? () {} : () => repo.toggleDone(n.id),
-                            onEdit: foreign
-                                ? () {}
-                                : () => showScheduleSheet(context, repo, n.id),
-                          ),
-                        if (foreign)
-                          _SharedBanner(
-                            owner: repo.incomingShare(n.id)?.ownerEmail,
-                            canEdit: writable,
-                          ),
-                        if (n != null)
-                          Padding(
-                            padding: const EdgeInsets.only(bottom: 8),
-                            child: Text(
-                              fechaLarga(n.updatedAt),
-                              style: TextStyle(
-                                  color: Palette.secondary(context),
-                                  fontSize: 13),
+            if (_board != null)
+              Expanded(
+                child: Whiteboard(
+                  key: const ValueKey('pizarra-nota'),
+                  controller: _board!,
+                  readOnly: !writable,
+                ).animate().fadeIn(duration: Anim.medium, curve: Anim.curve),
+              )
+            else
+              Expanded(
+                child: Center(
+                  child: ConstrainedBox(
+                    // En ventanas muy anchas el texto no se estira de lado a lado.
+                    constraints: const BoxConstraints(maxWidth: 860),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      child: Column(
+                        children: [
+                          const SizedBox(height: 8),
+                          if (n != null && n.isTemporal)
+                            _TemporalBanner(
+                              note: n,
+                              onToggleDone:
+                                  foreign ? () {} : () => repo.toggleDone(n.id),
+                              onEdit: foreign
+                                  ? () {}
+                                  : () =>
+                                      showScheduleSheet(context, repo, n.id),
                             ),
-                          ),
-                        Expanded(
-                          child: ImageDropZone(
-                            onImages: (images) =>
-                                insertImages(context, _ctrl, images),
-                            child: ImageMoveTarget(
-                              controller: _ctrl,
-                              editorKey: _editorKey,
-                              child: NoteMediaScope(
-                                allowAi: n != null && !n.vault && !foreign,
-                                child: QuillEditor(
-                                  controller: _ctrl,
-                                  focusNode: _focus,
-                                  scrollController: _scroll,
-                                  config: QuillEditorConfig(
-                                    editorKey: _editorKey,
-                                    showCursor: !_caretByImage,
-                                    placeholder: tr('Escribe algo…'),
-                                    autoFocus: widget.autofocus,
-                                    expands: true,
-                                    padding: const EdgeInsets.only(bottom: 40),
-                                    customStyles: _styles(context),
-                                    // Imágenes: se dibujan con su propio estilo,
-                                    // Ctrl+V pega capturas y el teclado de Android
-                                    // puede insertar imágenes directamente.
-                                    embedBuilders: const [
-                                      NoteImageEmbedBuilder(),
-                                      NoteFileEmbedBuilder(),
-                                    ],
-                                    customShortcuts:
-                                        widget.onCommandPalette == null
-                                            ? null
-                                            : const {
-                                                SingleActivator(
-                                                  LogicalKeyboardKey.keyK,
-                                                  control: true,
-                                                ): _PaletteIntent(),
-                                              },
-                                    customActions: widget.onCommandPalette ==
-                                            null
-                                        ? null
-                                        : {
-                                            _PaletteIntent:
-                                                CallbackAction<_PaletteIntent>(
-                                              onInvoke: (_) {
-                                                widget.onCommandPalette!();
-                                                return null;
-                                              },
-                                            ),
-                                          },
-                                    contentInsertionConfiguration:
-                                        ContentInsertionConfiguration(
-                                      allowedMimeTypes: const [
-                                        'image/png',
-                                        'image/jpeg',
-                                        'image/gif',
-                                        'image/webp',
+                          if (foreign)
+                            _SharedBanner(
+                              owner: repo.incomingShare(n.id)?.ownerEmail,
+                              canEdit: writable,
+                            ),
+                          if (n != null)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 8),
+                              child: Text(
+                                fechaLarga(n.updatedAt),
+                                style: TextStyle(
+                                    color: Palette.secondary(context),
+                                    fontSize: 13),
+                              ),
+                            ),
+                          Expanded(
+                            child: ImageDropZone(
+                              onImages: (images) =>
+                                  insertImages(context, _ctrl, images),
+                              child: ImageMoveTarget(
+                                controller: _ctrl,
+                                editorKey: _editorKey,
+                                child: NoteMediaScope(
+                                  allowAi: n != null && !n.vault && !foreign,
+                                  child: QuillEditor(
+                                    controller: _ctrl,
+                                    focusNode: _focus,
+                                    scrollController: _scroll,
+                                    config: QuillEditorConfig(
+                                      editorKey: _editorKey,
+                                      showCursor: !_caretByImage,
+                                      placeholder: tr('Escribe algo…'),
+                                      // En el móvil el teclado solo sale al
+                                      // tocar el texto.
+                                      autoFocus:
+                                          widget.autofocus && autoKeyboard,
+                                      expands: true,
+                                      padding:
+                                          const EdgeInsets.only(bottom: 40),
+                                      customStyles: _styles(context),
+                                      // Imágenes: se dibujan con su propio estilo,
+                                      // Ctrl+V pega capturas y el teclado de Android
+                                      // puede insertar imágenes directamente.
+                                      embedBuilders: [
+                                        const NoteImageEmbedBuilder(),
+                                        const NoteFileEmbedBuilder(),
+                                        NoteBoardEmbedBuilder(
+                                            onOpen: _enterBoard),
                                       ],
-                                      onContentInserted: (c) {
-                                        final data = c.data;
-                                        if (data != null && data.isNotEmpty) {
-                                          insertImages(context, _ctrl, [data]);
-                                        }
-                                      },
+                                      customShortcuts:
+                                          widget.onCommandPalette == null
+                                              ? null
+                                              : const {
+                                                  SingleActivator(
+                                                    LogicalKeyboardKey.keyK,
+                                                    control: true,
+                                                  ): _PaletteIntent(),
+                                                },
+                                      customActions: widget.onCommandPalette ==
+                                              null
+                                          ? null
+                                          : {
+                                              _PaletteIntent: CallbackAction<
+                                                  _PaletteIntent>(
+                                                onInvoke: (_) {
+                                                  widget.onCommandPalette!();
+                                                  return null;
+                                                },
+                                              ),
+                                            },
+                                      contentInsertionConfiguration:
+                                          ContentInsertionConfiguration(
+                                        allowedMimeTypes: const [
+                                          'image/png',
+                                          'image/jpeg',
+                                          'image/gif',
+                                          'image/webp',
+                                        ],
+                                        onContentInserted: (c) {
+                                          final data = c.data;
+                                          if (data != null && data.isNotEmpty) {
+                                            insertImages(
+                                                context, _ctrl, [data]);
+                                          }
+                                        },
+                                      ),
+                                      // Menú de cortar/copiar/pegar con el estilo de la app.
+                                      contextMenuBuilder: (context, state) =>
+                                          buildTextMenu(
+                                              context,
+                                              state.contextMenuButtonItems,
+                                              state.contextMenuAnchors),
                                     ),
-                                    // Menú de cortar/copiar/pegar con el estilo de la app.
-                                    contextMenuBuilder: (context, state) =>
-                                        buildTextMenu(
-                                            context,
-                                            state.contextMenuButtonItems,
-                                            state.contextMenuAnchors),
                                   ),
                                 ),
                               ),
                             ),
                           ),
-                        ),
-                        if (n != null)
-                          _LinksBar(
-                            graph: NoteGraph.of(repo),
-                            noteId: n.id,
-                            repo: repo,
-                            onOpen: widget.onOpenNote,
-                            onCreate: _createLinked,
-                          ),
-                      ],
+                          if (n != null)
+                            _LinksBar(
+                              graph: NoteGraph.of(repo),
+                              noteId: n.id,
+                              repo: repo,
+                              onOpen: widget.onOpenNote,
+                              onCreate: _createLinked,
+                            ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
               ),
-            ),
           ],
         ),
       ),

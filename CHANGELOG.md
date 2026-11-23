@@ -2,6 +2,29 @@
 
 All notable changes to Oganesson TakeNotes (formerly *Notas* / *BabuNotes*).
 
+## [2.12.0] — 2026-11-23
+
+### Added
+- **Whiteboard mode**: turn any note into a dotted whiteboard from the top bar. Draw with a mouse,
+  touch screen or graphics tablet, with pen colors, size and pressure, an eraser with size and
+  pressure, and a lasso that closes on release and selects everything inside. Right-click or
+  long-press for paste, copy, cut, duplicate, insert image and more.
+- **@usernames and friends**: every account has an @username, you can add friends and share with
+  them in one tap, and sign in with your @username and password.
+- **Files in the note network**: right-click a note to connect images, voice messages or files.
+  They appear as larger bordered circles and open with a click.
+- **The AI can reuse attachments**: it can copy images, voice notes and files from one note to
+  another.
+
+### Changed
+- Completed tasks move to *Completed* after 10 minutes.
+- On Android, the keyboard only opens when you tap somewhere to type.
+- Shared notes show @usernames instead of email addresses.
+
+### Fixed
+- The AI now formats the first line of a note as its title, not the last one.
+- Calendar tasks no longer hide behind **+N** when their day has free space.
+
 ## [2.11.0] — 2026-11-23
 
 ### Added

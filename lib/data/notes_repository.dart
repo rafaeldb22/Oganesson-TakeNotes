@@ -223,18 +223,29 @@ class NotesRepository extends ChangeNotifier {
       });
   }
 
-  /// Días que una nota completada sigue en las listas antes de pasar a
+  /// Minutos que una nota completada sigue en las listas antes de pasar a
   /// "Completadas", y días que se guarda allí antes de ir a la papelera.
-  static const completedAfterDays = 3;
+  static const completedAfterMinutes = 10;
   static const completedKeepDays = 30;
 
   DateTime _doneSince(Note n) => n.doneAt ?? n.updatedAt;
 
-  /// Completada hace más de 3 días: ya no sale en las listas.
+  /// Completada hace 10 minutos o más: ya no sale en las listas.
   bool isArchived(Note n) =>
       n.done &&
-      DateTime.now().toUtc().difference(_doneSince(n)).inDays >=
-          completedAfterDays;
+      DateTime.now().toUtc().difference(_doneSince(n)).inMinutes >=
+          completedAfterMinutes;
+
+  int _completedCount = 0;
+
+  /// El paso a "Completadas" depende del reloj: sin esto la lista no se
+  /// actualizaría hasta el siguiente cambio.
+  void _refreshCompleted() {
+    final count = _notes.values.where(isArchived).length;
+    if (count == _completedCount) return;
+    _completedCount = count;
+    _notify();
+  }
 
   /// Notas en "Completadas", las más recientes primero.
   List<Note> get completed => _notes.values
@@ -415,7 +426,11 @@ class NotesRepository extends ChangeNotifier {
     _notify();
     _subscribe();
     unawaited(sync());
-    _periodic = Timer.periodic(const Duration(seconds: 45), (_) => sync());
+    _completedCount = _notes.values.where(isArchived).length;
+    _periodic = Timer.periodic(const Duration(seconds: 45), (_) {
+      _refreshCompleted();
+      sync();
+    });
   }
 
   @override

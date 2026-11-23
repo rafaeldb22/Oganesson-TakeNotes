@@ -202,7 +202,7 @@ class _UnlockDialogState extends State<_UnlockDialog> {
             _PasswordField(
               controller: _pass,
               hint: tr('Contraseña maestra'),
-              autofocus: true,
+              autofocus: autoKeyboard,
               enabled: !_busy,
               onSubmitted: _submit,
             ),
@@ -373,7 +373,7 @@ class _NewPasswordDialogState extends State<_NewPasswordDialog> {
                     icon: _useAccount
                         ? Icons.account_circle_outlined
                         : Icons.key_rounded,
-                    autofocus: true,
+                    autofocus: autoKeyboard,
                     enabled: !_busy),
               ),
               // Cambiar entre la contraseña del Vault y la de la cuenta.
@@ -408,7 +408,7 @@ class _NewPasswordDialogState extends State<_NewPasswordDialog> {
                     widget.mode == _Mode.change || widget.mode == _Mode.account
                         ? tr('Contraseña nueva')
                         : tr('Contraseña maestra'),
-                autofocus:
+                autofocus: autoKeyboard &&
                     widget.mode != _Mode.change && widget.mode != _Mode.account,
                 enabled: !_busy),
             const SizedBox(height: 10),
@@ -539,7 +539,7 @@ class _ResetDialogState extends State<_ResetDialog> {
                 TextField(
                   contextMenuBuilder: textFieldMenu,
                   controller: _code,
-                  autofocus: true,
+                  autofocus: autoKeyboard,
                   enabled: !_busy,
                   keyboardType: TextInputType.number,
                   maxLength: 6,

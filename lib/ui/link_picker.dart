@@ -97,7 +97,7 @@ class _LinkPickerState extends State<_LinkPicker> {
             TextField(
               contextMenuBuilder: textFieldMenu,
               controller: _query,
-              autofocus: true,
+              autofocus: autoKeyboard,
               onChanged: (_) => setState(() {}),
               decoration: InputDecoration(
                 hintText: tr('Buscar notas…'),

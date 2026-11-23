@@ -184,6 +184,7 @@ class Note {
   String get title {
     final l = _lines;
     if (l.isNotEmpty) return l.first;
+    if (rich?.contains('oga-board') ?? false) return tr('Nota de pizarra');
     if (hasImages) return tr('Imagen');
     return hasFiles ? tr('Adjunto') : tr('Nota nueva');
   }

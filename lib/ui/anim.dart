@@ -1,4 +1,10 @@
+import 'dart:io' show Platform;
+
 import 'package:flutter/material.dart';
+
+/// En el móvil el teclado solo se abre cuando el usuario toca un campo; en
+/// el PC los campos pueden enfocarse solos.
+final bool autoKeyboard = !Platform.isAndroid;
 
 /// Curvas y duraciones comunes para que todo se mueva igual.
 class Anim {

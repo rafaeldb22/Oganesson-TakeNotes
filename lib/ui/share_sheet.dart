@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 
 import '../config.dart';
+import '../data/accounts.dart';
 import '../data/note_sharing.dart';
 import '../data/notes_repository.dart';
 import 'anim.dart';
+import 'friends_sheet.dart';
 import 'i18n.dart';
 import 'theme.dart';
 import 'toast.dart';
@@ -35,6 +37,7 @@ class _ShareSheetState extends State<_ShareSheet> {
   final _email = TextEditingController();
   late final NoteSharing _api = NoteSharing(widget.repo.client);
   List<SharePerson> _people = const [];
+  List<Person> _friends = const [];
   String _role = 'edit';
   bool _loading = !AppConfig.demo;
   bool _busy = false;
@@ -49,7 +52,18 @@ class _ShareSheetState extends State<_ShareSheet> {
   @override
   void initState() {
     super.initState();
-    if (!AppConfig.demo) _load();
+    if (!AppConfig.demo) {
+      _load();
+      _loadFriends();
+    }
+  }
+
+  /// Sin la migración 012 simplemente no hay lista de amigos.
+  Future<void> _loadFriends() async {
+    try {
+      final f = await Accounts(widget.repo.client).friends();
+      if (mounted) setState(() => _friends = f);
+    } on AccountException catch (_) {}
   }
 
   @override
@@ -95,14 +109,16 @@ class _ShareSheetState extends State<_ShareSheet> {
     }
   }
 
-  void _invite() {
-    final email = _email.text.trim();
-    if (email.isEmpty) return;
+  void _invite([String? target]) {
+    final raw = (target ?? _email.text).trim();
+    if (raw.isEmpty) return;
+    // Sin arroba también vale: se entiende como @nombre.
+    final who = isUsernameLogin(raw) ? '@${cleanUsername(raw)}' : raw;
     _run(() async {
-      await _api.share(widget.noteId, email, _role);
-      _email.clear();
+      await _api.share(widget.noteId, who, _role);
+      if (target == null) _email.clear();
       if (mounted) {
-        showToast(context, trf('Compartida con {0}', [email.toLowerCase()]),
+        showToast(context, trf('Compartida con {0}', [who.toLowerCase()]),
             icon: Icons.group_add_outlined);
       }
     });
@@ -146,6 +162,8 @@ class _ShareSheetState extends State<_ShareSheet> {
     final p = Palette.of(context);
     final foreign = _foreign;
     final canInvite = !foreign && !AppConfig.demo;
+    final inNote = {for (final x in _people) x.email};
+    final friends = _friends.where((f) => !inNote.contains(f.handle)).toList();
     return Padding(
       padding: EdgeInsets.fromLTRB(
           20, 0, 20, 16 + MediaQuery.viewInsetsOf(context).bottom),
@@ -160,10 +178,27 @@ class _ShareSheetState extends State<_ShareSheet> {
           Text(
               foreign
                   ? tr('Otra persona te ha dado acceso a esta nota.')
-                  : tr('Escribe el correo de una cuenta de Oganesson.'),
+                  : tr('Elige un amigo o escribe su @nombre o correo.'),
               style: TextStyle(color: p.secondary, fontSize: 13)),
           const SizedBox(height: 14),
           if (canInvite) ...[
+            if (friends.isNotEmpty) ...[
+              SizedBox(
+                height: 38,
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: friends.length,
+                  separatorBuilder: (_, __) => const SizedBox(width: 6),
+                  itemBuilder: (_, i) => ActionChip(
+                    avatar: Icon(Icons.person_add_alt_rounded,
+                        size: 16, color: p.accent),
+                    label: Text(friends[i].handle),
+                    onPressed: _busy ? null : () => _invite(friends[i].handle),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
+            ],
             TextField(
               key: const ValueKey('correo-compartir'),
               controller: _email,
@@ -171,7 +206,7 @@ class _ShareSheetState extends State<_ShareSheet> {
               autocorrect: false,
               onSubmitted: (_) => _invite(),
               decoration: InputDecoration(
-                hintText: tr('Correo de la otra cuenta'),
+                hintText: tr('@nombre o correo'),
                 prefixIcon: const Icon(Icons.alternate_email_rounded, size: 19),
                 isDense: true,
                 filled: true,
@@ -204,7 +239,7 @@ class _ShareSheetState extends State<_ShareSheet> {
                 const SizedBox(width: 10),
                 Bouncy(
                   child: FilledButton(
-                    onPressed: _busy ? null : _invite,
+                    onPressed: _busy ? null : () => _invite(),
                     child: Text(tr('Compartir')),
                   ),
                 ),
@@ -245,13 +280,7 @@ class _ShareSheetState extends State<_ShareSheet> {
                       key: ValueKey(person.email),
                       dense: true,
                       contentPadding: EdgeInsets.zero,
-                      leading: CircleAvatar(
-                        radius: 16,
-                        backgroundColor: p.accent.withValues(alpha: 0.15),
-                        child: Text(person.email[0].toUpperCase(),
-                            style: TextStyle(
-                                color: p.accent, fontWeight: FontWeight.w800)),
-                      ),
+                      leading: PersonAvatar(name: person.email),
                       title: Text(person.email,
                           maxLines: 1, overflow: TextOverflow.ellipsis),
                       subtitle: Text(switch (person.role) {
