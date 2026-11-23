@@ -944,6 +944,12 @@ const enStrings = <String, String>{
   "¿Eliminar la pizarra?": "Delete the whiteboard?",
   "Podrás recuperarla desde el historial de versiones.":
       "You can bring it back from the version history.",
+  // 3.2
+  "Mirando el calendario…": "Checking the calendar…",
+  "He llegado al límite de pasos. Dime «sigue» y continúo.":
+      "I reached the step limit. Say “continue” and I'll carry on.",
+  "No he podido responder. Prueba a pedírmelo de otra forma.":
+      "I couldn't answer. Try asking in a different way.",
   // 3.1
   "La IA quiere añadir texto a «{0}». ¿Añadirlo?":
       "The AI wants to add text to “{0}”. Add it?",

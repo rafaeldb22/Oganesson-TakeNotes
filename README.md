@@ -52,6 +52,7 @@
 - 🤖 **The AI asks before each change**, one at a time, so you can accept some and reject others.
 - 📅 **All-day tasks** last until the end of the day, with no end time.
 - ⏳ **The time-left banner** now sits at the bottom of the note.
+- 🧠 **New in 3.2:** a faster, smarter AI that can also read your imported `.ics` calendars and plan around them.
 
 ## See it in action
 

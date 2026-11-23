@@ -111,6 +111,8 @@ that it still arrives. On Windows, check toasts are enabled first:
   `AiSession` (keeps the raw model `content` so Gemini's thought signatures are sent back).
   UI: `lib/ui/assistant_panel.dart` (`openAssistant`: right panel on wide, bottom sheet on phone).
   Free-tier limits are per Google project and only shown in AI Studio (reset at midnight PT).
+  Imported `.ics` events are read-only for the AI: `list_calendar` and `read_note` only (`_note()`
+  rejects them). Read-only tools run in parallel; each change asks through `confirm`, one by one.
   The system prompt must stay **static** (prompt caching): per-turn data (date, time, folders) goes
   in a `<contexto>` block appended to each user message (`AiSession._context`). Claude requests send
   top-level `cache_control` and `output_config.effort: low`. Retryable errors (`AiException.retryable`)

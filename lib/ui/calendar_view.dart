@@ -472,22 +472,67 @@ class _MonthGrid extends StatelessWidget {
           for (var w = 0; w < 6; w++)
             SizedBox(
               height: cellHeight,
-              child: Row(
+              child: Stack(
                 children: [
-                  for (var d = 0; d < 7; d++)
-                    Expanded(
-                      child: Builder(builder: (context) {
-                        final day = DateTime(gridStart.year, gridStart.month,
-                            gridStart.day + w * 7 + d);
-                        return _cell(context, day, today, weeks[w][day]!);
-                      }),
+                  Row(
+                    children: [
+                      for (var d = 0; d < 7; d++)
+                        Expanded(
+                          child: Builder(builder: (context) {
+                            final day = DateTime(gridStart.year,
+                                gridStart.month, gridStart.day + w * 7 + d);
+                            return _cell(context, day, today, weeks[w][day]!);
+                          }),
+                        ),
+                    ],
+                  ),
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      child: CustomPaint(
+                        painter: _WeekLines(_linesOfWeek(
+                            context,
+                            DateTime(gridStart.year, gridStart.month,
+                                gridStart.day + w * 7),
+                            weeks[w])),
+                      ),
                     ),
+                  ),
                 ],
               ),
             ),
         ],
       ),
     );
+  }
+
+  /// Una línea por tarea y semana: pintada de una pieza no deja marcas entre
+  /// días. Cada día lleva su tono, y al cambiar de mes se funden.
+  List<_WeekLine> _linesOfWeek(
+      BuildContext context, DateTime monday, Map<DateTime, DaySlots> week) {
+    DateTime at(int d) => DateTime(monday.year, monday.month, monday.day + d);
+    final lines = <_WeekLine>[];
+    for (var lane = 0; lane < _maxLanes; lane++) {
+      for (var d = 0; d < 7; d++) {
+        final n = week[at(d)]!.notes[lane];
+        if (n == null) continue;
+        final first = d;
+        while (d < 6 && week[at(d + 1)]!.notes[lane]?.id == n.id) {
+          d++;
+        }
+        final base = n.done
+            ? Palette.secondary(context)
+            : (n.color != null
+                ? Color(n.color!)
+                : fuseForTheme(context, notePalette(n)).first);
+        final alpha = n.done ? 0.6 : 0.95;
+        lines.add(_WeekLine(lane, first, d, [
+          for (var i = first; i <= d; i++)
+            base.withValues(
+                alpha: alpha * (at(i).month == month.month ? 1 : 0.45)),
+        ]));
+      }
+    }
+    return lines;
   }
 
   Widget _cell(
@@ -550,12 +595,6 @@ class _MonthGrid extends StatelessWidget {
                   ),
                 ),
               ),
-              const Spacer(),
-              // La primera fila es la de abajo: las líneas crecen hacia arriba.
-              for (var lane = _maxLanes - 1; lane >= 0; lane--)
-                _laneBar(context, day, slots.notes[lane], inMonth),
-              // Por encima del borde del día seleccionado.
-              const SizedBox(height: 5),
             ],
           ),
           if (extra > 0)
@@ -572,49 +611,48 @@ class _MonthGrid extends StatelessWidget {
       ),
     );
   }
+}
 
-  /// Línea recta: los días de una tarea van unidos. Se redondea en su inicio,
-  /// su final y los bordes de la semana, para que todas acaben a la misma
-  /// altura, y se funde con suavidad al pasar a otro mes.
-  Widget _laneBar(BuildContext context, DateTime day, Note? n, bool inMonth) {
-    if (n == null) return const SizedBox(height: _barHeight + _barGap);
-    final capLeft =
-        day == _day(n.periodStart.toLocal()) || day.weekday == DateTime.monday;
-    final capRight =
-        day == _day(n.dueAt!.toLocal()) || day.weekday == DateTime.sunday;
-    const outside = 0.45, border = (1 + outside) / 2;
-    final fade = inMonth ? 1.0 : outside;
-    bool inside(int offset) =>
-        DateTime(day.year, day.month, day.day + offset).month == month.month;
-    final fadeLeft = !capLeft && inside(-1) != inMonth ? border : fade;
-    final fadeRight = !capRight && inside(1) != inMonth ? border : fade;
-    final base = n.done
-        ? Palette.secondary(context)
-        : (n.color != null
-            ? Color(n.color!)
-            : fuseForTheme(context, notePalette(n)).first);
-    final alpha = n.done ? 0.6 : 0.95;
-    return Padding(
-      padding: EdgeInsets.only(
-        left: capLeft ? _dayGap : 0,
-        right: capRight ? _dayGap : 0,
-        bottom: _barGap,
-      ),
-      child: Container(
-        height: _barHeight,
-        decoration: BoxDecoration(
-          gradient: LinearGradient(colors: [
-            base.withValues(alpha: alpha * fadeLeft),
-            base.withValues(alpha: alpha * fadeRight),
-          ]),
-          borderRadius: BorderRadius.horizontal(
-            left: Radius.circular(capLeft ? _barHeight / 2 : 0),
-            right: Radius.circular(capRight ? _barHeight / 2 : 0),
-          ),
-        ),
-      ),
-    );
+/// Tramo de una tarea en una semana, del día [first] al [last] (0 = lunes).
+class _WeekLine {
+  const _WeekLine(this.lane, this.first, this.last, this.tones);
+  final int lane, first, last;
+  final List<Color> tones;
+}
+
+class _WeekLines extends CustomPainter {
+  const _WeekLines(this.lines);
+  final List<_WeekLine> lines;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    const bar = _MonthGrid._barHeight, step = bar + _MonthGrid._barGap;
+    // Por encima del borde del día seleccionado.
+    const bottom = 5.0;
+    final day = size.width / 7;
+    for (final l in lines) {
+      // La primera fila es la de abajo: las líneas crecen hacia arriba.
+      final top = size.height - bottom - step * (l.lane + 1);
+      final rect = Rect.fromLTWH(l.first * day + _MonthGrid._dayGap, top,
+          (l.last - l.first + 1) * day - _MonthGrid._dayGap * 2, bar);
+      final paint = Paint()..color = l.tones.first;
+      if (l.tones.toSet().length > 1) {
+        paint.shader = LinearGradient(
+          colors: l.tones,
+          stops: [
+            for (var i = 0; i < l.tones.length; i++)
+              (((l.first + i + 0.5) * day - rect.left) / rect.width)
+                  .clamp(0.0, 1.0),
+          ],
+        ).createShader(rect);
+      }
+      canvas.drawRRect(
+          RRect.fromRectAndRadius(rect, const Radius.circular(bar / 2)), paint);
+    }
   }
+
+  @override
+  bool shouldRepaint(_WeekLines old) => true;
 }
 
 class _DayPanel extends StatelessWidget {

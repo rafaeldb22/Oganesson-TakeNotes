@@ -2,6 +2,24 @@
 
 All notable changes to Oganesson TakeNotes (formerly *Notas* / *BabuNotes*).
 
+## [3.2.0] — 2026-11-24
+
+### Added
+- **The AI can read your imported calendars**: `.ics` events stay in the calendar and don't count as
+  notes, but the AI can look them up, summarize them and plan around them. It can't change them.
+- **Agenda for the AI**: it knows what's coming up, what's overdue and which plans clash.
+
+### Changed
+- **Smarter search**: ignores accents, matches by words and puts title matches first.
+- **Faster answers**: the AI reads several notes and files at once and doesn't analyze the same file twice.
+- **Lower usage**: long conversations send only what's needed.
+- **Better replies**: straight to the point, always in the app's language, with useful warnings.
+- The AI can handle longer tasks and read very long notes to the end.
+
+### Fixed
+- Multi-day calendar lines no longer show thin marks between days.
+- The AI no longer leaves a blank reply.
+
 ## [3.1.0] — 2026-11-24
 
 ### Added
