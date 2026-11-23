@@ -42,7 +42,11 @@ jobs:
           cp platform/android/debug.keystore ~/.android/debug.keystore
 
       - name: Build APK
-        run: flutter build apk --release --build-number=${{ github.run_number }}
+        # A second try: a network blip in Gradle or a native download must not
+        # block the whole release.
+        run: |
+          flutter build apk --release --build-number=${{ github.run_number }} ||
+            flutter build apk --release --build-number=${{ github.run_number }}
 
       - run: cp build/app/outputs/flutter-apk/app-release.apk Oganesson.apk
 
