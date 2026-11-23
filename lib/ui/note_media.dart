@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
@@ -14,11 +15,14 @@ import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../data/ai_assistant.dart';
+import '../data/note_attachments.dart';
 import '../data/note_files.dart';
 import '../data/note_images.dart';
+import 'ai_tools_ui.dart';
 import 'anim.dart';
 import 'context_menu.dart';
 import 'i18n.dart';
+import 'image_tools.dart';
 import 'pdf_viewer.dart';
 import 'theme.dart';
 import 'toast.dart';
@@ -216,22 +220,14 @@ Future<void> _showReadResult(
 
 Future<void> _readWithAi(BuildContext context, QuillController? c,
     Uint8List bytes, String mime, String prompt, String title,
-    {void Function(String text)? onInsert}) async {
+    {void Function(String text)? onInsert,
+    void Function(String text)? onResult}) async {
   final nav = Navigator.of(context, rootNavigator: true);
   var open = true;
   unawaited(showDialog<void>(
     context: context,
     barrierDismissible: false,
-    builder: (_) => AlertDialog(
-      content: Row(children: [
-        const SizedBox(
-            width: 22,
-            height: 22,
-            child: CircularProgressIndicator(strokeWidth: 2.5)),
-        const SizedBox(width: 16),
-        Expanded(child: Text(tr('Leyendo con la IA…'))),
-      ]),
-    ),
+    builder: (_) => AiWorkingDialog(label: tr('Leyendo con la IA…')),
   ).whenComplete(() => open = false));
   try {
     final text = await aiReadMedia(bytes, mime, prompt);
@@ -242,6 +238,7 @@ Future<void> _readWithAi(BuildContext context, QuillController? c,
           icon: Icons.info_outline_rounded);
       return;
     }
+    onResult?.call(text.trim());
     await _showReadResult(context, c, title, text.trim(), onInsert: onInsert);
   } on AiException catch (e) {
     if (open) nav.pop();
@@ -273,11 +270,20 @@ Future<void> readImageText(
         aiOcrPrompt,
         tr('Texto de la imagen'));
 
-/// Lee una pizarra con la IA; [onInsert] añade el resultado a la nota.
+/// Lee lo nuevo de una pizarra. [onRead] guarda lo leído y [onInsert] lo
+/// añade a la nota.
 Future<void> readBoardText(BuildContext context, Uint8List png,
-        {required void Function(String text) onInsert}) =>
-    _readWithAi(context, null, png, 'image/png', aiBoardPrompt,
+        {required String previous,
+        required void Function(String text) onRead,
+        required void Function(String text) onInsert}) =>
+    _readWithAi(context, null, png, 'image/png', boardTextPrompt(previous),
         tr('Texto de la pizarra'),
+        onInsert: onInsert, onResult: onRead);
+
+/// Enseña lo ya leído de una pizarra, sin volver a llamar a la IA.
+Future<void> showBoardText(BuildContext context, String text,
+        {required void Function(String text) onInsert}) =>
+    _showReadResult(context, null, tr('Texto de la pizarra'), text,
         onInsert: onInsert);
 
 // ------------------------------------------------------------- nota de voz
@@ -453,7 +459,6 @@ class NoteFileEmbedBuilder extends EmbedBuilder {
   Widget build(BuildContext context, EmbedContext e) {
     final file = NoteFile.parse(e.node.value.data);
     if (file == null) return const SizedBox.shrink();
-    final node = e.node;
     final controller = e.controller;
     return NoteFileCard(
       file: file,
@@ -462,12 +467,29 @@ class NoteFileEmbedBuilder extends EmbedBuilder {
       onDelete: e.readOnly
           ? null
           : () {
-              final o = node.documentOffset;
-              controller.replaceText(
-                  o, 1, '', TextSelection.collapsed(offset: o));
+              final o = fileEmbedOffset(controller.document, file.path);
+              if (o != null) removeEmbedLine(controller, o);
             },
     );
   }
+}
+
+/// Posición de un adjunto en el documento. Quill pasa a los embeds propios
+/// una copia suelta del nodo, cuyo `documentOffset` siempre es 0.
+int? fileEmbedOffset(Document doc, String path) {
+  var at = 0;
+  for (final op in doc.toDelta().toList()) {
+    final v = op.data;
+    if (v is Map &&
+        mediaIn(jsonEncode([
+              {'insert': v}
+            ])).firstOrNull?.path ==
+            path) {
+      return at;
+    }
+    at += op.length ?? 0;
+  }
+  return null;
 }
 
 class NoteFileCard extends StatefulWidget {
@@ -495,6 +517,7 @@ class _NoteFileCardState extends State<NoteFileCard> {
   AudioPlayer? _player;
   final _subs = <StreamSubscription<Object?>>[];
   bool _playing = false;
+  bool _ended = false;
   bool _loading = false;
   Duration _pos = Duration.zero;
   Duration _total = Duration.zero;
@@ -540,6 +563,8 @@ class _NoteFileCardState extends State<NoteFileCard> {
       }
       try {
         player = _player = AudioPlayer();
+        // Por defecto libera el audio al acabar y ya no se puede repetir.
+        await player.setReleaseMode(ReleaseMode.stop);
         _subs
           ..add(player.onPositionChanged.listen((d) {
             if (mounted) setState(() => _pos = d);
@@ -551,6 +576,7 @@ class _NoteFileCardState extends State<NoteFileCard> {
             if (mounted) {
               setState(() {
                 _playing = false;
+                _ended = true;
                 _pos = Duration.zero;
               });
             }
@@ -568,6 +594,10 @@ class _NoteFileCardState extends State<NoteFileCard> {
       if (_playing) {
         await player.pause();
       } else {
+        if (_ended) {
+          _ended = false;
+          await player.seek(Duration.zero);
+        }
         await player.resume();
       }
       if (mounted) setState(() => _playing = !_playing);

@@ -31,6 +31,7 @@ import 'share_sheet.dart';
 import 'smooth_scroll.dart';
 import 'text_menu.dart';
 import 'theme.dart';
+import 'toast.dart';
 import 'urgency.dart';
 import 'whiteboard.dart';
 import 'i18n.dart';
@@ -147,20 +148,34 @@ class _NoteEditorState extends State<NoteEditor> {
     repo.updateContent(widget.noteId, content, rich: rich);
   }
 
-  /// Pasa lo escrito a mano (la selección o todo) a texto con la IA.
+  /// Pasa a texto con la IA solo lo que aún no ha leído.
   Future<void> _boardToText() async {
     final c = _board;
     if (c == null) return;
-    final png = await renderBoardPng(c.dataForAi(), NoteImages.instance.load);
-    if (png == null || !mounted) return;
-    await readBoardText(context, png, onInsert: (text) {
+    void insert(String text) {
       final n = repo.byId(widget.noteId);
       if (n == null || text.isEmpty) return;
       final (content, rich) = withText(n.content, n.rich, text);
       _lastSaved = rich;
       _lastTyped = DateTime.now();
       repo.updateContent(widget.noteId, content, rich: rich);
-    });
+    }
+
+    final fresh = c.unreadData();
+    if (fresh.strokes.isEmpty && fresh.images.isEmpty) {
+      if (c.readText.isEmpty) {
+        showToast(context, tr('No hay nada nuevo que leer'),
+            icon: Icons.info_outline_rounded);
+      } else {
+        await showBoardText(context, c.readText, onInsert: insert);
+      }
+      return;
+    }
+    final png = await renderBoardPng(fresh, NoteImages.instance.load);
+    if (png == null || !mounted) return;
+    await readBoardText(context, png, previous: c.readText, onRead: (text) {
+      if (identical(_board, c)) c.markRead(fresh, text);
+    }, onInsert: insert);
   }
 
   /// Cambios de la pizarra que llegan desde otro dispositivo.
@@ -756,8 +771,19 @@ class _NoteEditorState extends State<NoteEditor> {
                   controller: _board!,
                   readOnly: !writable,
                 ).animate().fadeIn(duration: Anim.medium, curve: Anim.curve),
-              )
-            else
+              ),
+            if (_board != null && n != null)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: _LinksBar(
+                  graph: NoteGraph.of(repo),
+                  noteId: n.id,
+                  repo: repo,
+                  onOpen: widget.onOpenNote,
+                  onCreate: _createLinked,
+                ),
+              ),
+            if (_board == null)
               Expanded(
                 child: Center(
                   child: ConstrainedBox(
@@ -771,8 +797,8 @@ class _NoteEditorState extends State<NoteEditor> {
                           if (n != null && n.isTemporal)
                             _TemporalBanner(
                               note: n,
-                              onToggleDone:
-                                  foreign ? () {} : () => repo.toggleDone(n.id),
+                              onToggleDone: () =>
+                                  completeTask(context, repo, n.id),
                               onEdit: foreign
                                   ? () {}
                                   : () =>

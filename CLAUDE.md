@@ -169,6 +169,10 @@ that it still arrives. On Windows, check toasts are enabled first:
   one-way. `note_shares.email` now holds `u:<account id>`, and the `email` / `owner_email` columns
   of `note_people` / `my_shared_notes` carry the @username. `login_email` returns the address only
   for the right password and locks after 8 failures in 15 minutes.
+- Quill passes custom embeds a detached node whose `documentOffset` is always 0: find them with
+  `fileEmbedOffset`, and remove embeds with `removeEmbedLine`.
+- Whiteboard to text only sends strokes with `read == false` and stores the result in
+  `BoardData.readText`.
 - Android keyboard: use `autoKeyboard` (`lib/ui/anim.dart`) instead of `autofocus: true` on text
   fields.
 - `lib/data/updater.dart` — checks GitHub Releases (`AppConfig.githubRepo`) and installs the

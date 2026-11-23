@@ -227,7 +227,7 @@ class _CalendarViewState extends State<CalendarView> {
           onOpen: widget.onOpenNote,
           onEditDates: widget.onEditDates,
           onNew: () => widget.onNewOnDay(_selected),
-          onToggleDone: widget.repo.toggleDone,
+          onToggleDone: (id) => completeTask(context, widget.repo, id),
         );
 
         return LayoutBuilder(builder: (context, c) {
@@ -305,7 +305,7 @@ class _CalendarViewState extends State<CalendarView> {
                         onOpen: () => widget.onOpenNote(dayNotes[i].id),
                         onEditDates: () => widget.onEditDates(dayNotes[i].id),
                         onToggleDone: () =>
-                            widget.repo.toggleDone(dayNotes[i].id),
+                            completeTask(context, widget.repo, dayNotes[i].id),
                       )
                           .animate(delay: (40 * i).ms)
                           .fadeIn(duration: Anim.medium)
@@ -567,8 +567,8 @@ class _MonthGrid extends StatelessWidget {
     );
   }
 
-  /// Línea lisa. Una tarea larga es un tramo por día, separados por un hueco
-  /// mínimo; la de un solo día es una línea igual de gruesa.
+  /// Una tarea de varios días es una línea discontinua; la de un solo día,
+  /// una línea entera del mismo grosor.
   Widget _laneBar(BuildContext context, DateTime day, Note? n, bool inMonth) {
     if (n == null) return const SizedBox(height: _barHeight + _barGap);
     final s = _day(n.periodStart.toLocal());
@@ -582,19 +582,53 @@ class _MonthGrid extends StatelessWidget {
             .withValues(alpha: 0.95 * fade);
     return Padding(
       padding: EdgeInsets.only(
-        left: day == s ? 4 : 1.5,
-        right: day == e ? 4 : 1.5,
+        left: day == s ? 4 : 0,
+        right: day == e ? 4 : 0,
         bottom: _barGap,
       ),
-      child: Container(
-        height: _barHeight,
-        decoration: BoxDecoration(
-          color: color,
-          borderRadius: BorderRadius.circular(_barHeight / 2),
-        ),
-      ),
+      child: s == e
+          ? Container(
+              height: _barHeight,
+              decoration: BoxDecoration(
+                color: color,
+                borderRadius: BorderRadius.circular(_barHeight / 2),
+              ),
+            )
+          : CustomPaint(
+              size: const Size(double.infinity, _barHeight),
+              painter: _DashPainter(color),
+            ),
     );
   }
+}
+
+/// Rayitas iguales que encajan en el ancho: el hueco del final de un día
+/// continúa en el siguiente y la línea se ve seguida.
+class _DashPainter extends CustomPainter {
+  const _DashPainter(this.color);
+  final Color color;
+
+  static const _dash = 5.0, _gap = 3.0;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final count = (size.width / (_dash + _gap)).round().clamp(1, 1000);
+    final step = size.width / count;
+    final y = size.height / 2;
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = size.height
+      ..strokeCap = StrokeCap.round;
+    // Las puntas redondas ya ocupan medio grosor a cada lado.
+    final inset = (_gap + size.height) / 2;
+    for (var i = 0; i < count; i++) {
+      canvas.drawLine(Offset(i * step + inset, y),
+          Offset((i + 1) * step - inset, y), paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_DashPainter o) => o.color != color;
 }
 
 class _DayPanel extends StatelessWidget {

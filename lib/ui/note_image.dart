@@ -275,11 +275,7 @@ class NoteImageEmbedBuilder extends EmbedBuilder {
       offsetOf: () => node.documentOffset,
       onDelete: !editable
           ? null
-          : () {
-              final o = node.documentOffset;
-              controller.replaceText(
-                  o, 1, '', TextSelection.collapsed(offset: o));
-            },
+          : () => removeEmbedLine(controller, node.documentOffset),
       // Recortada: se guarda como imagen nueva y ocupa el mismo sitio.
       onCropped: !editable
           ? null

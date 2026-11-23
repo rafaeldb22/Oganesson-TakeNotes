@@ -42,6 +42,13 @@ bool caretNextToImage(QuillController c) {
       (o > 0 && o <= t.length && t.codeUnitAt(o - 1) == 0xFFFC);
 }
 
+/// Quita el embed de [offset] y su línea, sin dejar un hueco en la nota.
+void removeEmbedLine(QuillController c, int offset) {
+  final t = _plain(c);
+  final len = offset + 2 < t.length && t[offset + 1] == '\n' ? 2 : 1;
+  c.replaceText(offset, len, '', TextSelection.collapsed(offset: offset));
+}
+
 /// Inserta una imagen en [index] SIEMPRE en su propia línea (Quill solo
 /// separa así los vídeos: una imagen pegada en mitad de una frase quedaría
 /// mezclada con el texto). Devuelve la posición de la imagen.

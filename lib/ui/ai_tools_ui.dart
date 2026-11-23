@@ -3,13 +3,16 @@ import 'dart:async';
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 
 import '../data/ai_actions.dart';
 import '../data/ai_assistant.dart';
+import '../data/note_board.dart';
 import '../data/note_factory.dart';
 import '../data/note_images.dart';
 import '../data/notes_repository.dart';
 import '../models/note.dart';
+import 'anim.dart';
 import 'i18n.dart';
 import 'theme.dart';
 import 'toast.dart';
@@ -22,16 +25,7 @@ Future<T?> _withProgress<T>(
   unawaited(showDialog<void>(
     context: context,
     barrierDismissible: false,
-    builder: (_) => AlertDialog(
-      content: Row(children: [
-        const SizedBox(
-            width: 22,
-            height: 22,
-            child: CircularProgressIndicator(strokeWidth: 2.5)),
-        const SizedBox(width: 16),
-        Expanded(child: Text(label)),
-      ]),
-    ),
+    builder: (_) => AiWorkingDialog(label: label),
   ).whenComplete(() => open = false));
   try {
     final r = await job();
@@ -57,62 +51,23 @@ Future<void> showNoteAiActions(
     BuildContext context, NotesRepository repo, String noteId) async {
   final n = repo.byId(noteId);
   if (n == null || n.vault || repo.isForeign(n)) return;
-  if (n.content.replaceAll('￼', '').trim().isEmpty && !n.hasImages) {
+  if (n.content.replaceAll('￼', '').trim().isEmpty &&
+      !n.hasImages &&
+      !(n.rich?.contains(BoardData.embedType) ?? false)) {
     showToast(context, tr('La nota no tiene texto'),
         icon: Icons.info_outline_rounded);
     return;
   }
-  final action = await showModalBottomSheet<NoteAiAction>(
+  final picked = await showModalBottomSheet<(NoteAiAction, String?)>(
     context: context,
     useSafeArea: true,
-    constraints: const BoxConstraints(maxWidth: 480),
-    builder: (ctx) => Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        for (final (a, icon, label) in [
-          (NoteAiAction.summarize, Icons.short_text_rounded, tr('Resumir')),
-          (NoteAiAction.fix, Icons.spellcheck_rounded, tr('Corregir')),
-          (NoteAiAction.translate, Icons.translate_rounded, tr('Traducir')),
-          (
-            NoteAiAction.tasks,
-            Icons.checklist_rounded,
-            tr('Convertir en tareas')
-          ),
-        ])
-          ListTile(
-            leading: Icon(icon, color: Palette.accent(ctx)),
-            title: Text(label),
-            onTap: () => Navigator.pop(ctx, a),
-          ),
-        const SizedBox(height: 8),
-      ],
-    ),
+    isScrollControlled: true,
+    constraints: BoxConstraints(
+        maxWidth: 540, maxHeight: MediaQuery.sizeOf(context).height * 0.88),
+    builder: (_) => _AiActionsSheet(title: n.title),
   );
-  if (action == null || !context.mounted) return;
-
-  String? language;
-  if (action == NoteAiAction.translate) {
-    language = await showModalBottomSheet<String>(
-      context: context,
-      useSafeArea: true,
-      constraints: const BoxConstraints(maxWidth: 480),
-      builder: (ctx) => ListView(
-        shrinkWrap: true,
-        children: [
-          for (final (name, api) in const [
-            ('Español', 'Spanish'),
-            ('English', 'English'),
-            ('Français', 'French'),
-            ('Deutsch', 'German'),
-            ('Italiano', 'Italian'),
-            ('Português', 'Portuguese'),
-          ])
-            ListTile(title: Text(name), onTap: () => Navigator.pop(ctx, api)),
-        ],
-      ),
-    );
-    if (language == null || !context.mounted) return;
-  }
+  if (picked == null || !context.mounted) return;
+  final (action, language) = picked;
 
   final reply = await _withProgress(context, tr('La IA está trabajando…'),
       () => runNoteAction(n, action, language: language));
@@ -130,6 +85,393 @@ Future<void> showNoteAiActions(
   }
   await _showResult(context, repo, n, reply,
       canReplace: action != NoteAiAction.summarize);
+}
+
+/// Esfera de la IA: un anillo de luz que gira alrededor del destello.
+class AiOrb extends StatefulWidget {
+  const AiOrb({super.key, this.size = 46});
+  final double size;
+
+  @override
+  State<AiOrb> createState() => _AiOrbState();
+}
+
+class _AiOrbState extends State<AiOrb> with SingleTickerProviderStateMixin {
+  late final _spin =
+      AnimationController(vsync: this, duration: const Duration(seconds: 4));
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _spin.stop();
+    } else if (!_spin.isAnimating) {
+      _spin.repeat();
+    }
+  }
+
+  @override
+  void dispose() {
+    _spin.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final p = Palette.of(context);
+    final hsl = HSLColor.fromColor(p.accent);
+    final s = widget.size;
+    return SizedBox.square(
+      dimension: s,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          RotationTransition(
+            turns: _spin,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: SweepGradient(colors: [
+                  p.accent,
+                  hsl.withHue((hsl.hue + 45) % 360).toColor(),
+                  hsl.withHue((hsl.hue + 315) % 360).toColor(),
+                  p.accent,
+                ]),
+                boxShadow: [
+                  BoxShadow(
+                      color: p.accent.withValues(alpha: 0.35),
+                      blurRadius: s * 0.32),
+                ],
+              ),
+              child: SizedBox.square(dimension: s),
+            ),
+          ),
+          Container(
+            width: s - 5,
+            height: s - 5,
+            decoration: BoxDecoration(color: p.card, shape: BoxShape.circle),
+            child: Icon(Icons.auto_awesome_rounded,
+                size: s * 0.46, color: p.accent),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Espera mientras trabaja la IA.
+class AiWorkingDialog extends StatelessWidget {
+  const AiWorkingDialog({super.key, required this.label});
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = Palette.of(context);
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 300),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(24, 26, 24, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const AiOrb(size: 58)
+                  .animate(onPlay: (c) => c.repeat(reverse: true))
+                  .scale(
+                      begin: const Offset(0.94, 0.94),
+                      end: const Offset(1.05, 1.05),
+                      duration: 900.ms,
+                      curve: Curves.easeInOut),
+              const SizedBox(height: 18),
+              Text(label,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                      fontSize: 15, fontWeight: FontWeight.w700)),
+              const SizedBox(height: 14),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(3),
+                child: LinearProgressIndicator(
+                  minHeight: 4,
+                  color: p.accent,
+                  backgroundColor: p.accent.withValues(alpha: 0.14),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    ).animate().fadeIn(duration: Anim.fast).scale(
+        begin: const Offset(0.92, 0.92),
+        duration: Anim.medium,
+        curve: Curves.easeOutBack);
+  }
+}
+
+/// Panel de acciones de la IA sobre una nota.
+class _AiActionsSheet extends StatefulWidget {
+  const _AiActionsSheet({required this.title});
+  final String title;
+
+  @override
+  State<_AiActionsSheet> createState() => _AiActionsSheetState();
+}
+
+class _AiActionsSheetState extends State<_AiActionsSheet> {
+  bool _translating = false;
+
+  static const _languages = [
+    ('Español', 'Spanish'),
+    ('English', 'English'),
+    ('Français', 'French'),
+    ('Deutsch', 'German'),
+    ('Italiano', 'Italian'),
+    ('Português', 'Portuguese'),
+  ];
+
+  void _pick(NoteAiAction a) {
+    if (a == NoteAiAction.translate) {
+      setState(() => _translating = !_translating);
+    } else {
+      Navigator.pop(context, (a, null));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final p = Palette.of(context);
+    final actions = [
+      (
+        NoteAiAction.summarize,
+        Icons.short_text_rounded,
+        tr('Resumir'),
+        tr('Las ideas clave')
+      ),
+      (
+        NoteAiAction.fix,
+        Icons.spellcheck_rounded,
+        tr('Corregir'),
+        tr('Ortografía y gramática')
+      ),
+      (
+        NoteAiAction.translate,
+        Icons.translate_rounded,
+        tr('Traducir'),
+        tr('A otro idioma')
+      ),
+      (
+        NoteAiAction.tasks,
+        Icons.checklist_rounded,
+        tr('Convertir en tareas'),
+        tr('Lo que hay que hacer')
+      ),
+    ];
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(20, 2, 20, 20),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              const AiOrb(),
+              const SizedBox(width: 13),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(tr('Asistente de la nota'),
+                        style: const TextStyle(
+                            fontSize: 20, fontWeight: FontWeight.w800)),
+                    const SizedBox(height: 1),
+                    Text(widget.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(color: p.secondary, fontSize: 13)),
+                  ],
+                ),
+              ),
+            ],
+          )
+              .animate()
+              .fadeIn(duration: Anim.medium)
+              .slideY(begin: 0.2, duration: Anim.medium, curve: Anim.curve),
+          const SizedBox(height: 16),
+          LayoutBuilder(builder: (context, c) {
+            final columns = c.maxWidth < 340 ? 1 : 2;
+            final width = (c.maxWidth - 10 * (columns - 1)) / columns;
+            return Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: [
+                for (final (i, (a, icon, label, hint)) in actions.indexed)
+                  SizedBox(
+                    width: width,
+                    child: _AiActionCard(
+                      icon: icon,
+                      label: label,
+                      hint: hint,
+                      active: a == NoteAiAction.translate && _translating,
+                      onTap: () => _pick(a),
+                    )
+                        .animate(delay: (45 * i + 50).ms)
+                        .fadeIn(duration: Anim.medium)
+                        .slideY(
+                            begin: 0.22,
+                            duration: Anim.slow,
+                            curve: Curves.easeOutBack),
+                  ),
+              ],
+            );
+          }),
+          AnimatedSize(
+            duration: Anim.medium,
+            curve: Anim.curve,
+            alignment: Alignment.topCenter,
+            child: !_translating
+                ? const SizedBox(width: double.infinity)
+                : Padding(
+                    padding: const EdgeInsets.only(top: 14),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(tr('¿A qué idioma?'),
+                            style: TextStyle(
+                                color: p.secondary,
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w700)),
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 7,
+                          runSpacing: 7,
+                          children: [
+                            for (final (i, (name, api)) in _languages.indexed)
+                              ActionChip(
+                                label: Text(name),
+                                onPressed: () => Navigator.pop(
+                                    context, (NoteAiAction.translate, api)),
+                              )
+                                  .animate(delay: (25 * i).ms)
+                                  .fadeIn(duration: Anim.fast)
+                                  .scale(
+                                      begin: const Offset(0.85, 0.85),
+                                      duration: Anim.medium,
+                                      curve: Curves.easeOutBack),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AiActionCard extends StatefulWidget {
+  const _AiActionCard({
+    required this.icon,
+    required this.label,
+    required this.hint,
+    required this.active,
+    required this.onTap,
+  });
+  final IconData icon;
+  final String label, hint;
+  final bool active;
+  final VoidCallback onTap;
+
+  @override
+  State<_AiActionCard> createState() => _AiActionCardState();
+}
+
+class _AiActionCardState extends State<_AiActionCard> {
+  bool _hover = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = Palette.of(context);
+    final lit = _hover || widget.active;
+    return Semantics(
+      button: true,
+      selected: widget.active,
+      label: widget.label,
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        onEnter: (_) => setState(() => _hover = true),
+        onExit: (_) => setState(() => _hover = false),
+        child: Bouncy(
+          pressedScale: 0.96,
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: widget.onTap,
+            child: AnimatedContainer(
+              duration: Anim.medium,
+              curve: Anim.curve,
+              padding: const EdgeInsets.all(12),
+              transform: Matrix4.translationValues(0, _hover ? -2 : 0, 0),
+              decoration: BoxDecoration(
+                color: lit
+                    ? Color.alphaBlend(
+                        p.accent.withValues(alpha: 0.1), p.background)
+                    : p.background,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                    color: lit
+                        ? p.accent.withValues(alpha: 0.6)
+                        : p.separator.withValues(alpha: 0.65)),
+                boxShadow: [
+                  BoxShadow(
+                    color: p.accent.withValues(alpha: _hover ? 0.16 : 0),
+                    blurRadius: 16,
+                    offset: const Offset(0, 6),
+                  ),
+                ],
+              ),
+              child: Row(
+                children: [
+                  AnimatedContainer(
+                    duration: Anim.medium,
+                    width: 38,
+                    height: 38,
+                    decoration: BoxDecoration(
+                      color: p.accent.withValues(alpha: lit ? 0.24 : 0.13),
+                      borderRadius: BorderRadius.circular(11),
+                    ),
+                    child: AnimatedScale(
+                      scale: lit ? 1.12 : 1,
+                      duration: Anim.medium,
+                      curve: Curves.easeOutBack,
+                      child: Icon(widget.icon, size: 20, color: p.accent),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(widget.label,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                                fontSize: 14, fontWeight: FontWeight.w700)),
+                        Text(widget.hint,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style:
+                                TextStyle(fontSize: 11.5, color: p.secondary)),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 Future<void> _showResult(

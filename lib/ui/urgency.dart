@@ -2,10 +2,32 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../data/notes_repository.dart';
+import '../data/recurrence.dart';
 import '../models/note.dart';
 import 'anim.dart';
 import 'format.dart';
+import 'i18n.dart';
 import 'theme.dart';
+import 'toast.dart';
+
+/// Botón de completar: avisa cuando el cambio no se vería en la tarea (una
+/// nota de otra cuenta, o una repetida que salta a su siguiente fecha).
+void completeTask(BuildContext context, NotesRepository repo, String id) {
+  final n = repo.byId(id);
+  if (n == null) return;
+  if (repo.isForeign(n)) {
+    showToast(context, tr('Solo quien creó la nota puede completarla'),
+        icon: Icons.info_outline_rounded);
+    return;
+  }
+  final repeats = !n.done && RepeatRule.parse(n.repeat) != null;
+  repo.toggleDone(id);
+  if (repeats) {
+    showToast(context, trf('Hecha. Vuelve el {0}', [fechaCorta(n.dueAt!)]),
+        icon: Icons.event_repeat_rounded);
+  }
+}
 
 /// Rango del calendario: este mes, los 3 anteriores y los 3 siguientes.
 /// Se calcula siempre con la fecha de hoy, así que se actualiza solo.

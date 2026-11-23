@@ -32,11 +32,15 @@ const boardMarkers = <int>[
 class BoardController extends ChangeNotifier {
   BoardController(BoardData data, {required this.onChanged})
       : strokes = List.of(data.strokes),
-        images = List.of(data.images);
+        images = List.of(data.images),
+        readText = data.readText;
 
   final VoidCallback onChanged;
   List<BoardStroke> strokes;
   List<BoardImage> images;
+
+  /// Lo que la IA ya ha sacado de esta pizarra.
+  String readText;
   Set<int> selectedStrokes = {};
   Set<int> selectedImages = {};
 
@@ -112,14 +116,34 @@ class BoardController extends ChangeNotifier {
   }
 
   BoardData toData({bool active = true}) => BoardData(
-      active: active, strokes: List.of(strokes), images: List.of(images));
+      active: active,
+      strokes: List.of(strokes),
+      images: List.of(images),
+      readText: readText);
 
-  /// Lo que lee la IA: la selección si hay, o toda la pizarra.
-  BoardData dataForAi() => !hasSelection
-      ? toData()
-      : BoardData(
-          strokes: [for (final i in selectedStrokes) strokes[i]],
-          images: [for (final i in selectedImages) images[i]]);
+  /// Lo que la IA aún no ha leído, de la selección o de toda la pizarra.
+  BoardData unreadData() => BoardData(
+        strokes: [
+          for (final (i, s) in strokes.indexed)
+            if (!s.read && (!hasSelection || selectedStrokes.contains(i))) s,
+        ],
+        images: [
+          for (final (i, m) in images.indexed)
+            if (!m.read && (!hasSelection || selectedImages.contains(i))) m,
+        ],
+      );
+
+  /// Marca [seen] como leído y guarda el [text] que ha salido.
+  void markRead(BoardData seen, String text) {
+    for (final s in seen.strokes) {
+      s.read = true;
+    }
+    for (final i in seen.images) {
+      i.read = true;
+    }
+    readText = readText.isEmpty ? text : '$readText\n\n$text';
+    _changed();
+  }
 
   void _fitBox() {
     final r = selectionBounds;
@@ -130,6 +154,7 @@ class BoardController extends ChangeNotifier {
   void load(BoardData d) {
     strokes = List.of(d.strokes);
     images = List.of(d.images);
+    readText = d.readText;
     selBox = null;
     selectedStrokes = {};
     selectedImages = {};

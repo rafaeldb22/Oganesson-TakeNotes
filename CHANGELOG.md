@@ -2,6 +2,25 @@
 
 All notable changes to Oganesson TakeNotes (formerly *Notas* / *BabuNotes*).
 
+## [2.14.0] — 2026-11-23
+
+### Added
+- **Whiteboard to text** now explains what you wrote and only reads what is new.
+- The links of a note also appear below its whiteboard.
+
+### Changed
+- **New sign-in screen** with a moving background, animated logo and smoother forms.
+- **New AI panel** inside notes, with animated action cards.
+- Multi-day calendar lines are now dashed.
+- The pen and highlighter icons have a contrasting border.
+
+### Fixed
+- **Removing a PDF, audio or file no longer deletes the first letter of the note**, and now removes
+  the attachment.
+- Voice messages can be played again after they finish.
+- The mouse wheel scrolls the whiteboard toolbar with every tool.
+- Completing a repeating task or someone else's task now tells you what happened.
+
 ## [2.13.0] — 2026-11-23
 
 ### Added

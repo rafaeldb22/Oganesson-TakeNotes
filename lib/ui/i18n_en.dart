@@ -921,4 +921,16 @@ const enStrings = <String, String>{
   "Mirando la pizarra…": "Looking at the whiteboard…",
   "Buscando archivos…": "Searching files…",
   "Añadiendo archivos…": "Adding files…",
+  // 2.14
+  "Tus notas, siempre contigo.": "Your notes, always with you.",
+  "Solo quien creó la nota puede completarla":
+      "Only the note owner can complete it",
+  "Hecha. Vuelve el {0}": "Done. It comes back on {0}",
+  "No hay nada nuevo que leer": "Nothing new to read",
+  "Asistente de la nota": "Note assistant",
+  "Las ideas clave": "The key ideas",
+  "Ortografía y gramática": "Spelling and grammar",
+  "A otro idioma": "Into another language",
+  "Lo que hay que hacer": "What needs doing",
+  "¿A qué idioma?": "Which language?",
 };

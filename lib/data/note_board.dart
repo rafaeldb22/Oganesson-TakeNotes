@@ -154,11 +154,16 @@ class BoardStroke {
   final List<Offset> points;
   final List<double> factors;
 
-  BoardStroke moved(Offset by) =>
-      BoardStroke(color, width, [for (final p in points) p + by], factors);
+  /// Ya lo ha leído la IA: moverlo o borrar un trozo no lo hace nuevo.
+  bool read = false;
 
-  BoardStroke transformed(BoardAffine t) => BoardStroke(color,
-      width * t.meanScale, [for (final p in points) t.apply(p)], factors);
+  BoardStroke moved(Offset by) =>
+      BoardStroke(color, width, [for (final p in points) p + by], factors)
+        ..read = read;
+
+  BoardStroke transformed(BoardAffine t) => BoardStroke(
+      color, width * t.meanScale, [for (final p in points) t.apply(p)], factors)
+    ..read = read;
 
   Rect get bounds {
     var r = Rect.fromCircle(center: points.first, radius: width / 2);
@@ -178,6 +183,7 @@ class BoardStroke {
             (factors[i] * 100).round() / 100,
           ],
         ],
+        if (read) 'x': 1,
       };
 
   static BoardStroke? fromJson(Object? j) {
@@ -193,7 +199,8 @@ class BoardStroke {
     }
     if (pts.isEmpty) return null;
     return BoardStroke((j['c'] as num?)?.toInt() ?? 0,
-        (j['w'] as num?)?.toDouble() ?? 3, pts, f);
+        (j['w'] as num?)?.toDouble() ?? 3, pts, f)
+      ..read = j['x'] == 1;
   }
 }
 
@@ -206,6 +213,9 @@ class BoardImage {
   /// Giro y escala aplicados a [rect].
   final BoardAffine transform;
 
+  /// Ya la ha leído la IA.
+  bool read = false;
+
   Offset get center => transform.apply(rect.center);
 
   Rect get bounds {
@@ -217,7 +227,8 @@ class BoardImage {
         xs.reduce(math.max), ys.reduce(math.max));
   }
 
-  BoardImage transformed(BoardAffine t) => BoardImage(src, rect, t * transform);
+  BoardImage transformed(BoardAffine t) =>
+      BoardImage(src, rect, t * transform)..read = read;
 
   BoardImage moved(Offset by) => transformed(BoardAffine.translation(by));
 
@@ -225,6 +236,7 @@ class BoardImage {
         'g': src,
         'r': [rect.left, rect.top, rect.width, rect.height],
         if (!transform.isIdentity) 'm': transform.toList(),
+        if (read) 'x': 1,
       };
 
   static BoardImage? fromJson(Object? j) {
@@ -245,7 +257,8 @@ class BoardImage {
         j['g'] as String,
         Rect.fromLTWH((r[0] as num).toDouble(), (r[1] as num).toDouble(),
             (r[2] as num).toDouble(), (r[3] as num).toDouble()),
-        t);
+        t)
+      ..read = j['x'] == 1;
   }
 }
 
@@ -368,7 +381,8 @@ class BoardData {
   BoardData(
       {this.active = true,
       List<BoardStroke>? strokes,
-      List<BoardImage>? images})
+      List<BoardImage>? images,
+      this.readText = ''})
       : strokes = strokes ?? [],
         images = images ?? [];
 
@@ -378,10 +392,14 @@ class BoardData {
   List<BoardStroke> strokes;
   List<BoardImage> images;
 
+  /// Lo que la IA ya ha sacado de esta pizarra.
+  String readText;
+
   String encode() => jsonEncode({
         'on': active,
         's': [for (final s in strokes) s.toJson()],
         'i': [for (final i in images) i.toJson()],
+        if (readText.isNotEmpty) 'rt': readText,
       });
 
   static BoardData? decode(Object? data) {
@@ -398,6 +416,7 @@ class BoardData {
           for (final i in (j['i'] as List?) ?? const [])
             if (BoardImage.fromJson(i) case final x?) x,
         ],
+        readText: j['rt'] is String ? j['rt'] as String : '',
       );
     } catch (_) {
       return null;
@@ -515,7 +534,9 @@ List<BoardStroke>? eraseStrokes(
     var f = <double>[];
     var cut = false;
     void flush() {
-      if (pts.isNotEmpty) out.add(BoardStroke(s.color, s.width, pts, f));
+      if (pts.isNotEmpty) {
+        out.add(BoardStroke(s.color, s.width, pts, f)..read = s.read);
+      }
       pts = [];
       f = [];
     }
