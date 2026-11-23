@@ -40,6 +40,19 @@
   <img src="docs/screenshot-calendar.png" width="49%" alt="Note editor (Sepia light theme)">
 </p>
 
+## New in 3.1
+
+<table>
+  <tr>
+    <td align="center" width="50%"><img src="docs/scribble.gif" alt="Scribbling over a line on the whiteboard erases what the scribble covers"><br><sub><b>Scribble to erase</b> — scribble over your ink with the pen and it disappears, with a small dot as the pointer</sub></td>
+    <td align="center" width="50%"><img src="docs/calendar.gif" alt="Calendar with aligned, rounded task lines that fade softly into the next month"><br><sub><b>Cleaner calendar</b> — aligned, rounded lines that fade softly into the next month</sub></td>
+  </tr>
+</table>
+
+- 🤖 **The AI asks before each change**, one at a time, so you can accept some and reject others.
+- 📅 **All-day tasks** last until the end of the day, with no end time.
+- ⏳ **The time-left banner** now sits at the bottom of the note.
+
 ## See it in action
 
 <table>
@@ -66,7 +79,7 @@
 | 🕸️ **Note network** | Link notes or create linked sub-notes, then explore them as a live graph. |
 | 🔒 **Vault** | Notes behind a master password that locks itself after 5 minutes; reset it with your account password. |
 | 🔄 **Sync** | Same account on every device, real-time sync through Supabase, works offline (images too) and uploads when back online. |
-| ✨ **AI assistant** | Bring your own key — free **Gemini**, or **ChatGPT** / **Claude**: ask *"what's pending this week?"*, have it create notes, set deadlines, move notes to folders, mark tasks done… Every change can be undone, deleting needs your OK, and it **never sees Vault notes**. |
+| ✨ **AI assistant** | Bring your own key — free **Gemini**, or **ChatGPT** / **Claude**: ask *"what's pending this week?"*, have it create notes, set deadlines, move notes to folders, mark tasks done… It asks before each change, every change can be undone, and it **never sees Vault notes**. |
 | 📱 **Widgets** | Android home-screen widgets: calendar, tasks, next task with countdown, pinned notes and quick actions. |
 
 ---
@@ -106,7 +119,7 @@ Sign in with the **same account** on every device and your notes sync automatica
 
 **AI assistant (bring your own key)**
 - Open it with the ✨ button (bottom left), ⋯ → *AI assistant* or **Ctrl+J**. Pick **Gemini** (free key from [Google AI Studio](https://aistudio.google.com/apikey)), **ChatGPT** ([OpenAI API key](https://platform.openai.com/api-keys), paid) or **Claude** ([Anthropic API key](https://console.anthropic.com/settings/keys), paid). Each key is stored encrypted on that device only, never uploaded.
-- It can list and read your notes and tasks, create notes (with folder and deadline), add text, set or clear dates, mark tasks done, pin and move notes. Archiving or deleting asks you first, and every change has an *Undo* button.
+- It can list and read your notes and tasks, create notes (with folder and deadline), add text, set or clear dates, mark tasks done, pin and move notes. It asks you before changing an existing note, one change at a time, and every change has an *Undo* button.
 - **Vault notes are never sent to the AI.** Choose Gemini Flash-Lite (more free requests per day) or Gemini Flash (smarter, fewer free requests); the free plan's limits are shown in Google AI Studio and the app tells you clearly when you hit them.
 
 <p align="center"><img src="docs/screenshot-assistant.png" width="320" alt="AI assistant"></p>
