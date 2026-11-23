@@ -51,22 +51,37 @@ returns boolean language sql stable security definer set search_path = '' as $$
       and s.role = 'edit' and not n.vault and not n.deleted)
 $$;
 
--- Images and files: readable if they appear in a note shared between the
--- reader and the person who uploaded them.
+-- Images and files: a path written in a note grants nothing by itself, or
+-- anyone who once saw a path could paste it into a note and keep reading it.
+-- Only the account that owns the file can allow it (allowed = true). A path
+-- added by someone else is recorded as allowed = false and stays blocked.
+create table if not exists public.note_shared_files (
+  note_id     uuid not null references public.notes (id) on delete cascade,
+  object_name text not null,
+  allowed     boolean not null,
+  primary key (note_id, object_name)
+);
+
+alter table public.note_shared_files enable row level security;
+revoke all on public.note_shared_files from public, anon, authenticated;
+
+create or replace function public.note_file_refs(p_rich text)
+returns setof text language sql immutable set search_path = '' as $$
+  select distinct m[1]
+  from regexp_matches(coalesce(p_rich, ''), '(?:sb|ogf)://([^"?\\]+)', 'g') m
+$$;
+
+revoke all on function public.note_file_refs(text) from public, anon, authenticated;
+
 create or replace function public.can_read_shared_file(p_name text)
 returns boolean language sql stable security definer set search_path = '' as $$
   select exists (
-    select 1 from public.notes n
-    where position(p_name in coalesce(n.rich, '')) > 0
+    select 1 from public.note_shared_files f
+    join public.notes n on n.id = f.note_id
+    where f.object_name = p_name and f.allowed
       and not n.vault and not n.deleted
-      and (n.user_id = auth.uid() or public.can_read_note(n.id))
-      and (n.user_id::text = (storage.foldername(p_name))[1]
-           or exists (
-             select 1 from public.note_shares s
-             join auth.users u on lower(u.email) = s.email
-             where s.note_id = n.id and u.email_confirmed_at is not null
-               and u.id::text = (storage.foldername(p_name))[1]))
-      and exists (select 1 from public.note_shares s where s.note_id = n.id))
+      and p_name in (select public.note_file_refs(n.rich))
+      and (n.user_id = auth.uid() or public.can_read_note(n.id)))
 $$;
 
 -- ----------------------------------------------------------------- policies
@@ -118,6 +133,37 @@ drop trigger if exists notes_guard_shared on public.notes;
 create trigger notes_guard_shared before update on public.notes
   for each row execute function public.notes_guard_shared();
 
+-- Records who put each file path into a shared note.
+create or replace function public.notes_track_shared_files()
+returns trigger language plpgsql security definer set search_path = '' as $$
+declare
+  v_uid uuid := auth.uid();
+begin
+  if v_uid is null then
+    return null;
+  end if;
+  -- A file its owner took out of the note loses its permission. Removal by
+  -- anyone else keeps it, so a collaborator's undo doesn't break the image.
+  delete from public.note_shared_files f
+  where f.note_id = new.id and f.allowed
+    and split_part(f.object_name, '/', 1) = v_uid::text
+    and f.object_name not in (select public.note_file_refs(new.rich));
+  if not exists (select 1 from public.note_shares s where s.note_id = new.id) then
+    return null;
+  end if;
+  insert into public.note_shared_files (note_id, object_name, allowed)
+  select new.id, r, split_part(r, '/', 1) = v_uid::text
+  from public.note_file_refs(new.rich) r
+  where split_part(r, '/', 1) = v_uid::text
+     or r not in (select public.note_file_refs(old.rich))
+  on conflict (note_id, object_name) do nothing;
+  return null;
+end $$;
+
+drop trigger if exists notes_track_shared_files on public.notes;
+create trigger notes_track_shared_files after update of rich on public.notes
+  for each row execute function public.notes_track_shared_files();
+
 -- A note moved to the Vault stops being shared.
 create or replace function public.notes_vault_unshare()
 returns trigger language plpgsql security definer set search_path = '' as $$
@@ -157,6 +203,12 @@ begin
   insert into public.note_shares (note_id, email, role, created_by)
   values (p_note, v_email, p_role, auth.uid())
   on conflict (note_id, email) do update set role = excluded.role;
+  -- The owner's own files already in the note.
+  insert into public.note_shared_files (note_id, object_name, allowed)
+  select p_note, r, true
+  from public.note_file_refs(v_note.rich) r
+  where split_part(r, '/', 1) = auth.uid()::text
+  on conflict (note_id, object_name) do nothing;
 end $$;
 
 create or replace function public.unshare_note(p_note uuid, p_email text)
