@@ -17,7 +17,9 @@ class EditorToolbar extends StatelessWidget {
       this.onVoice,
       this.onAttach,
       this.onDraw,
-      this.onAi});
+      this.onAi,
+      this.onShare,
+      this.readOnly = false});
   final QuillController controller;
 
   /// Nota de voz, adjuntar archivo y dibujar; null = sin botón.
@@ -27,6 +29,12 @@ class EditorToolbar extends StatelessWidget {
 
   /// Acciones con IA; null en las notas del Vault.
   final VoidCallback? onAi;
+
+  /// Compartir con otra cuenta; null en las notas del Vault.
+  final VoidCallback? onShare;
+
+  /// Nota compartida de solo lectura: sin botones de formato.
+  final bool readOnly;
 
   /// Enlazar otra nota (`[[…]]`); null = sin botón.
   final VoidCallback? onLink;
@@ -186,6 +194,7 @@ class EditorToolbar extends StatelessWidget {
                 onTap: _clear),
           ],
         ];
+        if (readOnly) groups.clear();
 
         // Insertar: siempre a mano en PC, fijo a la derecha.
         final insert = <Widget>[
@@ -212,7 +221,7 @@ class EditorToolbar extends StatelessWidget {
           if (onLink != null)
             _Btn(
                 icon: Icons.link_rounded,
-                tooltip: tr('Enlazar nota  [['),
+                tooltip: tr('Enlazar nota'),
                 onTap: onLink),
         ];
 
@@ -255,6 +264,11 @@ class EditorToolbar extends StatelessWidget {
                   ...insert,
                 ],
                 // La IA siempre a la vista, también en el móvil.
+                if (onShare != null)
+                  _Btn(
+                      icon: Icons.group_add_outlined,
+                      tooltip: tr('Compartir'),
+                      onTap: onShare),
                 if (onAi != null) _AiButton(onTap: onAi!),
                 const SizedBox(width: 7),
               ],

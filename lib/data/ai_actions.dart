@@ -126,7 +126,9 @@ String dailyBriefData(NotesRepository repo, {DateTime? now}) {
     return '- ${n.title}$when';
   }
 
-  final tasks = repo.temporales.where((n) => !n.vault && !n.done).toList();
+  final tasks = repo.temporales
+      .where((n) => !n.vault && !n.done && !repo.isForeign(n))
+      .toList();
   bool due(Note n, DateTime a, DateTime b) {
     final d = n.dueAt!.toLocal();
     return !d.isBefore(a) && d.isBefore(b);
@@ -137,8 +139,11 @@ String dailyBriefData(NotesRepository repo, {DateTime? now}) {
   final next = tasks.where((n) => due(n, tomorrow, week));
   final limit = t.subtract(const Duration(hours: 24));
   final edited = repo.notes
-      .where(
-          (n) => !n.vault && !n.isEmpty && n.updatedAt.toLocal().isAfter(limit))
+      .where((n) =>
+          !n.vault &&
+          !repo.isForeign(n) &&
+          !n.isEmpty &&
+          n.updatedAt.toLocal().isAfter(limit))
       .take(12);
   String block(String name, Iterable<Note> list) =>
       '$name:\n${list.isEmpty ? '(none)' : list.take(25).map(line).join('\n')}';

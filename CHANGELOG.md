@@ -2,6 +2,27 @@
 
 All notable changes to Oganesson TakeNotes (formerly *Notas* / *BabuNotes*).
 
+## [2.7.0] — 2026-11-23
+
+### Added
+- **Shared notes**: share a note with another account from the editor toolbar, as *can edit* or
+  *view only*. Changes arrive live, and you can remove people or leave a note at any time. Only
+  the text is shared: folder, pin, dates and trash stay with the owner. If two people write at
+  the same moment, the most recent save wins.
+
+### Changed
+- The note color now only affects timelines. Notes no longer show a color strip.
+- Removed the "2 notes" and "1 link" counters, and "No additional text" under empty notes.
+- The ⋯ menu scrolls slower and smoother, with softer opening, hover and press animations.
+
+### Fixed
+- **Updates**: reaching GitHub's API limit no longer shows a false connection error.
+- Removed the stray `[[` from the "Link note" tooltip.
+
+### Setup
+- Run `supabase/migrations/010_note_sharing.sql` to enable shared notes, and keep *Confirm email*
+  enabled in Supabase. Shared notes are never sent to the AI assistant.
+
 ## [2.6.0] — 2026-11-23
 
 ### Changed

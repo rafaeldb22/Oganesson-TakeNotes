@@ -54,7 +54,6 @@ const enStrings = <String, String>{
   'Hoy': 'Today',
   'Notas': 'Notes',
   'Nota nueva': 'New note',
-  'Sin texto adicional': 'No additional text',
   'Español': 'Spanish',
   'Inglés': 'English',
   'Idioma': 'Language',
@@ -116,7 +115,7 @@ const enStrings = <String, String>{
 
   // --- Enlaces
   'Enlazar notas': 'Link notes',
-  'Enlazar nota  [[': 'Link note  [[',
+  'Enlazar nota': 'Link note',
   'Marca las notas que quieres conectar con «{0}».':
       'Tick the notes you want to connect with “{0}”.',
   'Buscar notas…': 'Search notes…',
@@ -772,4 +771,37 @@ const enStrings = <String, String>{
   // --- 2.6
   "{0} tareas añadidas": "{0} tasks added",
   "IA": "AI",
+
+  // --- 2.7
+  "Falta activar las notas compartidas en Supabase (migración 010).":
+      "Shared notes are not enabled in Supabase yet (migration 010).",
+  "Ese correo no es válido.": "That email is not valid.",
+  "Esa es tu propia cuenta.": "That is your own account.",
+  "Las notas del Vault o de la papelera no se pueden compartir.":
+      "Vault and trashed notes cannot be shared.",
+  "Una nota se comparte con 20 personas como mucho.":
+      "A note can be shared with 20 people at most.",
+  "Solo quien creó la nota puede hacer esto.":
+      "Only the note owner can do this.",
+  "No se ha podido. Revisa la conexión.":
+      "It did not work. Check your connection.",
+  "Las notas compartidas necesitan una cuenta.":
+      "Shared notes need an account.",
+  "Compartida con {0}": "Shared with {0}",
+  "Compartida por {0}": "Shared by {0}",
+  "¿Dejar de ver esta nota?": "Stop seeing this note?",
+  "Desaparecerá de tu cuenta. Quien la creó la conserva.":
+      "It will leave your account. Its owner keeps it.",
+  "Nota compartida": "Shared note",
+  "Compartir nota": "Share note",
+  "Otra persona te ha dado acceso a esta nota.":
+      "Someone gave you access to this note.",
+  "La verá al entrar con ese correo en Oganesson.":
+      "They will see it when they sign in to Oganesson with that email.",
+  "Correo de la otra cuenta": "Email of the other account",
+  "Puede editar": "Can edit",
+  "Solo ver": "View only",
+  "Compartir": "Share",
+  "Propietario": "Owner",
+  "Dejar de ver esta nota": "Stop seeing this note",
 };

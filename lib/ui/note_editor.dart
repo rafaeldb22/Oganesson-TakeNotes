@@ -22,6 +22,7 @@ import 'note_tools.dart';
 import 'format.dart';
 import 'link_picker.dart';
 import 'schedule_sheet.dart';
+import 'share_sheet.dart';
 import 'smooth_scroll.dart';
 import 'text_menu.dart';
 import 'theme.dart';
@@ -291,6 +292,10 @@ class _NoteEditorState extends State<NoteEditor> {
     final folder = repo.folderById(n?.folderId);
     // Barra compacta en móvil / ventanas estrechas.
     final compact = MediaQuery.sizeOf(context).width < 640;
+    // Nota de otra cuenta: solo se toca el texto (si hay permiso).
+    final foreign = n != null && repo.isForeign(n);
+    final writable = n == null || repo.canEdit(n);
+    if (_ctrl.readOnly == writable) _ctrl.readOnly = !writable;
 
     return Scaffold(
       backgroundColor: Palette.card(context),
@@ -311,50 +316,56 @@ class _NoteEditorState extends State<NoteEditor> {
             : null,
         actions: [
           // Fechas / recordatorio
-          _iconAction(
-            tooltip: tr('Nota temporal y avisos'),
-            icon: Icon(
-              n?.isTemporal == true ? Icons.alarm_on : Icons.alarm_add_outlined,
+          if (!foreign)
+            _iconAction(
+              tooltip: tr('Nota temporal y avisos'),
+              icon: Icon(
+                n?.isTemporal == true
+                    ? Icons.alarm_on
+                    : Icons.alarm_add_outlined,
+              ),
+              onPressed: () => showScheduleSheet(context, repo, widget.noteId),
             ),
-            onPressed: () => showScheduleSheet(context, repo, widget.noteId),
-          ),
           // Color de la nota (y de su mecha)
-          _iconAction(
-            tooltip: tr('Color de la nota'),
-            icon: n?.color == null
-                ? const Icon(Icons.palette_outlined)
-                : Container(
-                    width: 20,
-                    height: 20,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      gradient: LinearGradient(colors: fusePalette(n!.color)),
+          if (!foreign && n?.isTemporal == true)
+            _iconAction(
+              tooltip: tr('Color de la nota'),
+              icon: n?.color == null
+                  ? const Icon(Icons.palette_outlined)
+                  : Container(
+                      width: 20,
+                      height: 20,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: LinearGradient(colors: fusePalette(n!.color)),
+                      ),
                     ),
-                  ),
-            onPressed: () => showNoteColorSheet(context, repo, widget.noteId),
-          ),
+              onPressed: () => showNoteColorSheet(context, repo, widget.noteId),
+            ),
           if (!compact) ...[
             // Carpeta
-            PopupMenuButton<String>(
-              tooltip: tr('Mover a carpeta'),
-              icon: Icon(folder == null ? Icons.folder_outlined : Icons.folder,
-                  color:
-                      folder?.color != null ? Color(folder!.color!) : accent),
-              onSelected: (v) =>
-                  repo.moveToFolder(widget.noteId, v == '' ? null : v),
-              itemBuilder: (_) => [
-                CheckedPopupMenuItem(
-                    value: '',
-                    checked: n?.folderId == null,
-                    child: Text(tr('Sin carpeta'))),
-                for (final f in repo.folders)
+            if (!foreign)
+              PopupMenuButton<String>(
+                tooltip: tr('Mover a carpeta'),
+                icon: Icon(
+                    folder == null ? Icons.folder_outlined : Icons.folder,
+                    color:
+                        folder?.color != null ? Color(folder!.color!) : accent),
+                onSelected: (v) =>
+                    repo.moveToFolder(widget.noteId, v == '' ? null : v),
+                itemBuilder: (_) => [
                   CheckedPopupMenuItem(
-                      value: f.id,
-                      checked: n?.folderId == f.id,
-                      child: Text(f.name)),
-              ],
-            ),
-            if (n != null)
+                      value: '',
+                      checked: n?.folderId == null,
+                      child: Text(tr('Sin carpeta'))),
+                  for (final f in repo.folders)
+                    CheckedPopupMenuItem(
+                        value: f.id,
+                        checked: n?.folderId == f.id,
+                        child: Text(f.name)),
+                ],
+              ),
+            if (n != null && !foreign)
               _iconAction(
                 tooltip: pinned ? tr('Desfijar') : tr('Fijar arriba'),
                 onPressed: () => repo.togglePin(widget.noteId),
@@ -404,14 +415,15 @@ class _NoteEditorState extends State<NoteEditor> {
                         title: Text(tr('Exportar')))),
               ],
             ),
-            _iconAction(
-              tooltip: tr('Eliminar nota'),
-              icon: const Icon(Icons.delete_outline),
-              onPressed: () {
-                _closing = true;
-                widget.onDelete(widget.noteId);
-              },
-            ),
+            if (!foreign)
+              _iconAction(
+                tooltip: tr('Eliminar nota'),
+                icon: const Icon(Icons.delete_outline),
+                onPressed: () {
+                  _closing = true;
+                  widget.onDelete(widget.noteId);
+                },
+              ),
           ] else
             // Móvil: el resto va en un menú para que nada se monte.
             PopupMenuButton<String>(
@@ -438,24 +450,27 @@ class _NoteEditorState extends State<NoteEditor> {
                 }
               },
               itemBuilder: (_) => [
-                PopupMenuItem(
-                    value: 'carpeta',
-                    child: ListTile(
-                        dense: true,
-                        contentPadding: EdgeInsets.zero,
-                        leading: Icon(folder == null
-                            ? Icons.folder_outlined
-                            : Icons.folder),
-                        title: Text(folder?.name ?? tr('Mover a carpeta')))),
-                PopupMenuItem(
-                    value: 'fijar',
-                    child: ListTile(
-                        dense: true,
-                        contentPadding: EdgeInsets.zero,
-                        leading: Icon(
-                            pinned ? Icons.push_pin : Icons.push_pin_outlined),
-                        title: Text(
-                            pinned ? tr('Desfijar') : tr('Fijar arriba')))),
+                if (!foreign)
+                  PopupMenuItem(
+                      value: 'carpeta',
+                      child: ListTile(
+                          dense: true,
+                          contentPadding: EdgeInsets.zero,
+                          leading: Icon(folder == null
+                              ? Icons.folder_outlined
+                              : Icons.folder),
+                          title: Text(folder?.name ?? tr('Mover a carpeta')))),
+                if (!foreign)
+                  PopupMenuItem(
+                      value: 'fijar',
+                      child: ListTile(
+                          dense: true,
+                          contentPadding: EdgeInsets.zero,
+                          leading: Icon(pinned
+                              ? Icons.push_pin
+                              : Icons.push_pin_outlined),
+                          title: Text(
+                              pinned ? tr('Desfijar') : tr('Fijar arriba')))),
                 PopupMenuItem(
                     value: 'formato',
                     child: ListTile(
@@ -493,14 +508,16 @@ class _NoteEditorState extends State<NoteEditor> {
                         contentPadding: EdgeInsets.zero,
                         leading: const Icon(Icons.ios_share_rounded),
                         title: Text(tr('Exportar')))),
-                PopupMenuItem(
-                    value: 'borrar',
-                    child: ListTile(
-                        dense: true,
-                        contentPadding: EdgeInsets.zero,
-                        leading: Icon(Icons.delete_outline, color: Colors.red),
-                        title: Text(tr('Eliminar'),
-                            style: TextStyle(color: Colors.red)))),
+                if (!foreign)
+                  PopupMenuItem(
+                      value: 'borrar',
+                      child: ListTile(
+                          dense: true,
+                          contentPadding: EdgeInsets.zero,
+                          leading:
+                              Icon(Icons.delete_outline, color: Colors.red),
+                          title: Text(tr('Eliminar'),
+                              style: TextStyle(color: Colors.red)))),
               ],
             ),
           // Botón OK: aparece con un pequeño "pop", siempre centrado.
@@ -552,14 +569,26 @@ class _NoteEditorState extends State<NoteEditor> {
                     ? EditorToolbar(
                         key: const ValueKey('barra-formato'),
                         controller: _ctrl,
-                        onImage: () => pickAndInsertImages(context, _ctrl),
-                        onLink: () =>
-                            showLinkNotesPicker(context, repo, widget.noteId),
-                        onVoice: () => showVoiceRecorder(context, _ctrl),
-                        onAttach: () => pickAndAttachFiles(context, _ctrl),
-                        onDraw: _draw,
-                        // Las notas del Vault nunca se envían a la IA.
-                        onAi: n == null || n.vault
+                        readOnly: !writable,
+                        onImage: !writable
+                            ? null
+                            : () => pickAndInsertImages(context, _ctrl),
+                        onLink: foreign
+                            ? null
+                            : () => showLinkNotesPicker(
+                                context, repo, widget.noteId),
+                        onVoice: !writable
+                            ? null
+                            : () => showVoiceRecorder(context, _ctrl),
+                        onAttach: !writable
+                            ? null
+                            : () => pickAndAttachFiles(context, _ctrl),
+                        onDraw: !writable ? null : _draw,
+                        onShare: n == null || n.vault
+                            ? null
+                            : () => showShareSheet(context, repo, n.id),
+                        // Ni las del Vault ni las de otra persona van a la IA.
+                        onAi: n == null || n.vault || foreign
                             ? null
                             : () => showNoteAiActions(context, repo, n.id),
                       )
@@ -580,9 +609,16 @@ class _NoteEditorState extends State<NoteEditor> {
                         if (n != null && n.isTemporal)
                           _TemporalBanner(
                             note: n,
-                            onToggleDone: () => repo.toggleDone(n.id),
-                            onEdit: () =>
-                                showScheduleSheet(context, repo, n.id),
+                            onToggleDone:
+                                foreign ? () {} : () => repo.toggleDone(n.id),
+                            onEdit: foreign
+                                ? () {}
+                                : () => showScheduleSheet(context, repo, n.id),
+                          ),
+                        if (foreign)
+                          _SharedBanner(
+                            owner: repo.incomingShare(n.id)?.ownerEmail,
+                            canEdit: writable,
                           ),
                         if (n != null)
                           Padding(
@@ -602,7 +638,7 @@ class _NoteEditorState extends State<NoteEditor> {
                               controller: _ctrl,
                               editorKey: _editorKey,
                               child: NoteMediaScope(
-                                allowAi: n != null && !n.vault,
+                                allowAi: n != null && !n.vault && !foreign,
                                 child: QuillEditor(
                                   controller: _ctrl,
                                   focusNode: _focus,
@@ -688,6 +724,42 @@ class _NoteEditorState extends State<NoteEditor> {
         ),
       ),
     ).animate().fadeIn(duration: Anim.medium, curve: Anim.curve);
+  }
+}
+
+/// Aviso de quién ha compartido la nota.
+class _SharedBanner extends StatelessWidget {
+  const _SharedBanner({required this.owner, required this.canEdit});
+  final String? owner;
+  final bool canEdit;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = Palette.of(context);
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+      decoration: BoxDecoration(
+          color: p.background, borderRadius: BorderRadius.circular(10)),
+      child: Row(
+        children: [
+          Icon(canEdit ? Icons.group_outlined : Icons.visibility_outlined,
+              size: 16, color: p.secondary),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              '${owner == null ? tr('Nota compartida') : trf('Compartida por {0}', [
+                      owner!
+                    ])}'
+              '${canEdit ? '' : ' · ${tr('Solo ver')}'}',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontSize: 12.5, color: p.secondary),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 

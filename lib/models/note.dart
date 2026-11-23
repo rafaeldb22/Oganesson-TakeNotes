@@ -43,9 +43,13 @@ class Note {
     this.position,
     List<String>? links,
     this.repeat,
+    this.ownerId,
     List<Subtask>? subtasks,
   })  : links = links ?? [],
         subtasks = subtasks ?? [];
+
+  /// Cuenta dueña de la nota (distinta de la mía si me la han compartido).
+  String? ownerId;
 
   /// Repetición de la tarea (ver `RepeatRule`). null = no se repite.
   String? repeat;
@@ -148,7 +152,7 @@ class Note {
 
   String get preview {
     final l = _lines;
-    return l.length < 2 ? tr('Sin texto adicional') : l.sublist(1).join(' ');
+    return l.length < 2 ? '' : l.sublist(1).join(' ');
   }
 
   /// ¿Tiene texto además del título?
@@ -169,7 +173,7 @@ class Note {
           bool withTasks = true}) =>
       {
         'id': id,
-        if (userId != null) 'user_id': userId,
+        if ((userId ?? ownerId) != null) 'user_id': userId ?? ownerId,
         'content': content,
         'rich': rich,
         'folder_id': folderId,
@@ -211,6 +215,7 @@ class Note {
           ? (r['links'] as List).whereType<String>().toList()
           : null,
       repeat: r['repeat'] as String?,
+      ownerId: r['user_id'] as String?,
       subtasks: r['subtasks'] is List
           ? (r['subtasks'] as List)
               .map(Subtask.fromJson)

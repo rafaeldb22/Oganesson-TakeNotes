@@ -12,6 +12,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/note.dart';
 import 'note_images.dart';
+import 'note_sharing.dart';
 import 'widget_bridge.dart';
 
 enum SyncStatus { syncing, synced, pending, offline }
@@ -24,6 +25,106 @@ class NotesRepository extends ChangeNotifier {
 
   final SupabaseClient _client;
   final String userId;
+
+  SupabaseClient get client => _client;
+
+  // ---------------------------------------------------- notas compartidas
+
+  /// Notas de otras cuentas a las que tengo acceso.
+  final Map<String, IncomingShare> _incoming = {};
+
+  /// Notas mías compartidas con alguien.
+  final Set<String> _sharedOut = {};
+
+  RealtimeChannel? _sharesChannel;
+
+  String get _sharesKey => 'notas_compartidas_$userId';
+
+  /// ¿Es una nota de otra cuenta?
+  bool isForeign(Note n) => n.ownerId != null && n.ownerId != userId;
+
+  /// ¿Participa en una compartición, en cualquier sentido?
+  bool isShared(Note n) => isForeign(n) || _sharedOut.contains(n.id);
+
+  bool canEdit(Note n) => !isForeign(n) || (_incoming[n.id]?.canEdit ?? false);
+
+  IncomingShare? incomingShare(String id) => _incoming[id];
+
+  /// Quita de este dispositivo una nota ajena (sin tocar la original).
+  void dropForeign(String id) {
+    final n = _notes[id];
+    if (n == null || !isForeign(n)) return;
+    _notes.remove(id);
+    _dirty.remove(id);
+    _incoming.remove(id);
+    history.forget(id);
+    _changed();
+  }
+
+  /// Lee quién comparte qué. Sin la migración 010 no hace nada.
+  Future<void> _syncShares() async {
+    try {
+      final inc = await _client.rpc('my_shared_notes');
+      final out = await _client
+          .from('note_shares')
+          .select('note_id')
+          .eq('created_by', userId);
+      _incoming
+        ..clear()
+        ..addAll({
+          for (final r in inc as List)
+            '${r['note_id']}':
+                IncomingShare('${r['role']}', '${r['owner_email']}')
+        });
+      _sharedOut
+        ..clear()
+        ..addAll([for (final r in out) '${r['note_id']}']);
+      _prefs?.setString(
+          _sharesKey,
+          jsonEncode({
+            'in': {for (final e in _incoming.entries) e.key: e.value.toJson()},
+            'out': _sharedOut.toList(),
+          }));
+    } catch (e) {
+      debugPrint('Compartidas: $e');
+    }
+  }
+
+  void _loadShares() {
+    try {
+      final raw = _prefs?.getString(_sharesKey);
+      if (raw == null) return;
+      final j = jsonDecode(raw) as Map<String, dynamic>;
+      (j['in'] as Map).forEach((id, v) {
+        _incoming['$id'] = IncomingShare('${v['role']}', '${v['owner']}');
+      });
+      _sharedOut.addAll((j['out'] as List).whereType<String>());
+    } catch (_) {}
+  }
+
+  /// Sube el texto de notas ajenas. Si ya no tengo permiso, la versión local
+  /// se descarta y la siguiente sincronización trae la buena.
+  Future<void> _pushForeign(List<Note> list) async {
+    for (final n in list) {
+      final sent = n.updatedAt;
+      final res = await _client
+          .from('notes')
+          .update({
+            'content': n.content,
+            'rich': n.rich,
+            'updated_at': sent.toUtc().toIso8601String(),
+          })
+          .eq('id', n.id)
+          .select('id');
+      if (res.isEmpty) {
+        _notes.remove(n.id);
+        _dirty.remove(n.id);
+        _notify();
+      } else if (_notes[n.id]?.updatedAt == sent) {
+        _dirty.remove(n.id);
+      }
+    }
+  }
 
   final Map<String, Note> _notes = {};
   final Set<String> _dirty = {}; // notas con cambios aún no subidos
@@ -94,7 +195,7 @@ class NotesRepository extends ChangeNotifier {
     final now = DateTime.now().toUtc();
     for (final e in positions.entries) {
       final n = _notes[e.key];
-      if (n == null || n.position == e.value) continue;
+      if (n == null || isForeign(n) || n.position == e.value) continue;
       n.position = e.value;
       n.updatedAt = now;
       _dirty.add(n.id);
@@ -153,7 +254,10 @@ class NotesRepository extends ChangeNotifier {
         .toUtc()
         .subtract(const Duration(days: completedKeepDays));
     for (final n in _notes.values) {
-      if (n.done && !n.deleted && _doneSince(n).isBefore(limit)) {
+      if (n.done &&
+          !n.deleted &&
+          !isForeign(n) &&
+          _doneSince(n).isBefore(limit)) {
         n.deleted = true;
         n.updatedAt = DateTime.now().toUtc();
         _dirty.add(n.id);
@@ -296,6 +400,7 @@ class NotesRepository extends ChangeNotifier {
     if (_disposed) return;
     _loadLocal();
     _notes.values.toList().forEach(_absorbSubtasks);
+    _loadShares();
     loaded = true;
     _notify();
     _subscribe();
@@ -306,6 +411,8 @@ class NotesRepository extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    final shares = _sharesChannel;
+    if (shares != null) unawaited(_client.removeChannel(shares));
     _periodic?.cancel();
     _pushDebounce?.cancel();
     _saveDebounce?.cancel();
@@ -338,7 +445,7 @@ class NotesRepository extends ChangeNotifier {
 
   void updateContent(String id, String content, {String? rich}) {
     final n = _notes[id];
-    if (_disposed || n == null) return;
+    if (_disposed || n == null || !canEdit(n)) return;
     if (n.content == content && n.rich == rich) return;
     if (!n.vault) history.record(n);
     n.content = content;
@@ -412,9 +519,12 @@ class NotesRepository extends ChangeNotifier {
       if (n.vault) continue;
       final local = _notes[n.id];
       if (local != null &&
-          (local.vault || !n.updatedAt.isAfter(local.updatedAt))) {
+          (local.vault ||
+              isForeign(local) ||
+              !n.updatedAt.isAfter(local.updatedAt))) {
         continue;
       }
+      n.ownerId = userId;
       _notes[n.id] = n;
       _dirty.add(n.id);
       notes++;
@@ -500,7 +610,8 @@ class NotesRepository extends ChangeNotifier {
 
   void _edit(String id, void Function(Note n) change) {
     final n = _notes[id];
-    if (_disposed || n == null) return;
+    // Carpeta, fechas, fijar… de una nota ajena son de quien la creó.
+    if (_disposed || n == null || isForeign(n)) return;
     change(n);
     n.updatedAt = DateTime.now().toUtc();
     // Una nota "fresca" con fecha o carpeta ya cuenta como nota real
@@ -514,7 +625,7 @@ class NotesRepository extends ChangeNotifier {
 
   void delete(String id) {
     final n = _notes[id];
-    if (_disposed || n == null) return;
+    if (_disposed || n == null || isForeign(n)) return;
     if (_fresh.contains(id)) {
       _fresh.remove(id);
       _notes.remove(id);
@@ -622,6 +733,24 @@ class NotesRepository extends ChangeNotifier {
       for (final r in rows) {
         if (_mergeNote(Note.fromRow(r))) changed = true;
       }
+      // Notas ajenas a las que ya no tengo acceso.
+      final alive = {for (final r in rows) r['id']};
+      final revoked = _notes.values
+          .where((n) => isForeign(n) && !alive.contains(n.id))
+          .map((n) => n.id)
+          .toList();
+      for (final id in revoked) {
+        _notes.remove(id);
+        _dirty.remove(id);
+        history.forget(id);
+        changed = true;
+      }
+      final before = jsonEncode([_incoming.keys.toList(), _sharedOut.toList()]);
+      await _syncShares();
+      if (before !=
+          jsonEncode([_incoming.keys.toList(), _sharedOut.toList()])) {
+        changed = true;
+      }
       try {
         final frows = await _client.from('folders').select();
         for (final r in frows) {
@@ -704,6 +833,7 @@ class NotesRepository extends ChangeNotifier {
 
     if (_dirty.isEmpty) return;
     final sent = <String, DateTime>{};
+    final foreign = <Note>[];
     final rows = <Map<String, dynamic>>[];
     for (final id in _dirty.toList()) {
       final n = _notes[id];
@@ -713,6 +843,10 @@ class NotesRepository extends ChangeNotifier {
       }
       // Sin la columna `vault` en Supabase, las del Vault esperan en local.
       if (n.vault && !serverHasVault) continue;
+      if (isForeign(n)) {
+        foreign.add(n);
+        continue;
+      }
       sent[id] = n.updatedAt;
       rows.add(n.toRow(
           userId: userId,
@@ -720,6 +854,7 @@ class NotesRepository extends ChangeNotifier {
           withArchive: serverHasArchive,
           withTasks: serverHasTasks));
     }
+    await _pushForeign(foreign);
     if (rows.isEmpty) return;
     try {
       await _client.from('notes').upsert(rows);
@@ -791,6 +926,19 @@ class NotesRepository extends ChangeNotifier {
   }
 
   void _subscribe() {
+    // Canal aparte: sin la migración 010 esta tabla no existe, y en el mismo
+    // canal dejaría sin tiempo real también a las notas.
+    _sharesChannel = _client
+        .channel('compartidas-$userId')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'note_shares',
+          callback: (_) {
+            if (!_disposed) unawaited(sync());
+          },
+        )
+        .subscribe();
     _channel = _client
         .channel('notas-$userId')
         .onPostgresChanges(

@@ -77,6 +77,6 @@ void main() {
     expect(n('\uFFFC').title, 'Imagen');
     expect(n('\uFFFC').hasImages, isTrue);
     expect(n('\uFFFC').isEmpty, isFalse);
-    expect(n('Hola\n\uFFFC').preview, 'Sin texto adicional');
+    expect(n('Hola\n\uFFFC').preview, '');
   });
 }

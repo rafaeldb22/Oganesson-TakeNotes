@@ -388,15 +388,6 @@ class _GraphViewState extends State<GraphView> with TickerProviderStateMixin {
                         fontSize: 17,
                         fontWeight: FontWeight.w700,
                         color: onSurface)),
-                const SizedBox(width: 10),
-                Flexible(
-                  child: Text(
-                    '${trn(g.nodes.length, '{0} nota', '{0} notas')} · '
-                    '${trn(g.edgeCount, '{0} enlace', '{0} enlaces')}',
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(fontSize: 12, color: p.secondary),
-                  ),
-                ),
               ],
             ),
           ),
@@ -704,7 +695,7 @@ class _GraphPainter extends CustomPainter {
       final grow = (isHover ? lerp(1, 1.4) : (inFocus ? lerp(1, 1.12) : 1.0)) *
           (0.6 + 0.4 * a0);
       final r = radius(n.id) * scale.clamp(0.6, 1.6) * grow;
-      final base = note.color != null ? Color(note.color!) : colors.accent;
+      final base = colors.accent; // el color de la nota es solo de su mecha
       final orphan = graph.degree(n.id) == 0;
       final alpha = (orphan ? 0.55 : 1.0) * a0;
       final fill = Paint()

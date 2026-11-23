@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 
 import 'anim.dart';
+import 'smooth_scroll.dart';
 import 'theme.dart';
 
 /// Una opción del menú contextual. `null` en la lista = separador.
@@ -88,9 +89,9 @@ class _ContextMenuRoute extends PopupRoute<String> {
   @override
   String? get barrierLabel => 'menu';
   @override
-  Duration get transitionDuration => const Duration(milliseconds: 260);
+  Duration get transitionDuration => const Duration(milliseconds: 340);
   @override
-  Duration get reverseTransitionDuration => const Duration(milliseconds: 160);
+  Duration get reverseTransitionDuration => const Duration(milliseconds: 190);
 
   @override
   Widget buildPage(BuildContext context, Animation<double> animation,
@@ -136,7 +137,12 @@ class _ContextMenuLayout extends StatelessWidget {
       final origin = Alignment(openLeft ? 1 : -1, openUp ? 1 : -1);
       final curved = CurvedAnimation(
           parent: animation,
-          curve: Curves.easeOutCubic,
+          curve: Curves.easeOutQuint,
+          reverseCurve: Curves.easeInCubic);
+      // La escala se pasa un poco y vuelve: entra con un rebote muy suave.
+      final pop = CurvedAnimation(
+          parent: animation,
+          curve: const Cubic(0.2, 1.15, 0.35, 1),
           reverseCurve: Curves.easeInCubic);
       final top = position.dy.clamp(8.0, size.height - 60);
       // Alto disponible hasta el borde: si el menú no cabe, se desplaza por
@@ -155,7 +161,7 @@ class _ContextMenuLayout extends StatelessWidget {
               opacity: curved,
               child: ScaleTransition(
                 alignment: origin,
-                scale: Tween(begin: 0.9, end: 1.0).animate(curved),
+                scale: Tween(begin: 0.93, end: 1.0).animate(pop),
                 child: SlideTransition(
                   position: Tween(
                     begin: Offset(0, openUp ? 0.03 : -0.03),
@@ -175,19 +181,59 @@ class _ContextMenuLayout extends StatelessWidget {
   }
 }
 
-class _ContextMenuPanel extends StatelessWidget {
+class _ContextMenuPanel extends StatefulWidget {
   const _ContextMenuPanel({required this.entries, this.title, this.header});
   final List<MenuEntry?> entries;
   final String? title;
   final Widget? header;
 
   @override
+  State<_ContextMenuPanel> createState() => _ContextMenuPanelState();
+}
+
+class _ContextMenuPanelState extends State<_ContextMenuPanel> {
+  // Rueda más lenta y con más recorrido de frenada que en las listas.
+  final _scroll = SmoothScrollController(
+    duration: const Duration(milliseconds: 620),
+    curve: Curves.easeOutQuart,
+    wheelFactor: 0.42,
+  );
+  bool _atTop = true;
+  bool _atBottom = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _scroll.addListener(_edges);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _edges());
+  }
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  void _edges() {
+    if (!mounted || !_scroll.hasClients) return;
+    final p = _scroll.position;
+    final top = p.pixels <= p.minScrollExtent + 1;
+    final bottom = p.pixels >= p.maxScrollExtent - 1;
+    if (top != _atTop || bottom != _atBottom) {
+      setState(() {
+        _atTop = top;
+        _atBottom = bottom;
+      });
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final p = Palette.of(context);
     return Material(
       color: p.card,
-      elevation: 12,
-      shadowColor: Theme.of(context).shadowColor.withValues(alpha: 0.4),
+      elevation: 14,
+      shadowColor: Theme.of(context).shadowColor.withValues(alpha: 0.45),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
         side: BorderSide(color: p.separator),
@@ -196,49 +242,93 @@ class _ContextMenuPanel extends StatelessWidget {
       child: ConstrainedBox(
         constraints:
             BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height - 32),
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(6),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (header != null) header!,
-              if (title != null)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(12, 8, 12, 6),
-                  child: Text(title!,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 0.2,
-                          color: p.secondary)),
+        child: NotificationListener<ScrollMetricsNotification>(
+          onNotification: (_) {
+            WidgetsBinding.instance.addPostFrameCallback((_) => _edges());
+            return false;
+          },
+          // Los bordes se desvanecen cuando queda menú por ver.
+          child: TweenAnimationBuilder<double>(
+            tween: Tween(end: _atTop ? 0 : 1),
+            duration: Anim.fast,
+            builder: (_, top, child) => TweenAnimationBuilder<double>(
+              tween: Tween(end: _atBottom ? 0 : 1),
+              duration: Anim.fast,
+              child: child,
+              builder: (_, bottom, child) => ShaderMask(
+                blendMode: BlendMode.dstIn,
+                shaderCallback: (r) {
+                  final f =
+                      r.height > 0 ? (26 / r.height).clamp(0.0, 0.4) : 0.0;
+                  return LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Colors.white.withValues(alpha: 1 - top),
+                      Colors.white,
+                      Colors.white,
+                      Colors.white.withValues(alpha: 1 - bottom),
+                    ],
+                    stops: [0, f, 1 - f, 1],
+                  ).createShader(r);
+                },
+                child: child,
+              ),
+            ),
+            child: ScrollConfiguration(
+              behavior:
+                  ScrollConfiguration.of(context).copyWith(scrollbars: false),
+              child: SingleChildScrollView(
+                controller: _scroll,
+                padding: const EdgeInsets.all(6),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (widget.header != null) widget.header!,
+                    if (widget.title != null)
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(12, 8, 12, 6),
+                        child: Text(widget.title!,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: 0.2,
+                                color: p.secondary)),
+                      ),
+                    // Entrada escalonada, con tope para que un menú largo no
+                    // tarde en aparecer.
+                    for (final (i, e) in widget.entries.indexed)
+                      (e == null
+                              ? Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 8, vertical: 5),
+                                  child: Divider(height: 1, color: p.separator),
+                                )
+                              : e.section
+                                  ? Padding(
+                                      padding: const EdgeInsets.fromLTRB(
+                                          12, 10, 12, 4),
+                                      child: Text(e.label.toUpperCase(),
+                                          style: TextStyle(
+                                              fontSize: 10.5,
+                                              fontWeight: FontWeight.w800,
+                                              letterSpacing: 1,
+                                              color: p.secondary)),
+                                    )
+                                  : _MenuItem(entry: e))
+                          .animate(delay: (16 * i.clamp(0, 14)).ms)
+                          .fadeIn(duration: 240.ms, curve: Curves.easeOut)
+                          .slideY(
+                              begin: 0.18,
+                              duration: 320.ms,
+                              curve: Curves.easeOutQuint),
+                  ],
                 ),
-              // Entrada escalonada: cada opción aparece un poco después.
-              for (final (i, e) in entries.indexed)
-                (e == null
-                        ? Padding(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 5),
-                            child: Divider(height: 1, color: p.separator),
-                          )
-                        : e.section
-                            ? Padding(
-                                padding:
-                                    const EdgeInsets.fromLTRB(12, 10, 12, 4),
-                                child: Text(e.label.toUpperCase(),
-                                    style: TextStyle(
-                                        fontSize: 10.5,
-                                        fontWeight: FontWeight.w800,
-                                        letterSpacing: 1,
-                                        color: p.secondary)),
-                              )
-                            : _MenuItem(entry: e))
-                    .animate(delay: (14 * i).ms)
-                    .fadeIn(duration: 180.ms, curve: Curves.easeOut)
-                    .slideX(begin: 0.04, duration: 220.ms, curve: Anim.curve),
-            ],
+              ),
+            ),
           ),
         ),
       ),
@@ -256,6 +346,7 @@ class _MenuItem extends StatefulWidget {
 
 class _MenuItemState extends State<_MenuItem> {
   bool _hover = false;
+  bool _down = false;
 
   @override
   Widget build(BuildContext context) {
@@ -270,68 +361,83 @@ class _MenuItemState extends State<_MenuItem> {
       onExit: (_) => setState(() => _hover = false),
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
+        onTapDown: (_) => setState(() => _down = true),
+        onTapCancel: () => setState(() => _down = false),
+        onTapUp: (_) => setState(() => _down = false),
         onTap: () => Navigator.of(context).pop(e.value),
-        child: AnimatedContainer(
+        child: AnimatedScale(
+          scale: _down ? 0.97 : 1,
           duration: Anim.fast,
           curve: Anim.curve,
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
-          decoration: BoxDecoration(
-            color: _hover ? tint.withValues(alpha: 0.10) : Colors.transparent,
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: Row(
-            children: [
-              AnimatedContainer(
-                duration: Anim.fast,
-                width: 28,
-                height: 28,
-                decoration: BoxDecoration(
-                  color: tint.withValues(alpha: _hover ? 0.18 : 0.08),
-                  borderRadius: BorderRadius.circular(8),
+          child: AnimatedContainer(
+            duration: Anim.fast,
+            curve: Anim.curve,
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
+            decoration: BoxDecoration(
+              color: _hover ? tint.withValues(alpha: 0.10) : Colors.transparent,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Row(
+              children: [
+                AnimatedContainer(
+                  duration: Anim.fast,
+                  width: 28,
+                  height: 28,
+                  decoration: BoxDecoration(
+                    color: tint.withValues(alpha: _hover ? 0.18 : 0.08),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: AnimatedScale(
+                    scale: _hover ? 1.12 : 1,
+                    duration: Anim.medium,
+                    curve: Curves.easeOutBack,
+                    child: Icon(e.icon,
+                        size: 16,
+                        color:
+                            e.danger ? error : (_hover ? tint : p.secondary)),
+                  ),
                 ),
-                child: Icon(e.icon,
-                    size: 16,
-                    color: e.danger ? error : (_hover ? tint : p.secondary)),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(e.label,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                            fontSize: 13.5,
-                            fontWeight: FontWeight.w500,
-                            color: fg)),
-                    if (e.subtitle != null)
-                      Text(e.subtitle!,
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(e.label,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: TextStyle(fontSize: 11.5, color: p.secondary)),
-                  ],
-                ),
-              ),
-              if (e.badge != null)
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: tint.withValues(alpha: 0.14),
-                    borderRadius: BorderRadius.circular(10),
+                          style: TextStyle(
+                              fontSize: 13.5,
+                              fontWeight: FontWeight.w500,
+                              color: fg)),
+                      if (e.subtitle != null)
+                        Text(e.subtitle!,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style:
+                                TextStyle(fontSize: 11.5, color: p.secondary)),
+                    ],
                   ),
-                  child: Text(e.badge!,
-                      style: TextStyle(
-                          fontSize: 11.5,
-                          fontWeight: FontWeight.w700,
-                          color: tint)),
                 ),
-              if (e.hint != null)
-                Text(e.hint!,
-                    style: TextStyle(fontSize: 11.5, color: p.secondary)),
-            ],
+                if (e.badge != null)
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: tint.withValues(alpha: 0.14),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(e.badge!,
+                        style: TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w700,
+                            color: tint)),
+                  ),
+                if (e.hint != null)
+                  Text(e.hint!,
+                      style: TextStyle(fontSize: 11.5, color: p.secondary)),
+              ],
+            ),
           ),
         ),
       ),

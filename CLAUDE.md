@@ -143,6 +143,9 @@ that it still arrives. On Windows, check toasts are enabled first:
   it is unlocked: filter `!n.vault` before giving anything to an AI.
 - Subtasks were removed in 2.6: `Note.subtasks` only exists to read 2.3 data, and the repository
   converts it to Quill checkboxes (`_absorbSubtasks`). Editor tools live in `EditorToolbar`.
+- Shared notes (2.7): migration 010 (`note_shares`, RPCs, RLS, a trigger that lets non-owners change
+  only text), `lib/data/note_sharing.dart`, `lib/ui/share_sheet.dart`. `repo.isForeign(n)` = another
+  account's note: never upsert it (`_pushForeign`), never send it to an AI.
 - Smooth wheel scrolling: use `SmoothScrollController` (`lib/ui/smooth_scroll.dart`) for new
   scroll views on desktop.
 - Completed tasks: `Note.doneAt` (column `notes.done_at`); done > 3 days → hidden from lists and

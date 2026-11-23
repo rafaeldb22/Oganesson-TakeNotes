@@ -1675,7 +1675,7 @@ class AiTools {
   Note? _note(Object? id) {
     final n = repo.byId('$id');
     // Fuera del alcance: borradas, archivadas o del Vault.
-    if (n == null || n.deleted || n.vault) return null;
+    if (n == null || n.deleted || n.vault || repo.isForeign(n)) return null;
     return n;
   }
 
@@ -1777,7 +1777,7 @@ class AiTools {
         final limit = (a['limit'] is num ? (a['limit'] as num).toInt() : 30)
             .clamp(1, 100);
         final list = repo.notes
-            .where((n) => !n.isEmpty)
+            .where((n) => !n.isEmpty && !repo.isForeign(n))
             .where((n) => q.isEmpty || n.content.toLowerCase().contains(q))
             .where((n) => fid == null || n.folderId == fid)
             .take(limit)
@@ -1799,8 +1799,9 @@ class AiTools {
         final status = '${a['status'] ?? 'pending'}';
         final now = DateTime.now().toUtc();
         final all = [
-          ...repo.temporales,
-          ...repo.completed.where((n) => n.isTemporal && !n.vault),
+          ...repo.temporales.where((n) => !repo.isForeign(n)),
+          ...repo.completed
+              .where((n) => n.isTemporal && !n.vault && !repo.isForeign(n)),
         ];
         final list = all
             .where((n) => switch (status) {

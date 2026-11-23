@@ -16,7 +16,6 @@ import '../data/desktop_integration.dart';
 import '../data/note_factory.dart';
 import '../data/note_filters.dart';
 import '../data/note_images.dart';
-import '../data/note_links.dart';
 import '../data/notes_repository.dart';
 import '../data/vault.dart';
 import '../data/widget_bridge.dart';
@@ -45,6 +44,7 @@ import 'note_image.dart' show NoteThumb;
 import 'note_tools.dart';
 import 'quick_capture.dart';
 import 'schedule_sheet.dart';
+import 'share_sheet.dart';
 import 'sort_menu.dart';
 import 'split.dart';
 import 'toast.dart';
@@ -223,8 +223,12 @@ class _NotesHomeState extends State<NotesHome> {
   final Set<String> _picked = {};
   bool get _selecting => _picked.isNotEmpty;
 
-  void _togglePick(String id) => setState(
-      () => _picked.contains(id) ? _picked.remove(id) : _picked.add(id));
+  void _togglePick(String id) {
+    // Las notas de otra cuenta no se mueven ni se borran en bloque.
+    final n = repo.byId(id);
+    if (n == null || repo.isForeign(n)) return;
+    setState(() => _picked.contains(id) ? _picked.remove(id) : _picked.add(id));
+  }
 
   void _clearPicked() => setState(_picked.clear);
 
@@ -650,29 +654,48 @@ class _NotesHomeState extends State<NotesHome> {
   /// Acciones de una nota: menú contextual con clic derecho (en [at]) o
   /// panel inferior con pulsación larga.
   Future<void> _options(Note n, [Offset? at]) async {
-    final actions = <(String, IconData, String, bool)>[
-      ('link', Icons.hub_outlined, tr('Enlazar con otras notas…'), false),
-      ('sub', Icons.account_tree_outlined, tr('Crear subnota enlazada'), false),
-      ('-', Icons.remove, '', false),
-      (
-        'pin',
-        n.pinned ? Icons.push_pin : Icons.push_pin_outlined,
-        n.pinned ? tr('Desfijar') : tr('Fijar arriba'),
-        false
-      ),
-      (
-        'dates',
-        n.isTemporal ? Icons.alarm_on : Icons.alarm_add_outlined,
-        n.isTemporal ? tr('Cambiar fechas') : tr('Hacer temporal'),
-        false
-      ),
-      ('color', Icons.palette_outlined, tr('Color'), false),
-      ('folder', Icons.drive_file_move_outline, tr('Mover a carpeta'), false),
-      ('-', Icons.remove, '', false),
-      ('select', Icons.check_circle_outline, tr('Seleccionar'), false),
-      ('-', Icons.remove, '', false),
-      ('delete', Icons.delete_outline, tr('Eliminar'), true),
-    ];
+    final foreign = repo.isForeign(n);
+    final actions = foreign
+        ? <(String, IconData, String, bool)>[
+            ('share', Icons.group_outlined, tr('Nota compartida'), false),
+          ]
+        : <(String, IconData, String, bool)>[
+            ('share', Icons.group_add_outlined, tr('Compartir'), false),
+            ('-', Icons.remove, '', false),
+            ('link', Icons.hub_outlined, tr('Enlazar con otras notas…'), false),
+            (
+              'sub',
+              Icons.account_tree_outlined,
+              tr('Crear subnota enlazada'),
+              false
+            ),
+            ('-', Icons.remove, '', false),
+            (
+              'pin',
+              n.pinned ? Icons.push_pin : Icons.push_pin_outlined,
+              n.pinned ? tr('Desfijar') : tr('Fijar arriba'),
+              false
+            ),
+            (
+              'dates',
+              n.isTemporal ? Icons.alarm_on : Icons.alarm_add_outlined,
+              n.isTemporal ? tr('Cambiar fechas') : tr('Hacer temporal'),
+              false
+            ),
+            // El color solo se ve en la línea de tiempo.
+            if (n.isTemporal)
+              ('color', Icons.palette_outlined, tr('Color'), false),
+            (
+              'folder',
+              Icons.drive_file_move_outline,
+              tr('Mover a carpeta'),
+              false
+            ),
+            ('-', Icons.remove, '', false),
+            ('select', Icons.check_circle_outline, tr('Seleccionar'), false),
+            ('-', Icons.remove, '', false),
+            ('delete', Icons.delete_outline, tr('Eliminar'), true),
+          ];
 
     String? choice;
     if (at != null) {
@@ -717,6 +740,8 @@ class _NotesHomeState extends State<NotesHome> {
     }
     if (!mounted || choice == null) return;
     switch (choice) {
+      case 'share':
+        await showShareSheet(context, repo, n.id);
       case 'link':
         await showLinkNotesPicker(context, repo, n.id);
       case 'sub':
@@ -906,23 +931,6 @@ class _NotesHomeState extends State<NotesHome> {
                                         child: _calendar()),
                           ),
                         )),
-                        // Contador abajo a la derecha de la ventana.
-                        Positioned(
-                          right: 14,
-                          bottom: 8,
-                          child: IgnorePointer(
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 10, vertical: 4),
-                              decoration: BoxDecoration(
-                                color: Palette.background(context)
-                                    .withValues(alpha: 0.85),
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              child: _statusText(context),
-                            ),
-                          ),
-                        ),
                       ],
                     ),
                   );
@@ -1084,7 +1092,6 @@ class _NotesHomeState extends State<NotesHome> {
                         q.isNotEmpty || _openFolders.contains(f.id);
                     return FolderGroup(
                       folder: f,
-                      count: inFolder.where((n) => !n.isEmpty).length,
                       expanded: expanded,
                       onToggle: () => _toggleFolder(f.id),
                       onNewNote: () {
@@ -1255,13 +1262,7 @@ class _NotesHomeState extends State<NotesHome> {
                         margin: const EdgeInsets.symmetric(horizontal: 8),
                         color: Palette.separator(context),
                       ),
-                      // Contador: en pantalla ancha va abajo a la derecha de la
-                      // ventana; en el móvil, aquí.
-                      Expanded(
-                        child: wide
-                            ? const SizedBox()
-                            : Center(child: _statusText(context)),
-                      ),
+                      const Spacer(),
                       // En el móvil la lista, el calendario y la red ocupan la misma
                       // pantalla: botón para volver a las notas.
                       if (!wide) ...[
@@ -1507,34 +1508,6 @@ class _NotesHomeState extends State<NotesHome> {
     return _filter == view;
   }
 
-  /// Nº de notas, enlaces o tareas pendientes según la vista.
-  Widget _statusText(BuildContext context) {
-    final total = repo.notes.where((n) => !n.isEmpty).length;
-    final pendientes = repo.temporales.where((n) => !n.done).length;
-    final enlaces = _filter == 'red' ? NoteGraph.of(repo).edgeCount : 0;
-    return AnimatedSwitcher(
-      duration: Anim.medium,
-      transitionBuilder: (c, a) => FadeTransition(
-        opacity: a,
-        child: SlideTransition(
-          position:
-              Tween(begin: const Offset(0, 0.6), end: Offset.zero).animate(a),
-          child: c,
-        ),
-      ),
-      child: Text(
-        switch (_filter) {
-          'calendario' =>
-            trn(pendientes, '{0} tarea pendiente', '{0} tareas pendientes'),
-          'red' => trn(enlaces, '{0} enlace', '{0} enlaces'),
-          _ => trn(total, '{0} nota', '{0} notas'),
-        },
-        key: ValueKey('$_filter-$total-$pendientes-$enlaces'),
-        style: TextStyle(fontSize: 12, color: Palette.secondary(context)),
-      ),
-    );
-  }
-
   /// Opciones de una carpeta (clic derecho o pulsación larga).
   Future<void> _folderOptions(Folder f, Offset? at) async {
     final entries = [
@@ -1592,6 +1565,8 @@ class _NotesHomeState extends State<NotesHome> {
               removing: _removing.contains(n.id),
               checked: _picked.contains(n.id),
               selecting: _selecting,
+              shared: repo.isShared(n),
+              foreign: repo.isForeign(n),
               note: n,
               selected: wide && n.id == _openId,
               onTap: () {
@@ -1789,6 +1764,8 @@ class _NoteTile extends StatefulWidget {
     required this.removing,
     this.checked = false,
     this.selecting = false,
+    this.shared = false,
+    this.foreign = false,
     required this.note,
     required this.selected,
     required this.onTap,
@@ -1805,6 +1782,10 @@ class _NoteTile extends StatefulWidget {
   /// Marcada en la selección múltiple / hay selección activa.
   final bool checked;
   final bool selecting;
+
+  /// Compartida con alguien / de otra cuenta.
+  final bool shared;
+  final bool foreign;
   final Note note;
   final bool selected;
   final VoidCallback onTap;
@@ -1892,7 +1873,7 @@ class _NoteTileState extends State<_NoteTile> {
     final dismissible = Dismissible(
       key: ValueKey('desliza-${n.id}'),
       // Con selección activa no se desliza ni se arrastra.
-      direction: widget.selecting
+      direction: widget.selecting || widget.foreign
           ? DismissDirection.none
           : DismissDirection.horizontal,
       background: const SizedBox.shrink(),
@@ -1963,22 +1944,6 @@ class _NoteTileState extends State<_NoteTile> {
                             )
                           : const SizedBox.shrink(),
                     ),
-                    // Franja con el color elegido para la nota.
-                    AnimatedContainer(
-                      duration: Anim.medium,
-                      width: n.color == null ? 0 : 4,
-                      height: 38,
-                      margin: EdgeInsets.only(right: n.color == null ? 0 : 12),
-                      decoration: BoxDecoration(
-                        gradient: n.color == null
-                            ? null
-                            : LinearGradient(
-                                begin: Alignment.topCenter,
-                                end: Alignment.bottomCenter,
-                                colors: fusePalette(n.color)),
-                        borderRadius: BorderRadius.circular(2),
-                      ),
-                    ),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -2032,6 +1997,15 @@ class _NoteTileState extends State<_NoteTile> {
                     // Miniatura de la primera imagen (como en Notas de iPhone).
                     if (NoteImages.firstPathIn(n.rich) case final path?)
                       NoteThumb(path: path),
+                    if (widget.shared)
+                      Padding(
+                        padding: const EdgeInsets.only(left: 8),
+                        child: Tooltip(
+                          message: tr('Nota compartida'),
+                          child: Icon(Icons.group_outlined,
+                              size: 16, color: Palette.secondary(context)),
+                        ),
+                      ),
                     AnimatedSwitcher(
                       duration: Anim.medium,
                       transitionBuilder: (c, a) =>
@@ -2142,7 +2116,7 @@ class _NoteTileState extends State<_NoteTile> {
     // Arrastrar la nota: con el ratón en vertical (lo horizontal es deslizar)
     // y en el móvil con pulsación larga.
     return LayoutBuilder(builder: (context, c) {
-      if (widget.selecting) return animated;
+      if (widget.selecting || widget.foreign) return animated;
       final feedback = Material(
         color: Colors.transparent,
         child: Container(

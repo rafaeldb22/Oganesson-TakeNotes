@@ -8,13 +8,12 @@ import 'i18n.dart';
 import 'theme.dart';
 
 /// Carpeta desplegable dentro de la lista de notas (como las carpetas de
-/// pestañas de Zen): cabecera con flecha, icono, nombre y nº de notas; al
+/// pestañas de Zen): cabecera con flecha, icono y nombre; al
 /// abrirla, sus notas aparecen debajo, sangradas y con una línea guía.
 class FolderGroup extends StatefulWidget {
   const FolderGroup({
     super.key,
     required this.folder,
-    required this.count,
     required this.expanded,
     required this.onToggle,
     required this.onNewNote,
@@ -27,7 +26,6 @@ class FolderGroup extends StatefulWidget {
   final void Function(String noteId) onDropNote;
 
   final Folder folder;
-  final int count;
   final bool expanded;
   final VoidCallback onToggle;
   final VoidCallback onNewNote;
@@ -139,20 +137,6 @@ class _FolderGroupState extends State<FolderGroup> {
                     ),
                   ),
                 ),
-              ),
-              Container(
-                constraints: const BoxConstraints(minWidth: 22),
-                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.14),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Text('${widget.count}',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                        fontSize: 11.5,
-                        fontWeight: FontWeight.w700,
-                        color: color)),
               ),
               const SizedBox(width: 6),
             ],

@@ -12,7 +12,6 @@ import '../data/note_factory.dart';
 import '../data/note_filters.dart';
 import '../data/notes_repository.dart';
 import '../models/note.dart';
-import 'anim.dart';
 import 'format.dart';
 import 'i18n.dart';
 import 'theme.dart';
@@ -275,13 +274,8 @@ Future<NoteFilters?> showFiltersSheet(
     BuildContext context, NotesRepository repo, NoteFilters current) {
   var date = current.date;
   var folder = current.folderId;
-  var color = current.color;
   var images = current.withImages;
   var tasks = current.withTasks;
-  final colors = {
-    for (final n in repo.notes)
-      if (n.color != null) n.color!
-  }.toList();
   return showModalBottomSheet<NoteFilters>(
     context: context,
     useSafeArea: true,
@@ -330,29 +324,6 @@ Future<NoteFilters?> showFiltersSheet(
               for (final f in repo.folders)
                 chip(f.name, folder == f.id, () => folder = f.id),
             ]),
-            if (colors.isNotEmpty) ...[
-              label(tr('Color')),
-              Wrap(spacing: 8, runSpacing: 6, children: [
-                chip(tr('Todos'), color == null, () => color = null),
-                for (final c in colors)
-                  InkWell(
-                    customBorder: const CircleBorder(),
-                    onTap: () => set(() => color = c),
-                    child: AnimatedContainer(
-                      duration: Anim.fast,
-                      width: 32,
-                      height: 32,
-                      decoration: BoxDecoration(
-                        color: Color(c),
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                            color: color == c ? p.accent : Colors.transparent,
-                            width: 2.5),
-                      ),
-                    ),
-                  ),
-              ]),
-            ],
             label(tr('Contenido')),
             Wrap(spacing: 8, runSpacing: 6, children: [
               FilterChip(
@@ -378,7 +349,6 @@ Future<NoteFilters?> showFiltersSheet(
                       NoteFilters(
                         date: date,
                         folderId: folder,
-                        color: color,
                         withImages: images,
                         withTasks: tasks,
                       )),
@@ -495,7 +465,8 @@ Future<void> showExportAll(BuildContext context, NotesRepository repo) async {
     ),
   );
   if (kind == null || !context.mounted) return;
-  final notes = repo.allActive.where((n) => !n.vault).toList();
+  final notes =
+      repo.allActive.where((n) => !n.vault && !repo.isForeign(n)).toList();
   final day = DateTime.now().toIso8601String().substring(0, 10);
   await _run(context, () async {
     switch (kind) {

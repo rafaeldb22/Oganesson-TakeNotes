@@ -91,6 +91,11 @@ class Updater {
       final body = await res.transform(utf8.decoder).join();
       // 404 = sin releases o repositorio privado: no hay nada que ofrecer.
       if (res.statusCode == 404) return null;
+      // Límite de la API (60 consultas/hora por conexión): no es un fallo de
+      // red, y la web de GitHub sigue diciendo cuál es la última versión.
+      if (res.statusCode == 403 || res.statusCode == 429) {
+        return await _fetchFromWeb(client);
+      }
       if (res.statusCode != 200) {
         throw HttpException('GitHub respondió ${res.statusCode}');
       }
@@ -112,6 +117,22 @@ class Updater {
     } finally {
       client.close(force: true);
     }
+  }
+
+  /// Última versión según la redirección de `releases/latest` (sin API).
+  Future<AppRelease?> _fetchFromWeb(HttpClient client) async {
+    final req = await client.getUrl(Uri.parse(
+        'https://github.com/${AppConfig.githubRepo}/releases/latest'));
+    req
+      ..followRedirects = false
+      ..headers.set(HttpHeaders.userAgentHeader, 'Oganesson-Updater');
+    final res = await req.close().timeout(const Duration(seconds: 15));
+    final location = res.headers.value(HttpHeaders.locationHeader);
+    await res.drain<void>();
+    if (res.statusCode < 300 || res.statusCode >= 400) {
+      throw HttpException('GitHub respondió ${res.statusCode}');
+    }
+    return releaseFromRedirect(location, AppConfig.githubRepo, _assetName);
   }
 
   /// Descarga el instalador informando del progreso (0..1) y lo lanza.
@@ -161,6 +182,21 @@ class Updater {
       }
     }
   }
+}
+
+/// Release a partir de la URL `…/releases/tag/vX.Y.Z`. null si no hay versión.
+AppRelease? releaseFromRedirect(String? location, String repo, String asset) {
+  if (location == null) return null;
+  final m = RegExp(r'/releases/tag/([^/?#]+)').firstMatch(location);
+  if (m == null) return null;
+  final tag = Uri.decodeComponent(m.group(1)!);
+  return AppRelease(
+    version: tag.startsWith('v') ? tag.substring(1) : tag,
+    notes: '',
+    pageUrl: 'https://github.com/$repo/releases/tag/$tag',
+    downloadUrl: 'https://github.com/$repo/releases/download/$tag/$asset',
+    size: 0,
+  );
 }
 
 /// Compara versiones "1.2.3" (ignora sufijos como "+4" o "-beta").
