@@ -75,7 +75,7 @@
 |---|---|
 | 📝 **Write** | Rich text with titles, lists, checklists, quotes, code, colours and highlight. New notes start with a big title line. |
 | 🖼️ **Add images** | **Ctrl+V** pastes a screenshot (Win+Shift+S) or a copied image; drop files onto a note on Windows; gallery or camera on Android. Crop (free, 1:1, 4:3, 16:9, 3:4, rotate), move up/down or drag it between lines, copy, save. |
-| ⏰ **Deadlines** | Turn a note into a task with a start and a deadline. A fuse bar burns down as time runs out, and you get reminders 7, 3 and 1 days before. |
+| ⏰ **Deadlines** | Turn a note into a task with a start and a deadline. A fuse bar burns down as time runs out, and you choose your reminders: daily, weekly, or 7, 3 and 1 days before, at the time you want. |
 | 📅 **Calendar** | Month view with every task as a bar; tap a day to add one. |
 | 🕸️ **Note network** | Link notes or create linked sub-notes, then explore them as a live graph. |
 | 🔒 **Vault** | Notes behind a master password that locks itself after 5 minutes; reset it with your account password. |

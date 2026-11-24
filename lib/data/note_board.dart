@@ -594,7 +594,21 @@ bool isScribble(List<Offset> points) {
 
   return math.max(reversals((p) => p.dx, box.width),
           reversals((p) => p.dy, box.height)) >=
-      5;
+      4;
+}
+
+/// Radio de borrado de un garabato: cubre el hueco entre sus pasadas para
+/// que no quede tinta entre una y otra.
+double scribbleReach(List<Offset> points, double minimum) {
+  var length = 0.0;
+  var box = Rect.fromPoints(points.first, points.first);
+  for (var i = 1; i < points.length; i++) {
+    length += (points[i] - points[i - 1]).distance;
+    box = box.expandToInclude(Rect.fromPoints(points[i], points[i]));
+  }
+  if (length == 0) return minimum;
+  final spacing = box.width * box.height / length;
+  return (spacing * 0.65).clamp(minimum, minimum * 3);
 }
 
 List<BoardStroke>? eraseStrokes(

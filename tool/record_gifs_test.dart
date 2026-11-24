@@ -22,6 +22,7 @@ import 'package:notas/data/note_images.dart';
 import 'package:notas/data/notes_repository.dart';
 import 'package:notas/ui/assistant_panel.dart';
 import 'package:notas/ui/logo.dart';
+import 'package:notas/ui/new_note_icon.dart';
 import 'package:notas/ui/note_image.dart';
 import 'package:notas/ui/notes_home.dart';
 import 'package:notas/ui/theme.dart';
@@ -657,7 +658,7 @@ void main() {
     await rec.hold(900);
 
     // Nota nueva: el editor entra por encima de la lista…
-    await tester.tap(find.byIcon(Icons.edit_note).first);
+    await tester.tap(find.byType(NewNoteIcon).first);
     await rec.hold(700);
     final id = repo.notes.firstWhere((n) => n.isEmpty).id;
     const title = 'Llamar al dentista';

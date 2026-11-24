@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_quill/flutter_quill.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:notas/data/notes_repository.dart';
+import 'package:notas/ui/new_note_icon.dart';
 import 'package:notas/ui/notes_home.dart';
 import 'package:notas/ui/theme.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -29,7 +30,7 @@ void main() {
         home: NotesHome(repo: repo),
       ));
       await tester.pump(const Duration(seconds: 1));
-      await tester.tap(find.byIcon(Icons.edit_note).first);
+      await tester.tap(find.byType(NewNoteIcon).first);
       await tester.pump(const Duration(milliseconds: 400));
 
       // Un aviso cualquiera del repositorio (como un cambio de estado de la

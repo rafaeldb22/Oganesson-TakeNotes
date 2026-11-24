@@ -8,6 +8,7 @@ import 'anim.dart';
 import 'context_menu.dart';
 import 'format.dart';
 import 'i18n.dart';
+import 'new_note_icon.dart';
 import 'note_editor.dart';
 import 'notes_home.dart' show confirmDelete;
 import 'theme.dart';
@@ -161,7 +162,7 @@ class _VaultScreenState extends State<VaultScreen> {
         ),
         floatingActionButton: FloatingActionButton.extended(
           onPressed: _newNote,
-          icon: const Icon(Icons.edit_note),
+          icon: const NewNoteIcon(),
           label: Text(tr('Nueva nota')),
         ),
         body: ListenableBuilder(

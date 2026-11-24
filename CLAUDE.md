@@ -53,7 +53,8 @@ that it still arrives. On Windows, check toasts are enabled first:
   `remindAt`/`dueAt`/`done` for deadlines) and `Folder`.
 - `lib/data/notes_repository.dart` — local cache (SharedPreferences), change queue,
   upsert to Supabase, realtime for `notes` and `folders`, last edit wins, 3-day trash.
-- `lib/data/reminders.dart` — notifications at 7/3/1 days before the deadline.
+- `lib/data/reminders.dart` — notifications from the choices in `lib/ui/reminder_settings.dart`
+  (daily, weekly, 7/3/1 days before, at a chosen time; saved per device).
 - `lib/data/widget_bridge.dart` — data for the Android widgets (home_widget). Renders the
   image widgets (calendar, tasks, next task, pinned notes: `lib/ui/calendar_widget_image.dart`,
   `lib/ui/widget_images.dart`) only for widgets that are installed. Kotlin side:
@@ -111,8 +112,8 @@ that it still arrives. On Windows, check toasts are enabled first:
   `AiSession` (keeps the raw model `content` so Gemini's thought signatures are sent back).
   UI: `lib/ui/assistant_panel.dart` (`openAssistant`: right panel on wide, bottom sheet on phone).
   Free-tier limits are per Google project and only shown in AI Studio (reset at midnight PT).
-  Imported `.ics` events are read-only for the AI: `list_calendar` and `read_note` only (`_note()`
-  rejects them). Read-only tools run in parallel; each change asks through `confirm`, one by one.
+  Imported `.ics` events are found with `list_calendar` and can be changed or deleted by the AI
+  like notes. Read-only tools run in parallel; each change asks through `confirm`, one by one.
   The system prompt must stay **static** (prompt caching): per-turn data (date, time, folders) goes
   in a `<contexto>` block appended to each user message (`AiSession._context`). Claude requests send
   top-level `cache_control` and `output_config.effort: low`. Retryable errors (`AiException.retryable`)

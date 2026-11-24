@@ -1617,12 +1617,15 @@ class AiTools {
     },
     {
       'name': 'list_calendar',
-      'description': 'Agenda de un periodo: tareas pendientes y eventos '
-          'importados de calendarios (.ics), ordenados por fecha y con el día '
-          'de la semana. Úsala para "qué tengo hoy/mañana/esta semana", para '
-          'planificar, ver huecos libres o detectar choques. Los eventos '
-          '(kind=event) solo se pueden consultar, no cambiar.',
+      'description': 'Agenda: tareas y eventos importados de calendarios '
+          '(.ics), ordenados por fecha y con el día de la semana. Úsala para '
+          '"qué tengo hoy/mañana/esta semana", para planificar, ver huecos o '
+          'detectar choques, y con query para encontrar eventos por su nombre '
+          'antes de cambiarlos o borrarlos. Sus ids valen para todas las '
+          'funciones que cambian notas.',
       'parameters': _obj({
+        'query': _s('Palabras del nombre o del texto. Con query se busca en '
+            'todas las fechas, también en lo ya hecho (opcional).'),
         'from': _s('Desde, ISO 8601 en hora local (por defecto, hoy).'),
         'to': _s('Hasta, ISO 8601 en hora local (por defecto, 14 días).'),
       }),
@@ -1857,21 +1860,9 @@ class AiTools {
   Note? _note(Object? id) {
     final n = repo.byId('$id');
     // Fuera del alcance: borradas, archivadas o del Vault. Los eventos
-    // importados no son notas: solo se leen, con _calendarEvent.
-    if (n == null ||
-        n.deleted ||
-        n.vault ||
-        repo.isForeign(n) ||
-        n.isCalendarEvent) {
-      return null;
-    }
+    // importados de un .ics se pueden leer, cambiar y borrar como las notas.
+    if (n == null || n.deleted || n.vault || repo.isForeign(n)) return null;
     return n;
-  }
-
-  Note? _calendarEvent(Object? id) {
-    final n = repo.byId('$id');
-    if (n == null || !n.isCalendarEvent) return null;
-    return n.deleted || n.vault || repo.isForeign(n) ? null : n;
   }
 
   /// Minúsculas y sin acentos, con la misma longitud que el original.
@@ -2043,31 +2034,28 @@ class AiTools {
   }
 
   Future<Map<String, dynamic>> _run(String name, Map<String, dynamic> a) async {
-    if (!readOnly.contains(name) &&
-        _calendarEvent(a['id'] ?? a['to']) != null) {
-      return {
-        'error': 'Es un evento importado del calendario: solo se puede '
-            'consultar, no cambiar.'
-      };
-    }
     switch (name) {
       case 'list_calendar':
         final today = DateTime.now();
+        final words = _words('${a['query'] ?? ''}'.trim());
+        final searching = words.isNotEmpty;
+        final hasRange = a['from'] != null || a['to'] != null;
         final from =
             _date(a['from']) ?? DateTime(today.year, today.month, today.day);
         final to = _due(a['to']) ??
             DateTime(from.year, from.month, from.day + 14, 23, 59);
         if (to.isBefore(from)) return {'error': 'El periodo no es válido.'};
-        final items = repo.calendarItems
+        final inRange = repo.calendarItems
             .where((n) =>
                 !n.vault &&
                 !repo.isForeign(n) &&
-                !n.done &&
-                !n.periodStart.isAfter(to) &&
-                !n.dueAt!.isBefore(from))
-            .toList()
+                (searching || !n.done) &&
+                (searching && !hasRange ||
+                    !n.periodStart.isAfter(to) && !n.dueAt!.isBefore(from)))
+            .toList();
+        final items = (searching ? _ranked(inRange, words) : inRange)
           ..sort((x, y) => x.periodStart.compareTo(y.periodStart));
-        const maxItems = 60;
+        const maxItems = 100;
         return {
           'count': items.length,
           'items': [
@@ -2081,6 +2069,7 @@ class AiTools {
                 'end': _iso(n.dueAt),
                 'end_day': weekdays[n.dueAt!.toLocal().weekday - 1],
                 if (n.isAllDay) 'all_day': true,
+                if (n.done) 'done': true,
                 if (n.isOverdue()) 'overdue': true,
               },
           ],
@@ -2109,10 +2098,9 @@ class AiTools {
         return {'count': list.length, 'notes': list};
 
       case 'read_note':
-        final event = _calendarEvent(a['id']);
-        final n = event ?? _note(a['id']);
+        final n = _note(a['id']);
         if (n == null) return {'error': 'No existe esa nota.'};
-        if (event == null) sources.add(n.id);
+        if (!n.isCalendarEvent) sources.add(n.id);
         final text = n.content.replaceAll('￼', '[imagen]');
         const page = 8000;
         final from = (a['offset'] is num ? (a['offset'] as num).toInt() : 0)
@@ -2120,7 +2108,7 @@ class AiTools {
         final to = math.min(from + page, text.length);
         return {
           ..._summary(n),
-          if (event != null) 'kind': 'event',
+          if (n.isCalendarEvent) 'kind': 'event',
           'text': text.substring(from, to),
           if (to < text.length) 'next_offset': to,
         };
@@ -2745,7 +2733,7 @@ Cómo trabajar:
 - Si una búsqueda no da nada, prueba con sinónimos o palabras más generales antes de decir que no está.
 - Cada mensaje del usuario lleva al final un bloque <contexto> con la fecha y hora actuales, sus carpetas y su próxima agenda. Úsalo para entender "hoy", "mañana", "el viernes"… y para contestar sin llamar a funciones si ya basta. Las fechas que envíes van en ISO 8601 en hora local, sin zona; una fecha límite sin hora significa todo el día.
 - Una tarea es una nota con fecha límite ("due"); "start" es el inicio de su periodo.
-- Eventos del calendario: los importados de un .ics no son notas. Salen en list_calendar con kind=event y puedes leerlos con read_note, resumirlos y tenerlos en cuenta al planificar, pero no cambiarlos, borrarlos ni enlazarlos. Si te lo piden, explícalo.
+- Eventos del calendario: los importados de un .ics salen en list_calendar con kind=event, no en list_notes. Puedes leerlos y también cambiarlos, completarlos, moverlos de fecha o borrarlos con las mismas funciones que una nota. Nunca digas que son de solo lectura. Para encontrarlos por nombre usa list_calendar con query; si piden borrar o cambiar varios, llama a la función una vez por cada uno.
 - Para planificar o decir qué hacer primero, mira list_calendar y ordena por lo que vence antes, teniendo en cuenta los eventos y los choques de horario.
 - Si la petición es clara, hazla sin preguntar. Si es ambigua de verdad (varias notas encajan, falta la fecha…), haz una sola pregunta concreta antes de cambiar nada.
 - Cambiar una nota que ya existe (texto, archivos, fechas, hecha, carpeta, fijar, color, enlaces, archivar o borrar): la app pide confirmación de cada cambio, uno por uno. Haz una llamada por cada nota y no pidas tú la confirmación en el chat. Si rechaza uno, no insistas y sigue con los demás.

@@ -48,6 +48,8 @@ import 'schedule_sheet.dart';
 import 'share_sheet.dart';
 import 'sort_menu.dart';
 import 'split.dart';
+import 'new_note_icon.dart';
+import 'reminder_settings.dart';
 import 'toast.dart';
 import 'smooth_scroll.dart';
 import 'text_menu.dart';
@@ -363,7 +365,7 @@ class _NotesHomeState extends State<NotesHome> {
       repo: repo,
       onOpenNote: _open,
       commands: [
-        PaletteCommand(Icons.edit_note, tr('Nueva nota'), _newNote,
+        PaletteCommand(Icons.sticky_note_2_rounded, tr('Nueva nota'), _newNote,
             shortcut: 'Ctrl+N'),
         PaletteCommand(Icons.wb_sunny_outlined, tr('Resumen de hoy'),
             () => showDailyBrief(context, repo, onOpen: _open)),
@@ -657,7 +659,12 @@ class _NotesHomeState extends State<NotesHome> {
         : <(String, IconData, String, bool)>[
             ('share', Icons.group_add_outlined, tr('Compartir'), false),
             ('-', Icons.remove, '', false),
-            ('link', Icons.hub_outlined, tr('Enlazar notas o archivos…'), false),
+            (
+              'link',
+              Icons.hub_outlined,
+              tr('Enlazar notas o archivos…'),
+              false
+            ),
             (
               'sub',
               Icons.account_tree_outlined,
@@ -1345,7 +1352,8 @@ class _NotesHomeState extends State<NotesHome> {
                       const SizedBox(width: 4),
                       _BarButton(
                         tooltip: tr('Nueva nota (Ctrl+N)'),
-                        icon: Icons.edit_note,
+                        glyph: NewNoteIcon(
+                            size: 30, color: Palette.accent(context)),
                         big: true,
                         onTap: _newNote,
                       ),
@@ -1463,6 +1471,8 @@ class _NotesHomeState extends State<NotesHome> {
           MenuEntry('vault-pass', Icons.password_rounded,
               tr('Cambiar contraseña del Vault')),
         MenuEntry.section(tr('Aplicación')),
+        MenuEntry('avisos', Icons.notifications_active_outlined, tr('Avisos'),
+            subtitle: tr('Cuándo recordarte tus tareas')),
         MenuEntry('update', Icons.system_update_alt_rounded,
             tr('Buscar actualizaciones')),
         if (desktop.supported)
@@ -1530,6 +1540,8 @@ class _NotesHomeState extends State<NotesHome> {
   Future<void> _runMenuChoice(String choice, {bool withWindows = false}) async {
     final desktop = DesktopIntegration.instance;
     switch (choice) {
+      case 'avisos':
+        await showReminderSettings(context);
       case 'borrar-todo':
         await _confirmDeleteAll();
       case 'resumen':
@@ -2387,14 +2399,18 @@ class _EmptyList extends StatelessWidget {
 class _BarButton extends StatelessWidget {
   const _BarButton({
     required this.tooltip,
-    required this.icon,
+    this.icon,
+    this.glyph,
     required this.onTap,
     this.active = false,
     this.big = false,
   });
 
   final String tooltip;
-  final IconData icon;
+  final IconData? icon;
+
+  /// Dibujo propio en lugar de [icon].
+  final Widget? glyph;
   final VoidCallback onTap;
   final bool active;
   final bool big;
@@ -2420,7 +2436,8 @@ class _BarButton extends StatelessWidget {
                   active ? accent.withValues(alpha: 0.16) : Colors.transparent,
               borderRadius: BorderRadius.circular(13),
             ),
-            child: Icon(icon, size: big ? 30 : 24, color: accent),
+            alignment: Alignment.center,
+            child: glyph ?? Icon(icon, size: big ? 30 : 24, color: accent),
           ),
         ),
       ),

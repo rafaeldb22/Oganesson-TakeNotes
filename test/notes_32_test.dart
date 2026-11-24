@@ -47,7 +47,23 @@ void main() {
     FlutterSecureStorage.setMockInitialValues({});
   });
 
-  test('la IA consulta los eventos .ics pero no los cambia', () async {
+  test('la IA encuentra, cambia y borra los eventos .ics', () async {
+    final r = _repo();
+    final id = _importEvent(r);
+    final tools = AiTools(r, confirm: (_) async => true);
+    final found = await tools.run('list_calendar', {'query': 'fisica'});
+    expect((found['items'] as List).single['id'], id);
+    expect(
+        (await tools
+            .run('append_to_note', {'id': id, 'text': 'Traer DNI'}))['ok'],
+        isTrue);
+    expect(r.byId(id)!.content, contains('Traer DNI'));
+    expect((await tools.run('delete_note', {'id': id}))['ok'], isTrue);
+    expect(r.byId(id)!.deleted, isTrue);
+    r.dispose();
+  });
+
+  test('la IA lee los eventos .ics sin contarlos como notas', () async {
     final r = _repo();
     final id = _importEvent(r);
     var asked = 0;
@@ -68,17 +84,7 @@ void main() {
 
     expect(jsonEncode(await tools.run('list_notes', {})),
         isNot(contains('Clase de física')));
-    for (final (name, args) in [
-      ('delete_note', {'id': id}),
-      ('archive_note', {'id': id}),
-      ('append_to_note', {'id': id, 'text': 'x'}),
-      ('set_pinned', {'id': id, 'pinned': true}),
-      ('attach_files', {'to': id, 'codes': <String>[]}),
-    ]) {
-      expect((await tools.run(name, args))['error'], contains('evento'));
-    }
     expect(asked, 0);
-    expect(r.byId(id)!.deleted, isFalse);
     r.dispose();
   });
 

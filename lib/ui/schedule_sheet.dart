@@ -8,6 +8,7 @@ import '../data/reminders.dart';
 import '../models/note.dart';
 import 'anim.dart';
 import 'format.dart';
+import 'reminder_settings.dart';
 import 'smooth_scroll.dart';
 import 'theme.dart';
 import 'urgency.dart';
@@ -300,7 +301,16 @@ class _ScheduleSheetState extends State<_ScheduleSheet> {
                   ),
               ],
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 6),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed: () => showReminderSettings(context),
+                icon: const Icon(Icons.notifications_active_outlined, size: 18),
+                label: Text(tr('Elegir cuándo avisarme')),
+              ),
+            ),
+            const SizedBox(height: 8),
             Row(
               children: [
                 if (hadSchedule)

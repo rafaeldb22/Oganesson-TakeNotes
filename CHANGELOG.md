@@ -2,6 +2,20 @@
 
 All notable changes to Oganesson TakeNotes (formerly *Notas* / *BabuNotes*).
 
+## [3.3.0] — 2026-11-24
+
+### Added
+- **Choose your reminders** in Settings → Reminders: every day, every week, one week, three days
+  or the day before, at the time you pick, with a live preview and a test button.
+- **The AI can edit and delete imported calendar events**, and find them by name.
+
+### Changed
+- **New note icon**: a sticky note with a plus.
+- **Scribble to erase** now covers much more area, including the gaps between passes.
+
+### Fixed
+- Reminders from different notes could overwrite each other.
+
 ## [3.2.0] — 2026-11-24
 
 ### Added

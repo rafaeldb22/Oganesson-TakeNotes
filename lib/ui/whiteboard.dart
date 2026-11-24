@@ -794,7 +794,8 @@ class _WhiteboardState extends State<Whiteboard> {
       // Garabatear encima de algo lo borra; sobre el vacío es un dibujo más.
       final scribbled = !_strokeIsMarker &&
           isScribble(_points!) &&
-          _c.eraseScribble(_points!, math.max(6, _c.penWidth * 2));
+          _c.eraseScribble(_points!,
+              scribbleReach(_points!, math.max(18 / _scale, _c.penWidth * 3)));
       if (!scribbled) {
         _c.addStroke(BoardStroke(
             _strokeIsMarker ? _c.markerColor : _c.color,

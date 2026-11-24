@@ -944,6 +944,39 @@ const enStrings = <String, String>{
   "¿Eliminar la pizarra?": "Delete the whiteboard?",
   "Podrás recuperarla desde el historial de versiones.":
       "You can bring it back from the version history.",
+  // 3.3
+  "Avisos": "Reminders",
+  "Cuándo recordarte tus tareas": "When to remind you of your tasks",
+  "Elegir cuándo avisarme": "Choose when to remind me",
+  "Elige cuándo quieres que te recordemos tus tareas.":
+      "Choose when you want to be reminded of your tasks.",
+  "Avisos activados": "Reminders on",
+  "Avisos desactivados": "Reminders off",
+  "Antes de la fecha límite": "Before the deadline",
+  "una semana antes": "one week before",
+  "tres días antes": "three days before",
+  "el día de antes": "the day before",
+  "Mientras dure la tarea": "While the task lasts",
+  "Un aviso diario hasta que venza": "A daily reminder until it's due",
+  "Un aviso cada 7 días hasta que venza":
+      "A reminder every 7 days until it's due",
+  "A qué hora": "At what time",
+  "Hora de los avisos": "Reminder time",
+  "Probar aviso": "Test reminder",
+  "Aviso enviado": "Reminder sent",
+  "El sistema tiene los avisos desactivados para la app":
+      "Notifications are turned off for this app in your system",
+  "Los avisos funcionan": "Reminders are working",
+  "Así te recordaremos tus tareas.":
+      "This is how we'll remind you of your tasks.",
+  "Con esta selección no recibirás avisos":
+      "With this selection you won't get reminders",
+  "En una tarea de 2 semanas recibirás 1 aviso":
+      "A 2-week task would get 1 reminder",
+  "En una tarea de 2 semanas recibirás {0} avisos":
+      "A 2-week task would get {0} reminders",
+  "Hace 2 semanas": "2 weeks before",
+  "Quedan {0} días": "{0} days left",
   // 3.2
   "Mirando el calendario…": "Checking the calendar…",
   "He llegado al límite de pasos. Dime «sigue» y continúo.":
