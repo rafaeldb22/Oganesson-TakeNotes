@@ -25,7 +25,8 @@ void main() {
   group('avisos', () {
     final now = DateTime(2026, 12, 1, 8);
     final due = Note.dayEnd(DateTime(2026, 12, 15));
-    const none = ReminderPrefs(week: false, three: false, day: false);
+    const none =
+        ReminderPrefs(week: false, three: false, day: false, leads: {});
 
     List<int> daysOf(ReminderPrefs p) => [
           for (final (at, _) in reminderTimes(_task(now, due), p, now))
@@ -36,7 +37,7 @@ void main() {
         ];
 
     test('solo suenan las casillas marcadas', () {
-      expect(daysOf(const ReminderPrefs()), [7, 3, 1]);
+      expect(daysOf(const ReminderPrefs()), [7, 3, 1, 0]);
       expect(daysOf(none.copyWith(three: true)), [3]);
       expect(daysOf(none), isEmpty);
       expect(daysOf(const ReminderPrefs(enabled: false)), isEmpty);
@@ -59,6 +60,52 @@ void main() {
       final out = reminderTimes(
           _task(DateTime(2026, 12, 2), morning), const ReminderPrefs(), now);
       expect(out.last.$1.toLocal(), DateTime(2026, 12, 2, 7));
+    });
+
+    test('con hora: una hora antes de que acabe, también los días antes', () {
+      final at8pm = DateTime(2026, 12, 15, 20);
+      final out = reminderTimes(_task(now, at8pm),
+          const ReminderPrefs(week: false, three: false), now);
+      expect([for (final (t, _) in out) t.toLocal()],
+          [DateTime(2026, 12, 14, 19), DateTime(2026, 12, 15, 19)]);
+    });
+
+    test('varios avisos el último día', () {
+      final at8pm = DateTime(2026, 12, 15, 20);
+      final out = reminderTimes(
+          _task(now, at8pm),
+          const ReminderPrefs(
+              week: false, three: false, day: false, leads: {0, 10, 60}),
+          now);
+      expect([
+        for (final (t, _) in out) t.toLocal()
+      ], [
+        DateTime(2026, 12, 15, 19),
+        DateTime(2026, 12, 15, 19, 50),
+        at8pm,
+      ]);
+    });
+
+    test('en PC recupera lo que venció y no lo repite', () {
+      final at8pm = DateTime(2026, 12, 15, 20);
+      final n = _task(now, at8pm);
+      const p = ReminderPrefs(week: false, three: false, day: false);
+      final hit = remindersBetween(
+          [n], p, DateTime(2026, 12, 15, 18), DateTime(2026, 12, 15, 19, 30));
+      expect(hit.length, 1);
+      expect(
+          remindersBetween([n], p, DateTime(2026, 12, 15, 19, 30),
+              DateTime(2026, 12, 15, 19, 45)),
+          isEmpty);
+    });
+
+    test('los botones del aviso llegan bien en Android y en Windows', () {
+      expect(parseReminderResponse('done', 'open|a'), ('done', 'a'));
+      expect(parseReminderResponse('done|a', 'done|a'), ('done', 'a'));
+      expect(parseReminderResponse('snooze|a', 'snooze|a'), ('snooze', 'a'));
+      expect(parseReminderResponse(null, 'open|a'), ('open', 'a'));
+      expect(parseReminderResponse(null, 'a'), ('open', 'a'));
+      expect(parseReminderResponse(null, null).$2, isNull);
     });
 
     test('la selección se guarda', () {
@@ -90,6 +137,8 @@ void main() {
         await t.tap(find.text('abrir'));
         await t.pumpAndSettle();
         expect(t.takeException(), isNull);
+        await t.ensureVisible(find.text('tres días antes'));
+        await t.pumpAndSettle();
         await t.tap(find.text('tres días antes'));
         await t.pumpAndSettle();
         expect(Reminders.instance.prefs.three, isFalse);

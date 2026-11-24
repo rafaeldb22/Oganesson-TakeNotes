@@ -149,6 +149,7 @@ class _AssistantPanelState extends State<AssistantPanel> {
     s.addListener(_changed);
     settings.addListener(_changed);
     s.confirm = _confirm;
+    s.confirmMany = _confirmMany;
     // La conversación de la última vez sigue ahí.
     s.load();
     _settings = !settings.configured;
@@ -159,6 +160,7 @@ class _AssistantPanelState extends State<AssistantPanel> {
     s.removeListener(_changed);
     settings.removeListener(_changed);
     s.confirm = (_) async => false;
+    s.confirmMany = null;
     _input.dispose();
     _focus.dispose();
     _scroll.dispose();
@@ -193,6 +195,14 @@ class _AssistantPanelState extends State<AssistantPanel> {
         ),
       ) ==
       true;
+
+  /// Varios cambios en una lista: se aplican todos con un solo botón.
+  Future<Set<int>> _confirmMany(List<String> changes) async =>
+      await showDialog<Set<int>>(
+        context: context,
+        builder: (_) => _ChangesDialog(changes: changes),
+      ) ??
+      const {};
 
   void _send([String? text]) {
     final t = text ?? _input.text;
@@ -1217,6 +1227,55 @@ class _ModelTile extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _ChangesDialog extends StatefulWidget {
+  const _ChangesDialog({required this.changes});
+  final List<String> changes;
+
+  @override
+  State<_ChangesDialog> createState() => _ChangesDialogState();
+}
+
+class _ChangesDialogState extends State<_ChangesDialog> {
+  late final Set<int> _on = {for (var i = 0; i < widget.changes.length; i++) i};
+
+  @override
+  Widget build(BuildContext context) {
+    final total = widget.changes.length;
+    return AlertDialog(
+      icon: const AiBadge(size: 40),
+      title: Text(trf('La IA quiere hacer {0} cambios', [total]),
+          textAlign: TextAlign.center),
+      contentPadding: const EdgeInsets.fromLTRB(8, 12, 8, 0),
+      content: SizedBox(
+        width: 420,
+        child: ListView.builder(
+          shrinkWrap: true,
+          itemCount: total,
+          itemBuilder: (_, i) => CheckboxListTile(
+            dense: true,
+            value: _on.contains(i),
+            controlAffinity: ListTileControlAffinity.leading,
+            title: Text(widget.changes[i],
+                maxLines: 2, overflow: TextOverflow.ellipsis),
+            onChanged: (v) =>
+                setState(() => v == true ? _on.add(i) : _on.remove(i)),
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.pop(context, <int>{}),
+            child: Text(tr('Cancelar'))),
+        FilledButton(
+            onPressed: _on.isEmpty ? null : () => Navigator.pop(context, _on),
+            child: Text(_on.length == total
+                ? trf('Aplicar los {0}', [total])
+                : trf('Aplicar {0} de {1}', [_on.length, total]))),
+      ],
     );
   }
 }

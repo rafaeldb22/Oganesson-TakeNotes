@@ -2,6 +2,21 @@
 
 All notable changes to Oganesson TakeNotes (formerly *Notas* / *BabuNotes*).
 
+## [3.4.0] — 2026-11-24
+
+### Added
+- **Approve several AI changes at once**: one list with checkboxes and a single button.
+- **Mouse side buttons** (and Alt+←/→) go back and forward through what you had open.
+- **Keyboard shortcuts** screen in the ⋯ menu (Ctrl+/), plus Ctrl+H to go home.
+- The Oganesson logo takes you back to the main screen.
+- **Calendar-style reminders**: one hour before a task ends by default, more options on the last
+  day, a separate time for all-day tasks, and *Done* / *Snooze 10 min* buttons.
+- **Reminders on PC**: fired by the app from the tray, catching up on what it missed while closed.
+  It warns you if Windows has notifications turned off.
+
+### Changed
+- The new note icon is the same size as the other icons.
+
 ## [3.3.0] — 2026-11-24
 
 ### Added

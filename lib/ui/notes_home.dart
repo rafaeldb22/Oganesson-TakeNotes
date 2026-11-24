@@ -3,6 +3,7 @@ import 'dart:io' show File, Platform;
 import 'dart:math';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -17,6 +18,7 @@ import '../data/note_factory.dart';
 import '../data/note_filters.dart';
 import '../data/note_images.dart';
 import '../data/notes_repository.dart';
+import '../data/reminders.dart';
 import '../data/vault.dart';
 import '../data/widget_bridge.dart';
 import '../models/note.dart';
@@ -50,6 +52,7 @@ import 'sort_menu.dart';
 import 'split.dart';
 import 'new_note_icon.dart';
 import 'reminder_settings.dart';
+import 'shortcuts_sheet.dart';
 import 'toast.dart';
 import 'smooth_scroll.dart';
 import 'text_menu.dart';
@@ -162,6 +165,18 @@ class _NotesHomeState extends State<NotesHome> {
   void initState() {
     super.initState();
     _widgetSub = WidgetBridge.clicks.listen(_onWidgetUri);
+    // Al pulsar un aviso: abrir la nota o marcarla como hecha.
+    Reminders.instance.attach(
+      onOpen: (id) => _whenLoaded(() {
+        if (mounted && repo.byId(id)?.deleted == false) _open(id);
+      }),
+      onDone: (id) => _whenLoaded(() {
+        final n = repo.byId(id);
+        if (mounted && n != null && !n.deleted && !n.done) {
+          repo.toggleDone(id);
+        }
+      }),
+    );
     // Windows: Ctrl+Alt+N (desde cualquier sitio) o la bandeja.
     _newNoteSub = DesktopIntegration.instance.newNoteRequests.listen((_) {
       if (mounted) _newNote();
@@ -198,6 +213,7 @@ class _NotesHomeState extends State<NotesHome> {
 
   @override
   void dispose() {
+    Reminders.instance.detach();
     _widgetSub?.cancel();
     _newNoteSub?.cancel();
     _captureSub?.cancel();
@@ -571,10 +587,50 @@ class _NotesHomeState extends State<NotesHome> {
     _open(n.id, autofocus: true);
   }
 
+  // Historial de pestañas: botones laterales del ratón y Alt+←/→.
+  final _visited = <(String, String?)>[('todas', null)];
+  int _visitedAt = 0;
+  bool _walking = false;
+
+  void _remember() {
+    if (_walking) return;
+    final here = (_filter, _openId);
+    if (_visited[_visitedAt] == here) return;
+    _visited
+      ..removeRange(_visitedAt + 1, _visited.length)
+      ..add(here);
+    if (_visited.length > 60) _visited.removeAt(0);
+    _visitedAt = _visited.length - 1;
+  }
+
+  void _walk(int step) {
+    for (var i = _visitedAt + step; i >= 0 && i < _visited.length; i += step) {
+      final (filter, id) = _visited[i];
+      // Una nota borrada desde entonces se salta.
+      if (id != null && repo.byId(id)?.deleted != false) continue;
+      _walking = true;
+      _setFilter(filter);
+      id == null ? _close() : _open(id);
+      _walking = false;
+      _visitedAt = i;
+      return;
+    }
+  }
+
+  void _goHome() {
+    _close();
+    _setFilter('todas');
+  }
+
   void _setFilter(String f) {
     if (f == _filter) return;
     // Al ir al calendario o a la red se cierra la nota abierta para que se vea.
-    if ((f == 'calendario' || f == 'red') && _openId != null) _close();
+    if ((f == 'calendario' || f == 'red') && _openId != null) {
+      final was = _walking;
+      _walking = true;
+      _close();
+      _walking = was;
+    }
     // En PC Todas / Red / Calendario comparten la misma lista (no se vuelve
     // a montar): sus filas no deben repetir la entrada.
     const shared = {'todas', 'red', 'calendario'};
@@ -588,6 +644,7 @@ class _NotesHomeState extends State<NotesHome> {
         _rowIntro.clear();
       }
     });
+    _remember();
   }
 
   void _open(String id, {bool autofocus = false}) {
@@ -597,6 +654,7 @@ class _NotesHomeState extends State<NotesHome> {
       _openAutofocus = autofocus;
       _discarding = false;
     });
+    _remember();
     // Una nota nueva que se dejó vacía se descarta al cambiar de nota.
     if (prev != null && prev != id) repo.finishEditing(prev);
   }
@@ -608,6 +666,7 @@ class _NotesHomeState extends State<NotesHome> {
       _openId = null;
       _discarding = false;
     });
+    _remember();
     repo.finishEditing(prev);
   }
 
@@ -850,12 +909,28 @@ class _NotesHomeState extends State<NotesHome> {
   Widget build(BuildContext context) {
     return Listener(
       // Cualquier toque cuenta como actividad para el bloqueo del Vault.
-      onPointerDown: (_) => vault.touch(),
+      onPointerDown: (e) {
+        vault.touch();
+        if (e.kind != PointerDeviceKind.mouse) return;
+        if (e.buttons & kBackMouseButton != 0) _walk(-1);
+        if (e.buttons & kForwardMouseButton != 0) _walk(1);
+      },
       onPointerSignal: (_) => vault.touch(),
       child: CallbackShortcuts(
         bindings: {
           const SingleActivator(LogicalKeyboardKey.keyN, control: true):
               _newNote,
+          const SingleActivator(LogicalKeyboardKey.keyH, control: true):
+              _goHome,
+          const SingleActivator(LogicalKeyboardKey.arrowLeft, alt: true): () =>
+              _walk(-1),
+          const SingleActivator(LogicalKeyboardKey.arrowRight, alt: true): () =>
+              _walk(1),
+          const SingleActivator(LogicalKeyboardKey.slash, control: true): () =>
+              showShortcuts(context),
+          // En teclado español, la tecla de "/" sin Mayús es el 7.
+          const SingleActivator(LogicalKeyboardKey.digit7,
+              control: true, shift: true): () => showShortcuts(context),
           // Esc: primero quita la selección; si no hay, cierra la nota.
           const SingleActivator(LogicalKeyboardKey.escape): () =>
               _selecting ? _clearPicked() : _close(),
@@ -1132,10 +1207,16 @@ class _NotesHomeState extends State<NotesHome> {
         centerTitle: false,
         titleSpacing: 20,
         // Con el panel estrecho el título se encoge en vez de desbordarse.
-        title: const FittedBox(
-          fit: BoxFit.scaleDown,
-          alignment: Alignment.centerLeft,
-          child: WaveTitle(text: 'oganesson', fontSize: 30),
+        // Vuelve al inicio, sin cambiar de aspecto al pasar el ratón.
+        title: GestureDetector(
+          key: const ValueKey('logo-inicio'),
+          behavior: HitTestBehavior.opaque,
+          onTap: _goHome,
+          child: const FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: WaveTitle(text: 'oganesson', fontSize: 30),
+          ),
         ).animate(value: _titleIntro ? null : 1).fadeIn(duration: Anim.slow),
         actions: [
           _SyncIndicator(repo: repo),
@@ -1352,9 +1433,7 @@ class _NotesHomeState extends State<NotesHome> {
                       const SizedBox(width: 4),
                       _BarButton(
                         tooltip: tr('Nueva nota (Ctrl+N)'),
-                        glyph: NewNoteIcon(
-                            size: 30, color: Palette.accent(context)),
-                        big: true,
+                        glyph: NewNoteIcon(color: Palette.accent(context)),
                         onTap: _newNote,
                       ),
                       const SizedBox(width: 8),
@@ -1422,6 +1501,8 @@ class _NotesHomeState extends State<NotesHome> {
         MenuEntry('github', Icons.code_rounded, tr('Código en GitHub')),
         if (desktop.supported) ...[
           null,
+          MenuEntry('teclas', Icons.keyboard_rounded, tr('Teclas rápidas'),
+              hint: 'Ctrl+/'),
           MenuEntry('salir', Icons.power_settings_new_rounded,
               tr('Salir de Oganesson'),
               subtitle: tr('Cerrar la ventana solo la oculta')),
@@ -1542,6 +1623,8 @@ class _NotesHomeState extends State<NotesHome> {
     switch (choice) {
       case 'avisos':
         await showReminderSettings(context);
+      case 'teclas':
+        await showShortcuts(context);
       case 'borrar-todo':
         await _confirmDeleteAll();
       case 'resumen':
@@ -2403,7 +2486,6 @@ class _BarButton extends StatelessWidget {
     this.glyph,
     required this.onTap,
     this.active = false,
-    this.big = false,
   });
 
   final String tooltip;
@@ -2413,7 +2495,6 @@ class _BarButton extends StatelessWidget {
   final Widget? glyph;
   final VoidCallback onTap;
   final bool active;
-  final bool big;
 
   @override
   Widget build(BuildContext context) {
@@ -2437,7 +2518,7 @@ class _BarButton extends StatelessWidget {
               borderRadius: BorderRadius.circular(13),
             ),
             alignment: Alignment.center,
-            child: glyph ?? Icon(icon, size: big ? 30 : 24, color: accent),
+            child: glyph ?? Icon(icon, size: 24, color: accent),
           ),
         ),
       ),

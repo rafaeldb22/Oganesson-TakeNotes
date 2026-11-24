@@ -248,6 +248,47 @@ void main() {
       r.dispose();
     });
 
+    test('varios cambios se aprueban de una vez, con los elegidos', () async {
+      final r = _repo();
+      final a = r.createNote(), b = r.createNote(), c = r.createNote();
+      r.updateContent(a.id, 'A');
+      r.updateContent(b.id, 'B');
+      r.updateContent(c.id, 'C');
+      await key();
+      Map<String, dynamic> del(String id) => {
+            'functionCall': {
+              'name': 'delete_note',
+              'args': {'id': id}
+            }
+          };
+      final replies = [
+        _reply([del(a.id), del(b.id), del(c.id)]),
+        _reply([
+          {'text': 'Listo'}
+        ]),
+      ];
+      final s = AiSession(r, transport: (m, u, h, x) async {
+        return (200, replies.removeAt(0));
+      });
+      var single = 0;
+      List<String>? shown;
+      s.confirm = (_) async {
+        single++;
+        return true;
+      };
+      s.confirmMany = (items) async {
+        shown = items;
+        return {0, 2};
+      };
+      await s.send('borra las tres');
+      expect(shown?.length, 3);
+      expect(single, 0);
+      expect(a.deleted, isTrue);
+      expect(b.deleted, isFalse);
+      expect(c.deleted, isTrue);
+      r.dispose();
+    });
+
     test('nunca deja una respuesta en blanco', () async {
       final r = _repo();
       await key();

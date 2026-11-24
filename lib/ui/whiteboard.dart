@@ -609,6 +609,11 @@ class _WhiteboardState extends State<Whiteboard> {
   // ------------------------------------------------------------- gestos
 
   void _onDown(PointerDownEvent e) {
+    // Los botones laterales navegan por la app: no dibujan.
+    if (e.kind == PointerDeviceKind.mouse &&
+        e.buttons & (kBackMouseButton | kForwardMouseButton) != 0) {
+      return;
+    }
     _focus.requestFocus();
     _pointers[e.pointer] = e.localPosition;
     if (e.kind == PointerDeviceKind.stylus ||

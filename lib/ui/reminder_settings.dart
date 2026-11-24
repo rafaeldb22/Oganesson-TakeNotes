@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../data/reminders.dart';
 import 'anim.dart';
@@ -27,6 +28,7 @@ class _ReminderSheet extends StatefulWidget {
 class _ReminderSheetState extends State<_ReminderSheet> {
   ReminderPrefs _p = Reminders.instance.prefs;
   bool _testing = false;
+  bool _systemOff = false;
 
   @override
   void initState() {
@@ -34,7 +36,23 @@ class _ReminderSheetState extends State<_ReminderSheet> {
     Reminders.instance.loadPrefs().then((p) {
       if (mounted) setState(() => _p = p);
     });
+    Reminders.instance.windowsToastsOff().then((off) {
+      if (mounted && off) setState(() => _systemOff = true);
+    });
   }
+
+  void _toggleLead(int minutes) {
+    final next = {..._p.leads};
+    next.contains(minutes) ? next.remove(minutes) : next.add(minutes);
+    _set(_p.copyWith(leads: next));
+  }
+
+  static String _leadLabel(int m) => switch (m) {
+        0 => tr('Al acabar'),
+        60 => tr('1 hora antes'),
+        120 => tr('2 horas antes'),
+        _ => trf('{0} min antes', [m]),
+      };
 
   void _set(ReminderPrefs next) {
     setState(() => _p = next);
@@ -45,7 +63,7 @@ class _ReminderSheetState extends State<_ReminderSheet> {
     final t = await showTimePicker(
       context: context,
       initialTime: TimeOfDay(hour: _p.hour, minute: _p.minute),
-      helpText: tr('Hora de los avisos'),
+      helpText: tr('Tareas de todo el día'),
     );
     if (t != null && mounted) _set(_p.copyWith(hour: t.hour, minute: t.minute));
   }
@@ -85,6 +103,7 @@ class _ReminderSheetState extends State<_ReminderSheet> {
             Text(tr('Elige cuándo quieres que te recordemos tus tareas.'),
                 style: TextStyle(color: p.secondary, fontSize: 13)),
             const SizedBox(height: 14),
+            if (_systemOff) const _SystemOffCard(),
             _MasterCard(
               on: _p.enabled,
               onChanged: (v) => _set(_p.copyWith(enabled: v)),
@@ -97,7 +116,26 @@ class _ReminderSheetState extends State<_ReminderSheet> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    _Heading(tr('Antes de la fecha límite')),
+                    _Heading(tr('El día que acaba')),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: [
+                        for (final m in ReminderPrefs.leadOptions)
+                          FilterChip(
+                            label: Text(_leadLabel(m)),
+                            selected: _p.leads.contains(m),
+                            showCheckmark: false,
+                            selectedColor: p.accent,
+                            labelStyle: TextStyle(
+                              fontWeight: FontWeight.w600,
+                              color: _p.leads.contains(m) ? p.onAccent : null,
+                            ),
+                            onSelected: (_) => _toggleLead(m),
+                          ),
+                      ],
+                    ),
+                    _Heading(tr('Días antes')),
                     Row(
                       children: [
                         for (final (i, (days, label, on, change)) in [
@@ -148,7 +186,11 @@ class _ReminderSheetState extends State<_ReminderSheet> {
                       on: _p.weekly,
                       onTap: () => _set(_p.copyWith(weekly: !_p.weekly)),
                     ),
-                    _Heading(tr('A qué hora')),
+                    const SizedBox(height: 6),
+                    Text(
+                        tr('Los días antes te avisa una hora antes de la hora a la que acaba la tarea.'),
+                        style: TextStyle(fontSize: 12, color: p.secondary)),
+                    _Heading(tr('Tareas de todo el día')),
                     _TimeTile(time: _time, onTap: _pickTime),
                     const SizedBox(height: 14),
                     _Preview(prefs: _p),
@@ -384,7 +426,7 @@ class _TimeTile extends StatelessWidget {
               Icon(Icons.schedule_rounded, size: 21, color: p.accent),
               const SizedBox(width: 12),
               Expanded(
-                child: Text(tr('Hora de los avisos'),
+                child: Text(tr('Avisar a las'),
                     style: const TextStyle(fontWeight: FontWeight.w700)),
               ),
               Text(time,
@@ -397,6 +439,38 @@ class _TimeTile extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Windows tiene apagadas las notificaciones: sin esto ningún aviso se ve.
+class _SystemOffCard extends StatelessWidget {
+  const _SystemOffCard();
+
+  @override
+  Widget build(BuildContext context) {
+    final error = Theme.of(context).colorScheme.error;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.fromLTRB(14, 10, 8, 10),
+      decoration: BoxDecoration(
+        color: error.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.notifications_off_outlined, color: error),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(tr('Windows tiene las notificaciones desactivadas.'),
+                style: const TextStyle(fontSize: 13)),
+          ),
+          TextButton(
+            onPressed: () => launchUrl(Uri.parse('ms-settings:notifications')),
+            child: Text(tr('Activar')),
+          ),
+        ],
       ),
     );
   }

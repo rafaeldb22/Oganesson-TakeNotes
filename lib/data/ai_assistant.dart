@@ -1494,12 +1494,16 @@ class AiAction {
 /// Pide confirmación al usuario (archivar, borrar).
 typedef AiConfirm = Future<bool> Function(String question);
 
+/// Pide confirmación de varios cambios a la vez: devuelve los elegidos.
+typedef AiConfirmMany = Future<Set<int>> Function(List<String> changes);
+
 /// Ejecuta las funciones que pide la IA sobre el repositorio. Las notas del
 /// Vault no existen para el asistente: `repo.notes` nunca las contiene.
 class AiTools {
   AiTools(
     this.repo, {
     required this.confirm,
+    this.confirmMany,
     Future<Uint8List?> Function(String path)? loadImage,
     Future<String> Function(Uint8List bytes, String mime, String prompt)?
         readImage,
@@ -1511,6 +1515,81 @@ class AiTools {
         _readCache = readCache ?? {};
   final NotesRepository repo;
   final AiConfirm confirm;
+  final AiConfirmMany? confirmMany;
+
+  /// El usuario ya lo ha aprobado en la lista de varios cambios.
+  bool _approved = false;
+
+  Future<bool> _ask(String question) async =>
+      _approved || await confirm(question);
+
+  /// Índices aprobados de una función que cambia varias cosas a la vez.
+  Future<List<int>> _askEach(
+      List<String> questions, List<String> labels) async {
+    final all = [for (var i = 0; i < questions.length; i++) i];
+    if (_approved) return all;
+    final many = confirmMany;
+    if (many != null && labels.length > 1) {
+      final chosen = await many(labels);
+      return all.where(chosen.contains).toList();
+    }
+    return [
+      for (final i in all)
+        if (await confirm(questions[i])) i
+    ];
+  }
+
+  /// Ejecuta un cambio que ya se ha aprobado en la lista.
+  Future<Map<String, dynamic>> runApproved(
+      String name, Map<String, dynamic> args) async {
+    _approved = true;
+    try {
+      return await run(name, args);
+    } finally {
+      _approved = false;
+    }
+  }
+
+  /// Texto de un cambio para la lista de aprobar varios. null si no cambiaría
+  /// nada o no se puede hacer: entonces no hace falta preguntar.
+  String? describeChange(String name, Map<String, dynamic> a) {
+    final n = _note(a['id']);
+    final t = n?.title ?? '';
+    switch (name) {
+      case 'delete_note' when n != null:
+        return trf('Eliminar «{0}»', [t]);
+      case 'archive_note' when n != null:
+        return trf('Archivar «{0}»', [t]);
+      case 'append_to_note' when n != null:
+        return trf('Añadir texto a «{0}»', [t]);
+      case 'set_dates' when n != null:
+        return a['clear'] == true
+            ? trf('Quitar las fechas de «{0}»', [t])
+            : trf('Cambiar las fechas de «{0}»', [t]);
+      case 'set_done'
+          when n != null && n.isTemporal && n.done != (a['done'] == true):
+        return a['done'] == true
+            ? trf('Marcar «{0}» como hecha', [t])
+            : trf('Marcar «{0}» como pendiente', [t]);
+      case 'move_to_folder' when n != null:
+        final folder = '${a['folder'] ?? ''}'.trim();
+        return folder.isEmpty
+            ? trf('Sacar «{0}» de su carpeta', [t])
+            : trf('Mover «{0}» a {1}', [t, folder]);
+      case 'set_pinned' when n != null && n.pinned != (a['pinned'] == true):
+        return a['pinned'] == true
+            ? trf('Fijar «{0}»', [t])
+            : trf('Desfijar «{0}»', [t]);
+      case 'set_color' when n != null:
+        return trf('Cambiar el color de «{0}»', [t]);
+      case 'link_notes' when n != null:
+        return trf('Enlazar «{0}» con otras notas', [t]);
+      case 'attach_files':
+        final to = _noteByIdOrTitle(a['to']);
+        return to == null ? null : trf('Añadir archivos a «{0}»', [to.title]);
+    }
+    return null;
+  }
 
   /// Lo ya leído de archivos, imágenes y pizarras: no se vuelve a pagar ni a
   /// esperar por analizar lo mismo en la misma conversación.
@@ -1942,6 +2021,7 @@ class AiTools {
         : d;
   }
 
+  static const denied = _denied;
   static const _denied = {
     'ok': false,
     'reason': 'El usuario no ha permitido este cambio. No insistas.',
@@ -2236,7 +2316,7 @@ class AiTools {
         if (n == null) return {'error': 'No existe esa nota.'};
         final text = '${a['text'] ?? ''}';
         if (text.trim().isEmpty) return {'error': 'Falta el texto.'};
-        if (!await confirm(
+        if (!await _ask(
             trf('La IA quiere añadir texto a «{0}». ¿Añadirlo?', [n.title]))) {
           return _denied;
         }
@@ -2308,11 +2388,16 @@ class AiTools {
           return {'ok': true, 'added': 0, 'note': 'Ya estaban en esa nota.'};
         }
         final picked = <MediaItem>[];
-        for (final m in wanted) {
-          if (await confirm(trf('La IA quiere añadir «{0}» a «{1}». ¿Añadirlo?',
-              [m.name, to.title]))) {
-            picked.add(m);
-          }
+        final okFiles = await _askEach([
+          for (final m in wanted)
+            trf('La IA quiere añadir «{0}» a «{1}». ¿Añadirlo?',
+                [m.name, to.title]),
+        ], [
+          for (final m in wanted)
+            trf('Añadir «{0}» a «{1}»', [m.name, to.title]),
+        ]);
+        for (final i in okFiles) {
+          picked.add(wanted[i]);
         }
         if (picked.isEmpty) return _denied;
         _record(
@@ -2357,7 +2442,7 @@ class AiTools {
         final n = _note(a['id']);
         if (n == null) return {'error': 'No existe esa nota.'};
         if (a['clear'] == true) {
-          if (!await confirm(trf(
+          if (!await _ask(trf(
               'La IA quiere quitar las fechas de «{0}». ¿Quitarlas?',
               [n.title]))) {
             return _denied;
@@ -2370,7 +2455,7 @@ class AiTools {
         if (due == null) return {'error': 'Falta una fecha límite válida.'};
         final start = _date(a['start']) ??
             (n.isSingleDay ? Note.dayStart(due) : n.remindAt?.toLocal());
-        if (!await confirm(trf(
+        if (!await _ask(trf(
             'La IA quiere cambiar las fechas de «{0}». ¿Cambiarlas?',
             [n.title]))) {
           return _denied;
@@ -2395,7 +2480,7 @@ class AiTools {
         if (!n.isTemporal) return {'error': 'Esa nota no es una tarea.'};
         final done = a['done'] == true;
         if (n.done != done) {
-          if (!await confirm(done
+          if (!await _ask(done
               ? trf(
                   'La IA quiere marcar «{0}» como hecha. ¿Marcarla?', [n.title])
               : trf('La IA quiere marcar «{0}» como pendiente. ¿Marcarla?',
@@ -2416,7 +2501,7 @@ class AiTools {
         final n = _note(a['id']);
         if (n == null) return {'error': 'No existe esa nota.'};
         final folder = '${a['folder'] ?? ''}'.trim();
-        if (!await confirm(folder.isEmpty
+        if (!await _ask(folder.isEmpty
             ? trf(
                 'La IA quiere sacar «{0}» de su carpeta. ¿Sacarla?', [n.title])
             : trf('La IA quiere mover «{0}» a {1}. ¿Moverla?',
@@ -2437,7 +2522,7 @@ class AiTools {
         if (n == null) return {'error': 'No existe esa nota.'};
         final pinned = a['pinned'] == true;
         if (n.pinned != pinned) {
-          if (!await confirm(pinned
+          if (!await _ask(pinned
               ? trf('La IA quiere fijar «{0}». ¿Fijarla?', [n.title])
               : trf('La IA quiere desfijar «{0}». ¿Desfijarla?', [n.title]))) {
             return _denied;
@@ -2462,7 +2547,7 @@ class AiTools {
           if (m.isEmpty) return {'error': 'Color desconocido: $name'};
           color = m.first.$2;
         }
-        if (!await confirm(trf(
+        if (!await _ask(trf(
             'La IA quiere cambiar el color de «{0}». ¿Cambiarlo?',
             [n.title]))) {
           return _denied;
@@ -2484,12 +2569,16 @@ class AiTools {
         if (valid.isEmpty)
           return {'error': 'No hay notas válidas que enlazar.'};
         final targets = <String>[];
-        for (final t in valid) {
-          if (await confirm(trf(
-              'La IA quiere enlazar «{0}» con «{1}». ¿Enlazarlas?',
-              [n.title, _note(t)?.title ?? '']))) {
-            targets.add(t);
-          }
+        final okLinks = await _askEach([
+          for (final t in valid)
+            trf('La IA quiere enlazar «{0}» con «{1}». ¿Enlazarlas?',
+                [n.title, _note(t)?.title ?? '']),
+        ], [
+          for (final t in valid)
+            trf('Enlazar «{0}» con «{1}»', [n.title, _note(t)?.title ?? '']),
+        ]);
+        for (final i in okLinks) {
+          targets.add(valid[i]);
         }
         if (targets.isEmpty) return _denied;
         _record(
@@ -2504,7 +2593,7 @@ class AiTools {
         final n = _note(a['id']);
         if (n == null) return {'error': 'No existe esa nota.'};
         final archive = name == 'archive_note';
-        final ok = await confirm(archive
+        final ok = await _ask(archive
             ? trf('La IA quiere archivar «{0}». ¿Archivarla?', [n.title])
             : trf('La IA quiere mover «{0}» a la papelera. ¿Eliminarla?',
                 [n.title]));
@@ -2608,6 +2697,9 @@ class AiSession extends ChangeNotifier {
 
   /// La pone el panel para pedir confirmaciones.
   AiConfirm confirm = (_) async => false;
+
+  /// Lista para aprobar varios cambios de una vez (la pone el panel).
+  AiConfirmMany? confirmMany;
 
   /// Espera antes de reintentar un error pasajero (se acorta en los tests).
   @visibleForTesting
@@ -2733,10 +2825,10 @@ Cómo trabajar:
 - Si una búsqueda no da nada, prueba con sinónimos o palabras más generales antes de decir que no está.
 - Cada mensaje del usuario lleva al final un bloque <contexto> con la fecha y hora actuales, sus carpetas y su próxima agenda. Úsalo para entender "hoy", "mañana", "el viernes"… y para contestar sin llamar a funciones si ya basta. Las fechas que envíes van en ISO 8601 en hora local, sin zona; una fecha límite sin hora significa todo el día.
 - Una tarea es una nota con fecha límite ("due"); "start" es el inicio de su periodo.
-- Eventos del calendario: los importados de un .ics salen en list_calendar con kind=event, no en list_notes. Puedes leerlos y también cambiarlos, completarlos, moverlos de fecha o borrarlos con las mismas funciones que una nota. Nunca digas que son de solo lectura. Para encontrarlos por nombre usa list_calendar con query; si piden borrar o cambiar varios, llama a la función una vez por cada uno.
+- Eventos del calendario: los importados de un .ics salen en list_calendar con kind=event, no en list_notes. Puedes leerlos y también cambiarlos, completarlos, moverlos de fecha o borrarlos con las mismas funciones que una nota. Nunca digas que son de solo lectura. Para encontrarlos por nombre usa list_calendar con query; si piden borrar o cambiar varios, haz todas las llamadas en la misma respuesta.
 - Para planificar o decir qué hacer primero, mira list_calendar y ordena por lo que vence antes, teniendo en cuenta los eventos y los choques de horario.
 - Si la petición es clara, hazla sin preguntar. Si es ambigua de verdad (varias notas encajan, falta la fecha…), haz una sola pregunta concreta antes de cambiar nada.
-- Cambiar una nota que ya existe (texto, archivos, fechas, hecha, carpeta, fijar, color, enlaces, archivar o borrar): la app pide confirmación de cada cambio, uno por uno. Haz una llamada por cada nota y no pidas tú la confirmación en el chat. Si rechaza uno, no insistas y sigue con los demás.
+- Cambiar una nota que ya existe (texto, archivos, fechas, hecha, carpeta, fijar, color, enlaces, archivar o borrar): la app pide confirmación. Si son varios cambios, haz TODAS las llamadas juntas en una misma respuesta (una por nota): la app le enseña una sola lista para aprobarlos con un botón. No pidas tú la confirmación en el chat. Si rechaza alguno, no insistas.
 - Las notas del Vault son privadas: no puedes verlas ni cambiarlas. Si te preguntan por ellas, dilo.
 - Si preguntan algo que pueda estar en sus notas, busca con list_notes (prueba varias palabras clave), lee con read_note las que encajen y responde solo con lo que digan. Si una nota tiene has_images y la respuesta puede estar en una imagen, míralas con read_note_images. Si no está en sus notas, dilo; no te lo inventes. La app enlaza debajo de tu respuesta las notas que hayas leído.
 - Archivos: el <contexto> trae un índice con el código F… de los más recientes, su tipo y su nota. Para meter uno en una nota, usa attach_files con su código. Si no lo ves, búscalo con find_files (prueba por tipo o por el título de su nota). Nunca digas que no puedes o que no lo encuentras sin haber buscado, y nunca inventes un código.
@@ -2918,8 +3010,8 @@ Cómo responder:
     activity = tr('Pensando…');
     notifyListeners();
 
-    final tools =
-        _currentTools = AiTools(repo, confirm: confirm, readCache: _readCache);
+    final tools = _currentTools = AiTools(repo,
+        confirm: confirm, confirmMany: confirmMany, readCache: _readCache);
     final reply = StringBuffer();
     var finished = false;
     try {
@@ -2942,16 +3034,19 @@ Cómo responder:
           final c = turn.calls[i];
           activity = _activityFor(c.name);
           notifyListeners();
-          // Las lecturas seguidas van a la vez; los cambios, de uno en uno
-          // porque cada uno pide confirmación.
+          // Las lecturas seguidas van a la vez.
           var end = i + 1;
-          if (AiTools.readOnly.contains(c.name)) {
-            while (end < turn.calls.length &&
-                AiTools.readOnly.contains(turn.calls[end].name)) {
-              end++;
-            }
+          final reading = AiTools.readOnly.contains(c.name);
+          while (end < turn.calls.length &&
+              AiTools.readOnly.contains(turn.calls[end].name) == reading) {
+            end++;
           }
           final batch = turn.calls.sublist(i, end);
+          if (!reading) {
+            results.addAll(await _runChanges(tools, batch, run));
+            i = end;
+            continue;
+          }
           final outs = await Future.wait(
               [for (final b in batch) tools.run(b.name, b.args)]);
           for (final (k, b) in batch.indexed) {
@@ -2996,6 +3091,37 @@ Cómo responder:
         unawaited(_save());
       }
     }
+  }
+
+  /// Varios cambios seguidos se aprueban en una sola lista, con un botón.
+  Future<List<(AiToolCall, Map<String, dynamic>)>> _runChanges(
+      AiTools tools, List<AiToolCall> calls, int run) async {
+    final labels = [
+      for (final c in calls) tools.describeChange(c.name, c.args)
+    ];
+    final asked = [
+      for (var i = 0; i < calls.length; i++)
+        if (labels[i] != null) i
+    ];
+    final many = confirmMany;
+    final together = many != null && asked.length > 1;
+    final chosen = together
+        ? await many([for (final i in asked) labels[i]!])
+        : const <int>{};
+    final approved = {for (final k in chosen) asked[k]};
+    final out = <(AiToolCall, Map<String, dynamic>)>[];
+    for (final (i, c) in calls.indexed) {
+      if (run != _run) {
+        out.add((c, AiTools.denied));
+      } else if (!together || labels[i] == null) {
+        out.add((c, await tools.run(c.name, c.args)));
+      } else if (approved.contains(i)) {
+        out.add((c, await tools.runApproved(c.name, c.args)));
+      } else {
+        out.add((c, AiTools.denied));
+      }
+    }
+    return out;
   }
 
   static String _activityFor(String fn) => switch (fn) {

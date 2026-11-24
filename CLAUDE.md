@@ -54,7 +54,9 @@ that it still arrives. On Windows, check toasts are enabled first:
 - `lib/data/notes_repository.dart` — local cache (SharedPreferences), change queue,
   upsert to Supabase, realtime for `notes` and `folders`, last edit wins, 3-day trash.
 - `lib/data/reminders.dart` — notifications from the choices in `lib/ui/reminder_settings.dart`
-  (daily, weekly, 7/3/1 days before, at a chosen time; saved per device).
+  (last-day leads, daily, weekly, 7/3/1 days before; timed tasks fire one hour before their end
+  time, all-day tasks at a chosen time; saved per device). Android schedules them in the OS;
+  Windows fires them from a 30 s in-app ticker while in the tray and catches up on launch.
 - `lib/data/widget_bridge.dart` — data for the Android widgets (home_widget). Renders the
   image widgets (calendar, tasks, next task, pinned notes: `lib/ui/calendar_widget_image.dart`,
   `lib/ui/widget_images.dart`) only for widgets that are installed. Kotlin side:
@@ -113,7 +115,8 @@ that it still arrives. On Windows, check toasts are enabled first:
   UI: `lib/ui/assistant_panel.dart` (`openAssistant`: right panel on wide, bottom sheet on phone).
   Free-tier limits are per Google project and only shown in AI Studio (reset at midnight PT).
   Imported `.ics` events are found with `list_calendar` and can be changed or deleted by the AI
-  like notes. Read-only tools run in parallel; each change asks through `confirm`, one by one.
+  like notes. Read-only tools run in parallel; several changes in one turn are approved together
+  through `confirmMany` (a single change uses `confirm`).
   The system prompt must stay **static** (prompt caching): per-turn data (date, time, folders) goes
   in a `<contexto>` block appended to each user message (`AiSession._context`). Claude requests send
   top-level `cache_control` and `output_config.effort: low`. Retryable errors (`AiException.retryable`)
@@ -255,9 +258,8 @@ that it still arrives. On Windows, check toasts are enabled first:
 - Windows: some GPUs showed black/unpainted areas after resizing; a forced full repaint
   runs after resize/maximise (`forceFullRepaint` in `lib/main.dart`). Confirmed fine on
   the owner's PC (2026-11-21: 760 px, 1500x900, maximised and restored, no artefacts).
-- Windows notifications: still unknown whether scheduled toasts fire while the app is
-  closed (unpackaged app). The 2026-11-21 test could not tell: notifications were turned
-  off system-wide on the owner's PC (`ToastEnabled = 0`). Repeat with `TEST_TOAST`.
+- Windows notifications: fired by the app (`Reminders._tick`), so not while it is fully closed.
+  Not yet seen on a real desktop: the owner's PC has them off system-wide (`ToastEnabled = 0`).
 - Password reset by email code: needs custom SMTP in Supabase (see above).
 - Code comments are still in Spanish.
 - The repository is private (the owner plans to make it public): until then the README
