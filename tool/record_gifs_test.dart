@@ -25,6 +25,8 @@ import 'package:notas/ui/logo.dart';
 import 'package:notas/ui/new_note_icon.dart';
 import 'package:notas/ui/note_image.dart';
 import 'package:notas/ui/notes_home.dart';
+import 'package:notas/ui/reminder_settings.dart';
+import 'package:notas/ui/shortcuts_sheet.dart';
 import 'package:notas/ui/theme.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -821,6 +823,75 @@ void main() {
       await rec.hold(1300);
     }
     rec.save('docs/themes.gif');
+    await _cleanUp(tester, repo);
+  });
+
+  testWidgets('GIF: IA, aprobar varios cambios a la vez', (tester) async {
+    _setSize(tester, const Size(430, 760));
+    addTearDown(tester.view.reset);
+    // ignore: invalid_use_of_visible_for_testing_member
+    FlutterSecureStorage.setMockInitialValues({});
+    await AiSettings.instance
+        .save(apiKey: 'demo', model: 'gemini-3.5-flash-lite');
+    final repo = _demoRepo();
+    final session = AiSession(repo);
+    session.messages.add(AiMessage(AiRole.user,
+        'Plan my week: move the exam, add revision notes and a reminder'));
+    final rec = _Recorder(tester, pixelRatio: 0.8, stepMs: 60);
+    await tester.pumpWidget(_app(
+      buildTheme(themeById('galaxia'), Brightness.dark),
+      Scaffold(
+        body: SafeArea(
+          child: AssistantPanel(
+              session: session, onOpenNote: (_) {}, onClose: () {}),
+        ),
+      ),
+      boundary: _root,
+    ));
+    await tester.pump(const Duration(seconds: 1));
+    await rec.hold(700);
+    // El panel registra confirmMany: lo llamamos como lo haría la IA.
+    final chosen = session.confirmMany!([
+      'Deadline of “Examen de historia”: Friday 10:00',
+      'Create note “Revise history” in Clase',
+      'Create note “Physics formulas” in Clase',
+      'Reminder for “Entregar trabajo de física” 1 h before',
+    ]);
+    await rec.hold(1600);
+    for (final i in [1, 3]) {
+      await tester.tap(find.byType(CheckboxListTile).at(i));
+      await rec.hold(700);
+    }
+    await tester.tap(find.byType(CheckboxListTile).at(3));
+    await rec.hold(900);
+    await tester.tap(find.byType(FilledButton).last);
+    await rec.hold(800);
+    expect(await chosen, {0, 2, 3});
+    rec.save('docs/ai-batch.gif');
+    await _cleanUp(tester, repo);
+  });
+
+  testWidgets('GIF: atajos de teclado y avisos', (tester) async {
+    _setSize(tester, const Size(1000, 620));
+    addTearDown(tester.view.reset);
+    final repo = _demoRepo();
+    final rec = _Recorder(tester, pixelRatio: 0.62, stepMs: 70);
+    await tester.pumpWidget(_app(
+        buildTheme(themeById('clasico'), Brightness.dark),
+        NotesHome(repo: repo),
+        boundary: _root));
+    await tester.pump(const Duration(seconds: 2));
+    await rec.hold(800);
+    final ctx = tester.element(find.byType(NotesHome));
+    showShortcuts(ctx);
+    await rec.hold(2600);
+    Navigator.of(ctx).pop();
+    await rec.hold(700);
+    showReminderSettings(ctx);
+    await rec.hold(2600);
+    Navigator.of(ctx).pop();
+    await rec.hold(700);
+    rec.save('docs/shortcuts.gif');
     await _cleanUp(tester, repo);
   });
 

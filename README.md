@@ -40,19 +40,31 @@
   <img src="docs/screenshot-calendar.png" width="49%" alt="Note editor (Sepia light theme)">
 </p>
 
-## New in 3.1
+## New in 3.4
 
 <table>
   <tr>
-    <td align="center" width="50%"><img src="docs/scribble.gif" alt="Scribbling over a line on the whiteboard erases what the scribble covers"><br><sub><b>Scribble to erase</b> — scribble over your ink with the pen and it disappears, with a small dot as the pointer</sub></td>
+    <td align="center" width="42%"><img src="docs/ai-batch.gif" alt="The AI lists four changes with checkboxes; one is unticked and the rest are applied with one button"><br><sub><b>Approve AI changes in one go</b> — tick the ones you want and apply them with a single button</sub></td>
+    <td align="center"><img src="docs/shortcuts.gif" alt="Keyboard shortcuts screen, then the new reminder settings"><br><sub><b>Shortcuts and reminders</b> — every shortcut on one screen (Ctrl+/), and reminders that work like a calendar's</sub></td>
+  </tr>
+</table>
+
+- 🖱️ **Back and forward** with the mouse side buttons or Alt+←/→; **Ctrl+H** or the logo takes you home.
+- ⏰ **Calendar-style reminders**: one hour before a task ends by default, a separate time for all-day tasks, and **Done** / **Snooze 10 min** right in the notification.
+- 💻 **Reminders on PC** fire from the tray and catch up on anything missed while the app was closed. The app tells you if Windows has notifications turned off.
+
+### Also new since 3.1
+
+<table>
+  <tr>
+    <td align="center" width="50%"><img src="docs/scribble.gif" alt="Scribbling over a line on the whiteboard erases what the scribble covers"><br><sub><b>Scribble to erase</b> — scribble over your ink with the pen and it disappears</sub></td>
     <td align="center" width="50%"><img src="docs/calendar.gif" alt="Calendar with aligned, rounded task lines that fade softly into the next month"><br><sub><b>Cleaner calendar</b> — aligned, rounded lines that fade softly into the next month</sub></td>
   </tr>
 </table>
 
-- 🤖 **The AI asks before each change**, one at a time, so you can accept some and reject others.
-- 📅 **All-day tasks** last until the end of the day, with no end time.
-- ⏳ **The time-left banner** now sits at the bottom of the note.
-- 🧠 **New in 3.2:** a faster, smarter AI that can also read your imported `.ics` calendars and plan around them.
+- 🧠 **3.2:** a faster, smarter AI that reads your imported `.ics` calendars and plans around them.
+- 📆 **3.3:** choose your reminders (daily, weekly, 7/3/1 days before) and let the AI edit or delete calendar events.
+- 📅 **All-day tasks** last until the end of the day, and the time-left banner sits at the bottom of the note.
 
 ## See it in action
 
