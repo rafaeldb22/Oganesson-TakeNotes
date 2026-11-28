@@ -160,6 +160,53 @@ List<MediaItem> mediaIn(String? rich) {
   return _result(ops);
 }
 
+/// Añade [text] justo después de la línea [afterLine] (para seguir una lista
+/// o un apartado). Si no la encuentra, va al final.
+(String content, String rich) withTextAfter(
+    String content, String? rich, String afterLine, String text) {
+  final ops = _ops(content, rich);
+  final target = afterLine.trim().toLowerCase();
+  // Posición (en caracteres del Delta) del salto de línea de esa línea.
+  var pos = 0;
+  int? at;
+  final line = StringBuffer();
+  for (final o in ops) {
+    final v = o is Map ? o['insert'] : null;
+    final s = v is String ? v : '\uFFFC';
+    for (var i = 0; i < s.length; i++) {
+      if (s[i] == '\n') {
+        if (at == null && line.toString().trim().toLowerCase() == target) {
+          at = pos + i + 1;
+        }
+        line.clear();
+      } else {
+        line.write(s[i]);
+      }
+    }
+    pos += s.length;
+  }
+  if (at == null) return withText(content, rich, text);
+  // Parte las ops en [at] y mete las nuevas en medio.
+  final before = <Object?>[], after = <Object?>[];
+  var seen = 0;
+  for (final o in ops) {
+    final v = o is Map ? o['insert'] : null;
+    final len = v is String ? v.length : 1;
+    if (seen + len <= at) {
+      before.add(o);
+    } else if (seen >= at) {
+      after.add(o);
+    } else {
+      final cut = at - seen;
+      final m = o as Map;
+      before.add({...m, 'insert': (v as String).substring(0, cut)});
+      after.add({...m, 'insert': v.substring(cut)});
+    }
+    seen += len;
+  }
+  return _result([...before, ...markdownOps(text.trimRight()), ...after]);
+}
+
 /// Prefijo de los adjuntos guardados en `Note.links`, junto a los ids de nota.
 const linkedMediaPrefix = 'att:';
 

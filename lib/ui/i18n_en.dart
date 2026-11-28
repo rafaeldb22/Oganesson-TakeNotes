@@ -1151,4 +1151,22 @@ const enStrings = <String, String>{
   'Tareas hechas': 'Tasks done',
   'Notas creadas': 'Notes created',
   'Minutos de concentración': 'Focus minutes',
+  'Buscando en internet…': 'Searching the web…',
+  'Repasando lo que escribiste…': 'Going over what you wrote…',
+  'Pregunta algo sobre esta nota…': 'Ask something about this note…',
+  'Preguntar': 'Ask',
+  'Memoria y forma de responder': 'Memory and answer style',
+  'Lo que quieres que la IA sepa de ti y cómo quieres que conteste. Se guarda solo en este dispositivo.':
+      'What you want the AI to know about you and how it should answer. Saved only on this device.',
+  'Ej.: Estudio Ingeniería. Respóndeme corto y con listas. Mis entregas van en la carpeta Clase.':
+      'E.g.: I study engineering. Keep answers short, with lists. My assignments go in the Class folder.',
+  'Memoria guardada': 'Memory saved',
+  'Guardar memoria': 'Save memory',
+  'Se parece a «{0}»': 'Looks like “{0}”',
+  'Ignorar': 'Ignore',
+  'Modelo saturado, probando con otro…': 'Model busy, trying another one…',
+  'Por tipo (IA)': 'By type (AI)',
+  'Sin clasificar': 'Unsorted',
+  'Pon tu clave en el Asistente IA para agrupar por tipo.':
+      'Add your key in the AI Assistant to group by type.',
 };

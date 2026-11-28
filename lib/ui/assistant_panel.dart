@@ -1188,6 +1188,80 @@ class _KeySetupState extends State<_KeySetup> {
             ),
           ],
         ),
+        const SizedBox(height: 22),
+        const _MemoryField(),
+      ],
+    );
+  }
+}
+
+/// Memoria personalizada: lo que la IA debe saber del usuario y cómo debe
+/// responder. Se añade a sus instrucciones.
+class _MemoryField extends StatefulWidget {
+  const _MemoryField();
+
+  @override
+  State<_MemoryField> createState() => _MemoryFieldState();
+}
+
+class _MemoryFieldState extends State<_MemoryField> {
+  late final _text = TextEditingController(text: AiSettings.instance.memory);
+
+  @override
+  void dispose() {
+    _text.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final p = Palette.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(children: [
+          Icon(Icons.psychology_alt_outlined, size: 20, color: p.accent),
+          const SizedBox(width: 8),
+          Flexible(
+            child: Text(tr('Memoria y forma de responder'),
+                style: const TextStyle(fontWeight: FontWeight.w700)),
+          ),
+        ]),
+        const SizedBox(height: 4),
+        Text(
+            tr('Lo que quieres que la IA sepa de ti y cómo quieres que '
+                'conteste. Se guarda solo en este dispositivo.'),
+            style: TextStyle(color: p.secondary, fontSize: 12.5)),
+        const SizedBox(height: 8),
+        TextField(
+          controller: _text,
+          minLines: 3,
+          maxLines: 8,
+          maxLength: 2000,
+          decoration: InputDecoration(
+            hintText: tr('Ej.: Estudio Ingeniería. Respóndeme corto y con '
+                'listas. Mis entregas van en la carpeta Clase.'),
+            filled: true,
+            fillColor: p.background,
+            border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide.none),
+          ),
+        ),
+        Align(
+          alignment: Alignment.centerRight,
+          child: TextButton.icon(
+            onPressed: () async {
+              await AiSettings.instance.saveMemory(_text.text);
+              if (context.mounted) {
+                showToast(context, tr('Memoria guardada'),
+                    icon: Icons.psychology_alt_outlined);
+              }
+            },
+            icon: const Icon(Icons.save_outlined, size: 18),
+            label: Text(tr('Guardar memoria')),
+          ),
+        ),
       ],
     );
   }

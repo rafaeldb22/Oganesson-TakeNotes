@@ -2,6 +2,25 @@
 
 All notable changes to Oganesson TakeNotes (formerly *Notas* / *BabuNotes*).
 
+## [3.7.0] — 2026-11-28
+
+### Added
+- **The AI can search the web** (Gemini with Google Search, Claude web search, ChatGPT search) when
+  the answer isn't in your notes, and cites its sources.
+- **"What did I write today?"**: the AI can read everything you created or edited on a given day.
+- **Ask anything about a note** from the note's AI button, besides the quick actions.
+- **AI memory**: in the assistant's settings, tell it about yourself and how you want it to answer.
+- **The AI knows Oganesson**: ask it how to use any feature.
+- **Group by type (AI)** in the sort menu: deliveries, study, practice… together. Only new or renamed
+  notes are sent, so it uses very few requests.
+- **Similar note warning**: while you write, the app tells you if another note is about the same thing
+  (no AI involved). Open it or ignore it for good.
+
+### Changed
+- The AI decides where to add text: at the end, or right after the list or section it continues.
+- If the chosen model is overloaded twice in a row, the last try uses another model of the same
+  provider (e.g. Flash-Lite) instead of failing.
+
 ## [3.6.0] — 2026-11-28
 
 ### Added

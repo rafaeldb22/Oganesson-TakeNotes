@@ -34,6 +34,7 @@ import 'completed_sheet.dart';
 import 'friends_sheet.dart';
 import 'context_menu.dart';
 import 'folders.dart';
+import '../data/smart_groups.dart';
 import 'focus_tools.dart';
 import 'folder_group.dart';
 import 'drop_zone.dart';
@@ -167,6 +168,7 @@ class _NotesHomeState extends State<NotesHome> {
     super.initState();
     GestureBinding.instance.pointerRouter.addGlobalRoute(_sideButtons);
     HardwareKeyboard.instance.addHandler(_onKey);
+    SmartGroups.instance.addListener(_onGroups);
     _widgetSub = WidgetBridge.clicks.listen(_onWidgetUri);
     // Al pulsar un aviso: abrir la nota o marcarla como hecha.
     Reminders.instance.attach(
@@ -218,6 +220,7 @@ class _NotesHomeState extends State<NotesHome> {
   void dispose() {
     GestureBinding.instance.pointerRouter.removeGlobalRoute(_sideButtons);
     HardwareKeyboard.instance.removeHandler(_onKey);
+    SmartGroups.instance.removeListener(_onGroups);
     Reminders.instance.detach();
     _widgetSub?.cancel();
     _newNoteSub?.cancel();
@@ -663,6 +666,36 @@ class _NotesHomeState extends State<NotesHome> {
     return false;
   }
 
+  void _onGroups() {
+    if (mounted && _sort == 'tipo') setState(() {});
+  }
+
+  /// Notas ya enviadas a clasificar en esta sesión (no se repite si falla).
+  final _groupTried = <String>{};
+
+  /// Secciones del orden "Por tipo (IA)".
+  Map<String, List<Note>> _groupsOf(List<Note> notes) {
+    final g = SmartGroups.instance;
+    final pending = [
+      for (final n in notes)
+        if (g.categoryOf(n) == null && _groupTried.add('${n.id}|${n.title}')) n
+    ];
+    if (pending.isNotEmpty && AiSettings.instance.configured) {
+      Future.microtask(() => g.classify(pending));
+    }
+    final out = <String, List<Note>>{};
+    for (final n in notes) {
+      (out[g.categoryOf(n) ?? tr('Sin clasificar')] ??= []).add(n);
+    }
+    final keys = out.keys.toList()
+      ..sort((a, b) => a == tr('Sin clasificar')
+          ? 1
+          : b == tr('Sin clasificar')
+              ? -1
+              : a.compareTo(b));
+    return {for (final k in keys) k: out[k]!};
+  }
+
   /// Notas en el orden en que se ven en la lista (lo rellena `_buildList`).
   List<String> _order = const [];
 
@@ -997,6 +1030,10 @@ class _NotesHomeState extends State<NotesHome> {
       _removing.length,
       Object.hashAllUnordered(_picked),
       _filters.signature,
+      _sort == 'tipo'
+          ? Object.hash(
+              SmartGroups.instance.signature, SmartGroups.instance.busy)
+          : 0,
       Theme.of(context)
     );
     if (_listCache != null && _listKey == key) return _listCache!;
@@ -1288,32 +1325,51 @@ class _NotesHomeState extends State<NotesHome> {
             if (pinned.isNotEmpty)
               ..._section(context, tr('Fijadas'), pinned, wide, () => index++,
                   onDrop: (id) => _dropInto(id, folderId: null, pin: true)),
-            for (final f in folders)
-              if (q.isEmpty || others.any((n) => n.folderId == f.id))
-                Builder(
-                  key: ValueKey('carpeta-${f.id}'),
-                  builder: (context) {
-                    final inFolder =
-                        others.where((n) => n.folderId == f.id).toList();
-                    final expanded =
-                        q.isNotEmpty || _openFolders.contains(f.id);
-                    return FolderGroup(
-                      folder: f,
-                      expanded: expanded,
-                      onToggle: () => _toggleFolder(f.id),
-                      onNewNote: () {
-                        if (!_openFolders.contains(f.id)) _toggleFolder(f.id);
-                        _newNote(folderId: f.id);
-                      },
-                      onOptions: (at) => _folderOptions(f, at),
-                      onDropNote: (id) => _dropInto(id, folderId: f.id),
-                      child: inFolder.isEmpty
-                          ? null
-                          : _tilesCard(context, inFolder, wide, () => index++),
-                    );
-                  },
+            if (_sort == 'tipo') ...[
+              if (!AiSettings.instance.configured)
+                Padding(
+                  key: const ValueKey('tipo-sin-ia'),
+                  padding: const EdgeInsets.fromLTRB(8, 4, 8, 8),
+                  child: Text(
+                      tr('Pon tu clave en el Asistente IA para agrupar por tipo.'),
+                      style: TextStyle(color: Palette.secondary(context))),
                 ),
-            if (loose.isNotEmpty)
+              if (SmartGroups.instance.busy)
+                const Padding(
+                  key: ValueKey('tipo-cargando'),
+                  padding: EdgeInsets.symmetric(vertical: 6),
+                  child: LinearProgressIndicator(minHeight: 2),
+                ),
+              for (final e in _groupsOf(others).entries)
+                ..._section(context, e.key, e.value, wide, () => index++),
+            ] else
+              for (final f in folders)
+                if (q.isEmpty || others.any((n) => n.folderId == f.id))
+                  Builder(
+                    key: ValueKey('carpeta-${f.id}'),
+                    builder: (context) {
+                      final inFolder =
+                          others.where((n) => n.folderId == f.id).toList();
+                      final expanded =
+                          q.isNotEmpty || _openFolders.contains(f.id);
+                      return FolderGroup(
+                        folder: f,
+                        expanded: expanded,
+                        onToggle: () => _toggleFolder(f.id),
+                        onNewNote: () {
+                          if (!_openFolders.contains(f.id)) _toggleFolder(f.id);
+                          _newNote(folderId: f.id);
+                        },
+                        onOptions: (at) => _folderOptions(f, at),
+                        onDropNote: (id) => _dropInto(id, folderId: f.id),
+                        child: inFolder.isEmpty
+                            ? null
+                            : _tilesCard(
+                                context, inFolder, wide, () => index++),
+                      );
+                    },
+                  ),
+            if (loose.isNotEmpty && _sort != 'tipo')
               ..._section(
                   context,
                   folders.isEmpty && pinned.isEmpty ? null : tr('Sin carpeta'),

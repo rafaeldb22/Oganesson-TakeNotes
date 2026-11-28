@@ -228,6 +228,18 @@ class _AiActionsSheet extends StatefulWidget {
 
 class _AiActionsSheetState extends State<_AiActionsSheet> {
   bool _translating = false;
+  final _question = TextEditingController();
+
+  @override
+  void dispose() {
+    _question.dispose();
+    super.dispose();
+  }
+
+  void _ask() {
+    final q = _question.text.trim();
+    if (q.isNotEmpty) Navigator.pop(context, (NoteAiAction.ask, q));
+  }
 
   static const _languages = [
     ('Español', 'Spanish'),
@@ -312,7 +324,32 @@ class _AiActionsSheetState extends State<_AiActionsSheet> {
               .animate()
               .fadeIn(duration: Anim.medium)
               .slideY(begin: 0.2, duration: Anim.medium, curve: Anim.curve),
-          const SizedBox(height: 16),
+          const SizedBox(height: 14),
+          // Pregunta libre sobre la nota.
+          TextField(
+            controller: _question,
+            minLines: 1,
+            maxLines: 3,
+            textInputAction: TextInputAction.send,
+            onSubmitted: (_) => _ask(),
+            decoration: InputDecoration(
+              hintText: tr('Pregunta algo sobre esta nota…'),
+              filled: true,
+              fillColor: p.background,
+              border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  borderSide: BorderSide.none),
+              suffixIcon: ListenableBuilder(
+                listenable: _question,
+                builder: (_, __) => IconButton(
+                  tooltip: tr('Preguntar'),
+                  onPressed: _question.text.trim().isEmpty ? null : _ask,
+                  icon: const Icon(Icons.arrow_upward_rounded),
+                ),
+              ),
+            ),
+          ).animate().fadeIn(duration: Anim.medium, delay: 40.ms),
+          const SizedBox(height: 14),
           LayoutBuilder(builder: (context, c) {
             final columns = c.maxWidth < 340 ? 1 : 2;
             final width = (c.maxWidth - 10 * (columns - 1)) / columns;

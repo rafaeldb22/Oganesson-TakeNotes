@@ -13,6 +13,7 @@ import '../data/note_board.dart';
 import '../data/note_images.dart';
 import '../data/note_links.dart';
 import '../data/notes_repository.dart';
+import '../data/similar_notes.dart';
 import '../models/note.dart';
 import 'ai_tools_ui.dart';
 import 'anim.dart';
@@ -530,6 +531,60 @@ class _NoteEditorState extends State<NoteEditor> {
     _lastTyped = DateTime.now();
     repo.updateContent(widget.noteId, _plain(), rich: rich);
     _checkTasks();
+    _dupTimer?.cancel();
+    _dupTimer = Timer(const Duration(milliseconds: 1500), _findSimilar);
+  }
+
+  // Aviso de nota parecida (sin IA).
+  Timer? _dupTimer;
+  Note? _similar;
+  bool _dupOff = false;
+
+  Future<void> _findSimilar() async {
+    final n = repo.byId(widget.noteId);
+    if (n == null || _dupOff || n.vault || !mounted) return;
+    if ((await SimilarNotes.ignored()).contains(n.id)) {
+      _dupOff = true;
+      return;
+    }
+    final s = SimilarNotes.mostSimilar(n, repo.notes);
+    if (mounted && s?.id != _similar?.id) setState(() => _similar = s);
+  }
+
+  Widget _similarBanner(BuildContext context, Note s) {
+    final p = Palette.of(context);
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.fromLTRB(12, 6, 4, 6),
+      decoration: BoxDecoration(
+        color: p.accent.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(children: [
+        Icon(Icons.content_copy_rounded, size: 17, color: p.accent),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Text(trf('Se parece a «{0}»', [s.title]),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 13.5)),
+        ),
+        if (widget.onOpenNote != null)
+          TextButton(
+              onPressed: () => widget.onOpenNote!(s.id),
+              child: Text(tr('Abrir'))),
+        TextButton(
+          onPressed: () {
+            SimilarNotes.ignore(widget.noteId);
+            setState(() {
+              _similar = null;
+              _dupOff = true;
+            });
+          },
+          child: Text(tr('Ignorar')),
+        ),
+      ]),
+    ).animate().fadeIn(duration: Anim.medium).slideY(begin: -0.2);
   }
 
   /// Todas las casillas marcadas en una nota temporal: ¿tarea hecha?
@@ -635,6 +690,7 @@ class _NoteEditorState extends State<NoteEditor> {
 
   @override
   void dispose() {
+    _dupTimer?.cancel();
     _titleCtrl.dispose();
     _findSub?.cancel();
     _findCtrl.dispose();
@@ -1144,6 +1200,9 @@ class _NoteEditorState extends State<NoteEditor> {
                               canEdit: writable,
                             ),
                           if (_finding) _findBar(context),
+                          if (_similar case final s?
+                              when repo.byId(s.id)?.deleted == false)
+                            _similarBanner(context, s),
                           if (n != null)
                             Padding(
                               padding: const EdgeInsets.only(bottom: 8),
