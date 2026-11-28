@@ -18,6 +18,7 @@ import 'data/reminders.dart';
 import 'data/widget_bridge.dart';
 import 'ui/anim.dart' show ResumeFade;
 import 'ui/auth_gate.dart';
+import 'ui/desktop_widgets.dart' show DesktopWidgetView;
 import 'ui/focus_tools.dart' show PomodoroTomato, showPomodoro;
 import 'ui/i18n.dart';
 import 'ui/logo.dart';
@@ -173,11 +174,22 @@ class NotasApp extends StatelessWidget {
         builder: (context, child) => StartupSplash(
           child: ResumeFade(
               child: isDesktopWindows
-                  ? Column(
-                      children: [
-                        const AppTitleBar(),
-                        Expanded(child: _withTomato(child)),
-                      ],
+                  ? ValueListenableBuilder<String?>(
+                      valueListenable: DesktopIntegration.instance.widgetMode,
+                      // En modo widget la app sigue montada, pero oculta.
+                      builder: (context, kind, _) => Stack(children: [
+                        Offstage(
+                          offstage: kind != null,
+                          child: Column(
+                            children: [
+                              const AppTitleBar(),
+                              Expanded(child: _withTomato(child)),
+                            ],
+                          ),
+                        ),
+                        if (kind != null)
+                          Positioned.fill(child: DesktopWidgetView(kind: kind)),
+                      ]),
                     )
                   : _withTomato(child)),
         ),

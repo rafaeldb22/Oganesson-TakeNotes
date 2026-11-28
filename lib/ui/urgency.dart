@@ -29,13 +29,16 @@ void completeTask(BuildContext context, NotesRepository repo, String id) {
   }
 }
 
-/// Rango del calendario: este mes, los 3 anteriores y los 3 siguientes.
-/// Se calcula siempre con la fecha de hoy, así que se actualiza solo.
+/// Rango del calendario: los 3 meses anteriores y hasta 3 años vista (en
+/// diciembre de 2026, hasta diciembre de 2029). Se calcula con la fecha de
+/// hoy, así que se actualiza solo.
+const calendarMonthsBefore = 3, calendarMonthsAfter = 36;
+
 ({DateTime first, DateTime last}) calendarRange([DateTime? now]) {
   final n = now ?? DateTime.now();
   return (
-    first: DateTime(n.year, n.month - 3, 1),
-    last: DateTime(n.year, n.month + 4, 0, 23, 59),
+    first: DateTime(n.year, n.month - calendarMonthsBefore, 1),
+    last: DateTime(n.year, n.month + calendarMonthsAfter + 1, 0, 23, 59),
   );
 }
 

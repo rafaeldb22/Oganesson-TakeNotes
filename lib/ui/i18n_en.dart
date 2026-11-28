@@ -1280,4 +1280,30 @@ const enStrings = <String, String>{
   'Descanso largo (min)': 'Long break (min)',
   'Pomodoros hasta el descanso largo': 'Pomodoros until the long break',
   'Empezar la siguiente fase sola': 'Start the next phase automatically',
+  'Archivo abierto como nota': 'File opened as a note',
+  'Meses': 'Months',
+  'Semanas': 'Weeks',
+  'Días': 'Days',
+  'Día anterior': 'Previous day',
+  'Día siguiente': 'Next day',
+  'Próximas tareas': 'Upcoming tasks',
+  'Lo que vence antes, siempre a la vista':
+      'What is due soonest, always in sight',
+  'Calendario del mes': 'Month calendar',
+  'El mes con un punto en los días con tareas':
+      'The month with a dot on days with tasks',
+  'El tomate y sus botones': 'The tomato and its buttons',
+  'Nota fijada': 'Pinned note',
+  'Tu primera nota fijada, para leerla de un vistazo':
+      'Your first pinned note, at a glance',
+  'Widgets de escritorio': 'Desktop widgets',
+  'Oganesson se convierte en una ventanita siempre visible en el escritorio. Arrástrala donde quieras; el botón de abrir la devuelve a su tamaño.':
+      'Oganesson turns into a small always-on-top window on your desktop. Drag it anywhere; the open button brings it back to full size.',
+  'Cerrar widget': 'Close widget',
+  'Inicia sesión en Oganesson': 'Sign in to Oganesson',
+  'Nada pendiente': 'Nothing pending',
+  'Fija una nota para verla aquí': 'Pin a note to see it here',
+  'Widgets': 'Widgets',
+  'Tareas, calendario o pomodoro en el escritorio':
+      'Tasks, calendar or pomodoro on your desktop',
 };

@@ -667,6 +667,63 @@ class _NoteEditorState extends State<NoteEditor> {
   /// "bucle"). Como selección de arrastre enseña el extremo que se mueve.
   bool _mouseDown = false;
 
+  /// Arrastrando una selección hasta el borde (o fuera): el texto se
+  /// desplaza solo, suave y más rápido cuanto más lejos, aunque el ratón se
+  /// quede quieto, y la selección sigue al puntero.
+  final _selectArea = GlobalKey();
+  Timer? _edgeTimer;
+  Offset _edgePointer = Offset.zero;
+
+  void _edgeScroll(PointerMoveEvent e) {
+    if (!_mouseDown || e.buttons & kPrimaryMouseButton == 0) return;
+    _edgePointer = e.position;
+    _edgeTimer ??=
+        Timer.periodic(const Duration(milliseconds: 16), (_) => _edgeTick());
+  }
+
+  void _edgeTick() {
+    final box = _selectArea.currentContext?.findRenderObject() as RenderBox?;
+    final editor = _editorKey.currentState;
+    if (!mounted || box == null || editor == null || !_scroll.hasClients) {
+      return _stopEdgeScroll();
+    }
+    final local = box.globalToLocal(_edgePointer);
+    const zone = 36.0;
+    double speed = 0;
+    if (local.dy < zone) {
+      speed = -(zone - local.dy);
+    } else if (local.dy > box.size.height - zone) {
+      speed = local.dy - (box.size.height - zone);
+    }
+    if (speed == 0) return;
+    final pos = _scroll.position;
+    // Curva suave: despacio cerca del borde, rápido lejos.
+    final step = (speed.sign * pow(speed.abs() / 6, 1.35)).clamp(-48.0, 48.0);
+    final to =
+        (pos.pixels + step).clamp(pos.minScrollExtent, pos.maxScrollExtent);
+    if (to == pos.pixels) return;
+    pos.jumpTo(to);
+    final sel = _ctrl.selection;
+    if (!sel.isValid) return;
+    final at = editor.renderEditor.getPositionForOffset(Offset(
+        _edgePointer.dx,
+        _edgePointer.dy.clamp(box.localToGlobal(Offset.zero).dy + 2,
+            box.localToGlobal(Offset(0, box.size.height)).dy - 2)));
+    if (at.offset == sel.extentOffset) return;
+    _ctrl.updateSelection(
+        DragTextSelection(
+            baseOffset: sel.baseOffset,
+            extentOffset: at.offset,
+            first: at.offset < sel.baseOffset),
+        ChangeSource.local);
+  }
+
+  void _stopEdgeScroll() {
+    _mouseDown = false;
+    _edgeTimer?.cancel();
+    _edgeTimer = null;
+  }
+
   void _dragReveal() {
     final s = _ctrl.selection;
     if (!_mouseDown || s.isCollapsed || s is DragTextSelection) return;
@@ -738,6 +795,7 @@ class _NoteEditorState extends State<NoteEditor> {
 
   @override
   void dispose() {
+    _edgeTimer?.cancel();
     themeSettings.removeListener(_onTheme);
     if (_titleSave?.isActive ?? false) {
       _titleSave!.cancel();
@@ -1397,10 +1455,12 @@ class _NoteEditorState extends State<NoteEditor> {
                                 child: NoteMediaScope(
                                   allowAi: n != null && !n.vault && !foreign,
                                   child: Listener(
+                                    key: _selectArea,
                                     onPointerDown: (e) => _mouseDown =
                                         e.kind == PointerDeviceKind.mouse,
-                                    onPointerUp: (_) => _mouseDown = false,
-                                    onPointerCancel: (_) => _mouseDown = false,
+                                    onPointerMove: _edgeScroll,
+                                    onPointerUp: (_) => _stopEdgeScroll(),
+                                    onPointerCancel: (_) => _stopEdgeScroll(),
                                     child: QuillEditor(
                                       controller: _ctrl,
                                       focusNode: _focus,

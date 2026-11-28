@@ -55,6 +55,13 @@ void main() {
       final s = t.state<ScrollableState>(scrollable.first).position.pixels;
       offsets.add(s);
     }
+    // Con el ratón quieto bajo el borde sigue bajando sola.
+    final still = t.state<ScrollableState>(scrollable.first).position.pixels;
+    for (var i = 0; i < 20; i++) {
+      await t.pump(const Duration(milliseconds: 16));
+    }
+    expect(t.state<ScrollableState>(scrollable.first).position.pixels,
+        greaterThan(still + 20));
     await g.up();
     await t.pump(const Duration(seconds: 1));
     var backs = 0;

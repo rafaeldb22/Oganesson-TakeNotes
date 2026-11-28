@@ -157,6 +157,20 @@ Future<void> _save(
 const _fit = 0.322;
 
 void main() {
+  testWidgets('icono de los .md', (tester) async {
+    final frames = <img.Image>[];
+    for (final px in [16, 24, 32, 48, 64, 128, 256]) {
+      final tmp = '${Directory.systemTemp.path}/md_$px.png';
+      await _save(tester, _DocPainter(), px, tmp);
+      frames.add(img.decodePng(File(tmp).readAsBytesSync())!);
+      File(tmp).deleteSync();
+    }
+    File('installer/mdfile.ico')
+        .writeAsBytesSync(img.IcoEncoder().encodeImages(frames));
+    await _save(tester, _DocPainter(), 256,
+        '${Directory.systemTemp.path}/oganesson_md_preview.png');
+  });
+
   testWidgets('generar logo', (tester) async {
     final preview = Platform.environment['ICON_PREVIEW'];
     if (preview != null) {
@@ -190,6 +204,49 @@ void main() {
     File('assets/icon/tray.ico')
         .writeAsBytesSync(img.IcoEncoder().encodeImages(frames));
   });
+}
+
+/// Icono de los .md abiertos con Oganesson: una hoja con la esquina
+/// doblada y el logo dentro.
+class _DocPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final s = size.width;
+    final fold = s * 0.22;
+    final page = Path()
+      ..moveTo(s * 0.16, s * 0.04)
+      ..lineTo(s * 0.84 - fold, s * 0.04)
+      ..lineTo(s * 0.84, s * 0.04 + fold)
+      ..lineTo(s * 0.84, s * 0.96)
+      ..lineTo(s * 0.16, s * 0.96)
+      ..close();
+    canvas.drawShadow(page, Colors.black, s * 0.03, false);
+    canvas.drawPath(page, Paint()..color = const Color(0xFFFDFCF8));
+    canvas.drawPath(
+        page,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = math.max(1, s * 0.02)
+          ..color = const Color(0xFFB9B4A8));
+    canvas.drawPath(
+        Path()
+          ..moveTo(s * 0.84 - fold, s * 0.04)
+          ..lineTo(s * 0.84 - fold, s * 0.04 + fold)
+          ..lineTo(s * 0.84, s * 0.04 + fold)
+          ..close(),
+        Paint()..color = const Color(0xFFE4DFD3));
+    // El logo (con su fondo azul) en el centro de la hoja.
+    final logo = s * 0.5;
+    canvas.save();
+    canvas.translate((s - logo) / 2, s * 0.36);
+    canvas.clipRRect(RRect.fromRectAndRadius(
+        Rect.fromLTWH(0, 0, logo, logo), Radius.circular(logo * 0.22)));
+    LogoPainter().paint(canvas, Size(logo, logo));
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(_DocPainter old) => false;
 }
 
 class _Background extends CustomPainter {

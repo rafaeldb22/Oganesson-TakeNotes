@@ -1,6 +1,9 @@
 import 'dart:convert';
 
 import '../models/note.dart';
+import '../ui/i18n.dart';
+import 'markdown.dart';
+import 'note_attachments.dart';
 import 'notes_repository.dart';
 
 /// Delta de Quill (en JSON) para un texto: la primera línea es el título y
@@ -29,6 +32,25 @@ String richFor(String text, {List<String> images = const []}) {
   }
   if (ops.isEmpty) ops.add({'insert': '\n'});
   return jsonEncode(ops);
+}
+
+/// Nota nueva a partir de un Markdown (un .md abierto con la app): la
+/// primera línea es el título y el resto conserva listas, títulos, negrita…
+Note noteFromMarkdown(NotesRepository repo, String markdown,
+    {String fallbackTitle = ''}) {
+  final clean = markdown.replaceAll('\r\n', '\n').trim();
+  final cut = clean.indexOf('\n');
+  var title = stripMarkdown(cut == -1 ? clean : clean.substring(0, cut));
+  var body = cut == -1 ? '' : clean.substring(cut + 1);
+  if (title.isEmpty) {
+    title = fallbackTitle.isEmpty ? tr('Nota nueva') : fallbackTitle;
+    body = clean;
+  }
+  final n = repo.createNote();
+  final (content, rich) = withText(title, null, body);
+  repo.updateContent(n.id, body.trim().isEmpty ? title : content,
+      rich: body.trim().isEmpty ? richFor(title) : rich);
+  return repo.byId(n.id)!;
 }
 
 /// Crea una nota con formato a partir de texto e imágenes ya guardadas

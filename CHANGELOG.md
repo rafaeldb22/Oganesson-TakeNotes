@@ -2,6 +2,28 @@
 
 All notable changes to Oganesson TakeNotes (formerly *Notas* / *BabuNotes*).
 
+## [3.14.0] — 2026-11-28
+
+### Added
+- **Calendar remaster**: a sliding *Months · Weeks · Days* switch.
+  - **Months**: every month at a glance, with a coloured dot on days that have something; tap one to
+    open it.
+  - **Weeks**: the month grid as before.
+  - **Days**: the day by hours, all-day items on top and timed tasks in their slot, with a line for
+    the current time.
+- **The calendar reaches three years ahead** (in December 2026, up to December 2029).
+- **Desktop widgets** (⋯ → Widgets, on Windows): Oganesson becomes a small always-on-top window with
+  upcoming tasks, the month calendar, the pomodoro or your pinned note. Drag it anywhere; one button
+  brings the app back.
+- **Open .md files with Oganesson**: it appears in "Open with" for Markdown files, with its own icon
+  (a page with the logo), and the file becomes a note with its formatting.
+- **Markdown and PDF exports include photos** (and whiteboards) inside.
+
+### Changed
+- **Smoother text selection**: dragging to the top or bottom edge keeps scrolling smoothly — faster
+  the further you go — even if the mouse stays still.
+- The AI knows every feature of the app, with the exact menus and steps.
+
 ## [3.13.0] — 2026-11-28
 
 ### Added

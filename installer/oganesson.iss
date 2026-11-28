@@ -26,6 +26,7 @@ Compression=lzma2/max
 SolidCompression=yes
 WizardStyle=modern
 CloseApplications=yes
+ChangesAssociations=yes
 
 [Languages]
 Name: "spanish"; MessagesFile: "compiler:Languages\Spanish.isl"
@@ -36,6 +37,17 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 
 [Files]
 Source: "..\build\windows\x64\runner\Release\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "mdfile.ico"; DestDir: "{app}"; Flags: ignoreversion
+
+; Oganesson in "Open with" for .md files, with its own icon (a page with the logo).
+[Registry]
+Root: HKA; Subkey: "Software\Classes\Oganesson.md"; ValueType: string; ValueData: "Nota de Oganesson (Markdown)"; Flags: uninsdeletekey
+Root: HKA; Subkey: "Software\Classes\Oganesson.md\DefaultIcon"; ValueType: string; ValueData: "{app}\mdfile.ico"
+Root: HKA; Subkey: "Software\Classes\Oganesson.md\shell\open\command"; ValueType: string; ValueData: """{app}\Oganesson.exe"" ""%1"""
+Root: HKA; Subkey: "Software\Classes\.md\OpenWithProgids"; ValueType: string; ValueName: "Oganesson.md"; ValueData: ""; Flags: uninsdeletevalue
+Root: HKA; Subkey: "Software\Classes\.markdown\OpenWithProgids"; ValueType: string; ValueName: "Oganesson.md"; ValueData: ""; Flags: uninsdeletevalue
+Root: HKA; Subkey: "Software\Classes\Applications\Oganesson.exe\SupportedTypes"; ValueType: string; ValueName: ".md"; ValueData: ""; Flags: uninsdeletekey
+Root: HKA; Subkey: "Software\Classes\Applications\Oganesson.exe\SupportedTypes"; ValueType: string; ValueName: ".markdown"; ValueData: ""
 
 ; "Notas" in the shortcut name so Windows search finds the app when typing it.
 [InstallDelete]

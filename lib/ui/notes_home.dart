@@ -36,6 +36,7 @@ import 'context_menu.dart';
 import 'folders.dart';
 import '../data/smart_groups.dart';
 import 'focus_tools.dart';
+import 'desktop_widgets.dart';
 import 'mods_sheet.dart';
 import 'folder_group.dart';
 import 'drop_zone.dart';
@@ -169,6 +170,7 @@ class _NotesHomeState extends State<NotesHome> {
     super.initState();
     GestureBinding.instance.pointerRouter.addGlobalRoute(_sideButtons);
     HardwareKeyboard.instance.addHandler(_onKey);
+    activeRepo = repo;
     SmartGroups.instance.addListener(_onGroups);
     _widgetSub = WidgetBridge.clicks.listen(_onWidgetUri);
     // Al pulsar un aviso: abrir la nota o marcarla como hecha.
@@ -187,6 +189,13 @@ class _NotesHomeState extends State<NotesHome> {
     _newNoteSub = DesktopIntegration.instance.newNoteRequests.listen((_) {
       if (mounted) _newNote();
     });
+    _fileSub =
+        DesktopIntegration.instance.openFileRequests.listen(_openMarkdownFile);
+    final pending = DesktopIntegration.instance.pendingFile;
+    if (pending != null) {
+      DesktopIntegration.instance.pendingFile = null;
+      _whenLoaded(() => _openMarkdownFile(pending));
+    }
     DesktopIntegration.instance.askOnFirstClose = _askOnFirstClose;
     _captureSub =
         DesktopIntegration.instance.captureRequests.listen((_) => _capture());
@@ -221,10 +230,12 @@ class _NotesHomeState extends State<NotesHome> {
   void dispose() {
     GestureBinding.instance.pointerRouter.removeGlobalRoute(_sideButtons);
     HardwareKeyboard.instance.removeHandler(_onKey);
+    if (activeRepo == repo) activeRepo = null;
     SmartGroups.instance.removeListener(_onGroups);
     Reminders.instance.detach();
     _widgetSub?.cancel();
     _newNoteSub?.cancel();
+    _fileSub?.cancel();
     _captureSub?.cancel();
     _shareSub?.cancel();
     _entranceTimer?.cancel();
@@ -728,6 +739,27 @@ class _NotesHomeState extends State<NotesHome> {
           child: const Icon(Icons.keyboard_double_arrow_left_rounded),
         ),
       );
+
+  StreamSubscription<String>? _fileSub;
+
+  /// Un .md abierto desde el Explorador: pasa a ser una nota con su formato.
+  Future<void> _openMarkdownFile(String path) async {
+    try {
+      final text = await File(path).readAsString();
+      if (!mounted) return;
+      final n = noteFromMarkdown(repo, text,
+          fallbackTitle: path.split(RegExp(r'[\\/]')).last.replaceFirst(
+              RegExp(r'\.(md|markdown)$', caseSensitive: false), ''));
+      _open(n.id);
+      showToast(context, tr('Archivo abierto como nota'),
+          icon: Icons.description_outlined);
+    } catch (_) {
+      if (mounted) {
+        showToast(context, tr('No se pudo abrir el archivo'),
+            icon: Icons.error_outline_rounded);
+      }
+    }
+  }
 
   void _walk(int step) {
     for (var i = _visitedAt + step; i >= 0 && i < _visited.length; i += step) {
@@ -1700,6 +1732,9 @@ class _NotesHomeState extends State<NotesHome> {
         null,
         MenuEntry('mods', Icons.extension_outlined, tr('Mods'),
             subtitle: tr('Temas, plantillas y más de la comunidad')),
+        if (desktop.supported)
+          MenuEntry('widgets', Icons.widgets_outlined, tr('Widgets'),
+              subtitle: tr('Tareas, calendario o pomodoro en el escritorio')),
         null,
         MenuEntry('coffee', Icons.coffee_outlined, tr('Invítame a un café'),
             subtitle: tr('Apoya el proyecto (open source)')),
@@ -1848,6 +1883,8 @@ class _NotesHomeState extends State<NotesHome> {
         await showPomodoro(context);
       case 'mods':
         await showModsSheet(context);
+      case 'widgets':
+        await showWidgetsSheet(context);
       case 'productividad':
         await showProductivity(context, repo);
       case 'foto-tareas':

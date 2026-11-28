@@ -45,6 +45,18 @@ class DesktopIntegration with WindowListener, TrayListener {
   /// Peticiones de "nota nueva" (la bandeja).
   Stream<void> get newNoteRequests => _newNote.stream;
 
+  /// Archivos .md abiertos con Oganesson (Explorador → Abrir con).
+  final _openFile = StreamController<String>.broadcast();
+  Stream<String> get openFileRequests => _openFile.stream;
+
+  /// El .md con el que se abrió la app (lo recoge la pantalla principal).
+  String? pendingFile;
+
+  static String? markdownIn(List<String> args) => args.where((a) {
+        final l = a.toLowerCase();
+        return l.endsWith('.md') || l.endsWith('.markdown');
+      }).firstOrNull;
+
   final _capture = StreamController<void>.broadcast();
 
   /// Peticiones de nota rápida (Ctrl+Alt+N).
@@ -66,13 +78,18 @@ class DesktopIntegration with WindowListener, TrayListener {
   Future<void> ensureSingleInstance(List<String> args) async {
     if (!supported) return;
     startedHidden = args.contains(backgroundFlag);
+    pendingFile = markdownIn(args);
     try {
       await WindowsSingleInstance.ensureSingleInstance(
         args,
         'oganesson_takenotes',
         bringWindowToFront: false,
         onSecondWindow: (a) {
-          if (a.contains(newNoteFlag)) {
+          final file = markdownIn(a);
+          if (file != null) {
+            showWindow();
+            _openFile.add(file);
+          } else if (a.contains(newNoteFlag)) {
             requestNewNote();
           } else {
             showWindow();
@@ -245,6 +262,47 @@ class DesktopIntegration with WindowListener, TrayListener {
     await windowManager.show();
     await windowManager.focus();
     _capture.add(null);
+  }
+
+  /// Widget de escritorio activo ('tareas', 'calendario'…) o null.
+  final widgetMode = ValueNotifier<String?>(null);
+  Rect? _widgetBounds;
+  bool _widgetWasMaximized = false;
+
+  static const _widgetSizes = {
+    'tareas': Size(320, 400),
+    'calendario': Size(330, 340),
+    'pomodoro': Size(240, 300),
+    'fijada': Size(320, 360),
+  };
+
+  /// La app pasa a ser una ventanita siempre visible con el widget [kind].
+  Future<void> enterWidget(String kind) async {
+    if (!supported) return;
+    if (widgetMode.value == null) {
+      _widgetWasMaximized = await windowManager.isMaximized();
+      if (_widgetWasMaximized) await windowManager.unmaximize();
+      _widgetBounds = await windowManager.getBounds();
+    }
+    final size = _widgetSizes[kind] ?? const Size(320, 360);
+    final b = _widgetBounds!;
+    widgetMode.value = kind;
+    await windowManager.setMinimumSize(const Size(220, 200));
+    await windowManager.setBounds(Rect.fromLTWH(
+        b.right - size.width - 24, b.top + 40, size.width, size.height));
+    await windowManager.setAlwaysOnTop(true);
+    await windowManager.show();
+  }
+
+  /// Vuelve a la ventana normal (o la oculta en la bandeja con [hide]).
+  Future<void> exitWidget({bool hide = false}) async {
+    if (widgetMode.value == null) return;
+    widgetMode.value = null;
+    await windowManager.setAlwaysOnTop(false);
+    await windowManager.setMinimumSize(const Size(760, 540));
+    if (_widgetBounds != null) await windowManager.setBounds(_widgetBounds!);
+    if (_widgetWasMaximized) await windowManager.maximize();
+    if (hide) await windowManager.hide();
   }
 
   /// Fin de la nota rápida. Con [keepOpen] la ventana se queda abierta.

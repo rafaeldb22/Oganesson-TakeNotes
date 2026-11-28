@@ -148,6 +148,54 @@ String noteToMarkdown(Note n) {
   return '$text\n';
 }
 
+/// Fuentes de las imágenes de una nota, en orden.
+List<String> _imageSources(Note n) {
+  try {
+    final d = jsonDecode(n.rich ?? '[]');
+    return [
+      for (final op in d is List ? d : const [])
+        if (op is Map &&
+            op['insert'] is Map &&
+            (op['insert'] as Map)['image'] is String)
+          (op['insert'] as Map)['image'] as String,
+    ];
+  } catch (_) {
+    return const [];
+  }
+}
+
+Future<Uint8List?> _loadImage(
+    String src, Future<Uint8List?> Function(String path) load) async {
+  try {
+    return NoteImages.isOurs(src) ? await load(NoteImages.pathOf(src)) : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+/// Markdown con las fotos y las pizarras dentro (como imágenes en base64,
+/// así es un solo archivo que se ve en cualquier visor).
+Future<String> noteToMarkdownWithMedia(Note n,
+    {Future<Uint8List?> Function(String path)? load}) async {
+  final get = load ?? NoteImages.instance.load;
+  var md = noteToMarkdown(n);
+  for (final src in _imageSources(n)) {
+    final bytes = await _loadImage(src, get);
+    final at = md.indexOf('*[imagen]*');
+    if (at == -1) break;
+    final img = bytes == null
+        ? '*[imagen]*'
+        : '![](data:${NoteImages.mimeOf(bytes)};base64,${base64Encode(bytes)})';
+    md = md.replaceRange(at, at + '*[imagen]*'.length, img);
+  }
+  final boards = await boardImages(n, load: get);
+  for (final (i, png) in boards.indexed) {
+    md += '\n![${boards.length == 1 ? 'Pizarra' : 'Pizarra ${i + 1}'}]'
+        '(data:image/png;base64,${base64Encode(png)})\n';
+  }
+  return md;
+}
+
 /// Todas las notas en un solo Markdown, para leer o pasar a otra app.
 String notesToMarkdown(Iterable<Note> notes) => notes
     .where((n) => !n.vault && !n.isEmpty)
@@ -189,11 +237,64 @@ bool isBoardOnly(Note n) =>
         .where((l) => l.isNotEmpty)
         .isEmpty;
 
+/// Las líneas de una nota para el PDF, con sus fotos en su sitio.
+List<pw.Widget> _body(
+    Note n, List<Uint8List?> photos, String Function(String) clean) {
+  final out = <pw.Widget>[];
+  var next = 0;
+  final imageCount = photos.length;
+  // Los U+FFFC del texto son embeds: las imágenes van en orden; los demás
+  // (archivos, pizarras) no ocupan foto.
+  final kinds = <bool>[];
+  try {
+    final d = jsonDecode(n.rich ?? '[]');
+    for (final op in d is List ? d : const []) {
+      if (op is Map && op['insert'] is Map) {
+        kinds.add((op['insert'] as Map)['image'] is String);
+      }
+    }
+  } catch (_) {}
+  var embed = 0;
+  for (final line in n.content.split('\n').skip(1)) {
+    final text = line.replaceAll('\uFFFC', '').trim();
+    if (text.isNotEmpty) {
+      out.add(pw.Padding(
+        padding: const pw.EdgeInsets.only(bottom: 3),
+        child: pw.Text(clean(line),
+            style: const pw.TextStyle(fontSize: 11.5, lineSpacing: 2)),
+      ));
+    }
+    for (final _ in '\uFFFC'.allMatches(line)) {
+      final isImage = embed < kinds.length ? kinds[embed] : false;
+      embed++;
+      if (!isImage || next >= imageCount) continue;
+      final bytes = photos[next++];
+      if (bytes == null) continue;
+      out.add(pw.Padding(
+        padding: const pw.EdgeInsets.symmetric(vertical: 6),
+        child: pw.Center(
+            child: pw.Image(pw.MemoryImage(bytes),
+                fit: pw.BoxFit.contain, height: 320)),
+      ));
+    }
+  }
+  return out;
+}
+
 Future<Uint8List> notesToPdf(List<Note> notes,
     {Future<Uint8List?> Function(String path)? load}) async {
   final boards = {
     for (final n in notes)
       if (!n.vault) n.id: await boardImages(n, load: load)
+  };
+  // Fotos de cada nota, en orden (salen donde estaban en el texto).
+  final photos = <String, List<Uint8List?>>{
+    for (final n in notes)
+      if (!n.vault)
+        n.id: [
+          for (final src in _imageSources(n))
+            await _loadImage(src, load ?? NoteImages.instance.load)
+        ]
   };
   final regular = await _systemFont(const [
     r'C:\Windows\Fonts\segoeui.ttf',
@@ -226,13 +327,7 @@ Future<Uint8List> notesToPdf(List<Note> notes,
         pw.Text(clean(n.title),
             style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold)),
         pw.SizedBox(height: 8),
-        for (final line in n.content.split('\n').skip(1))
-          if (line.replaceAll('\uFFFC', '').trim().isNotEmpty)
-            pw.Padding(
-              padding: const pw.EdgeInsets.only(bottom: 3),
-              child: pw.Text(clean(line),
-                  style: const pw.TextStyle(fontSize: 11.5, lineSpacing: 2)),
-            ),
+        ..._body(n, photos[n.id] ?? const [], clean),
         // Las pizarras de la nota, cada una como imagen.
         for (final png in boards[n.id] ?? const <Uint8List>[])
           pw.Padding(

@@ -269,8 +269,12 @@ class _PomodoroSettingsState extends State<_PomodoroSettings> {
 /// El tomate de abajo a la izquierda mientras el pomodoro está activo: del
 /// color del tema, con el tiempo dentro. Tocarlo abre el pomodoro.
 class PomodoroTomato extends StatelessWidget {
-  const PomodoroTomato({super.key, required this.onTap});
+  const PomodoroTomato(
+      {super.key, required this.onTap, this.alwaysVisible = false});
   final VoidCallback onTap;
+
+  /// En el widget de escritorio se ve aunque el pomodoro no haya empezado.
+  final bool alwaysVisible;
 
   @override
   Widget build(BuildContext context) {
@@ -289,7 +293,7 @@ class PomodoroTomato extends StatelessWidget {
           transitionBuilder: (c, a) => ScaleTransition(
               scale: CurvedAnimation(parent: a, curve: Curves.easeOutBack),
               child: FadeTransition(opacity: a, child: c)),
-          child: !pomo.active
+          child: !pomo.active && !alwaysVisible
               ? const SizedBox.shrink(key: ValueKey('sin-tomate'))
               : Tooltip(
                   key: const ValueKey('tomate'),

@@ -549,7 +549,7 @@ Future<void> showExportNote(BuildContext context, Note n) async {
     if (kind == 'md') {
       return _deliver(
           context,
-          Uint8List.fromList(utf8.encode(noteToMarkdown(n))),
+          Uint8List.fromList(utf8.encode(await noteToMarkdownWithMedia(n))),
           safeFileName(n.title, 'md'),
           'text/markdown',
           'Markdown',
