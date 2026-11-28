@@ -188,7 +188,14 @@ class NotasApp extends StatelessWidget {
                           ),
                         ),
                         if (kind != null)
-                          Positioned.fill(child: DesktopWidgetView(kind: kind)),
+                          Positioned.fill(
+                              // Con su Overlay: los tooltips de sus botones lo
+                              // necesitan (está por encima del Navigator).
+                              child:
+                                  Overlay(key: ValueKey(kind), initialEntries: [
+                            OverlayEntry(
+                                builder: (_) => DesktopWidgetView(kind: kind))
+                          ])),
                       ]),
                     )
                   : _withTomato(child)),
@@ -212,8 +219,8 @@ final appNavigator = GlobalKey<NavigatorState>();
 Widget _withTomato(Widget? child) => Stack(children: [
       child ?? const SizedBox(),
       Positioned(
-        left: 14,
-        bottom: 14,
+        right: 18,
+        bottom: 18,
         child: SafeArea(
           child: PomodoroTomato(onTap: () {
             final ctx = appNavigator.currentContext;

@@ -17,8 +17,12 @@ import 'theme.dart';
 
 /// Lo que se arrastra al mover una imagen dentro de la nota.
 class ImageMovePayload {
-  const ImageMovePayload(this.src, this.offsetOf);
+  const ImageMovePayload(this.src, this.offsetOf, {this.embed});
   final String src;
+
+  /// Lo que se vuelve a insertar (una imagen si es null; si no, p. ej. el
+  /// embed de un archivo adjunto).
+  final Embeddable? embed;
 
   /// Posición actual de la imagen en el documento.
   final int Function() offsetOf;
@@ -52,7 +56,11 @@ void removeEmbedLine(QuillController c, int offset) {
 /// Inserta una imagen en [index] SIEMPRE en su propia línea (Quill solo
 /// separa así los vídeos: una imagen pegada en mitad de una frase quedaría
 /// mezclada con el texto). Devuelve la posición de la imagen.
-int insertImageBlock(QuillController c, int index, String src) {
+int insertImageBlock(QuillController c, int index, String src) =>
+    insertEmbedBlock(c, index, BlockEmbed.image(src));
+
+/// Igual que [insertImageBlock] para cualquier embed de bloque (archivos).
+int insertEmbedBlock(QuillController c, int index, Embeddable embed) {
   final t = _plain(c);
   index = index.clamp(0, max(0, t.length - 1));
   var at = index;
@@ -60,7 +68,7 @@ int insertImageBlock(QuillController c, int index, String src) {
     c.replaceText(at, 0, '\n', null);
     at++;
   }
-  c.replaceText(at, 0, BlockEmbed.image(src), null);
+  c.replaceText(at, 0, embed, null);
   final after = _plain(c);
   if (at + 1 >= after.length || after[at + 1] != '\n') {
     c.replaceText(at + 1, 0, '\n', null);
@@ -71,7 +79,8 @@ int insertImageBlock(QuillController c, int index, String src) {
 /// Mueve la imagen que está en [from] para que empiece en [target] (un
 /// inicio de línea del documento actual). Devuelve false si no hay que
 /// moverla.
-bool moveImageTo(QuillController c, int from, String src, int target) {
+bool moveImageTo(QuillController c, int from, String src, int target,
+    {Embeddable? embed}) {
   final t = _plain(c);
   if (from < 0 || from >= t.length) return false;
   // La imagen ocupa su propia línea: imagen + salto de línea.
@@ -79,7 +88,8 @@ bool moveImageTo(QuillController c, int from, String src, int target) {
   final len = hasBreak ? 2 : 1;
   if (target == from || target == from + len) return false;
   c.replaceText(from, len, '', null);
-  final at = insertImageBlock(c, target > from ? target - len : target, src);
+  final at = insertEmbedBlock(
+      c, target > from ? target - len : target, embed ?? BlockEmbed.image(src));
   c.updateSelection(
       TextSelection.collapsed(offset: at + 1), ChangeSource.local);
   HapticFeedback.selectionClick();
@@ -172,7 +182,8 @@ class _ImageMoveTargetState extends State<ImageMoveTarget> {
         final target = _target;
         _clear();
         if (target == null) return;
-        moveImageTo(widget.controller, d.data.offsetOf(), d.data.src, target);
+        moveImageTo(widget.controller, d.data.offsetOf(), d.data.src, target,
+            embed: d.data.embed);
       },
       builder: (context, candidates, _) => Stack(
         children: [

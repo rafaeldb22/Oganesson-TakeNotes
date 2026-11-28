@@ -2,6 +2,18 @@
 
 All notable changes to Oganesson TakeNotes (formerly *Notas* / *BabuNotes*).
 
+## [3.14.1] — 2026-11-28
+
+### Changed
+- **New pomodoro tomato**: bigger, at the bottom right, with the theme's colours — a round body, two
+  leaves on top and a little screen with the time.
+- **Move photos and files by holding them** and dragging (on PC too); the drag handle is gone.
+  New attached files go to the end of the note.
+
+### Fixed
+- Hovering the pomodoro tomato no longer covers the whole screen.
+- Tooltips in the desktop widgets no longer break the window.
+
 ## [3.14.0] — 2026-11-28
 
 ### Added

@@ -266,15 +266,23 @@ class _PomodoroSettingsState extends State<_PomodoroSettings> {
   }
 }
 
-/// El tomate de abajo a la izquierda mientras el pomodoro está activo: del
-/// color del tema, con el tiempo dentro. Tocarlo abre el pomodoro.
-class PomodoroTomato extends StatelessWidget {
+/// El tomate del pomodoro (abajo a la derecha mientras está activo), como
+/// el boceto: cuerpo redondo con el color del tema, dos hojas arriba y una
+/// pantallita con el tiempo. Tocarlo abre el pomodoro.
+class PomodoroTomato extends StatefulWidget {
   const PomodoroTomato(
       {super.key, required this.onTap, this.alwaysVisible = false});
   final VoidCallback onTap;
 
   /// En el widget de escritorio se ve aunque el pomodoro no haya empezado.
   final bool alwaysVisible;
+
+  @override
+  State<PomodoroTomato> createState() => _PomodoroTomatoState();
+}
+
+class _PomodoroTomatoState extends State<PomodoroTomato> {
+  bool _hover = false;
 
   @override
   Widget build(BuildContext context) {
@@ -284,39 +292,49 @@ class PomodoroTomato extends StatelessWidget {
       builder: (context, _) {
         final p = Palette.of(context);
         final focus = pomo.phase == PomodoroPhase.focus;
-        // Rojo tomate teñido con el acento del tema; verde en el descanso.
-        final body = focus
-            ? Color.lerp(const Color(0xFFE5484D), p.accent, 0.35)!
-            : Color.lerp(const Color(0xFF2DD4A7), p.accent, 0.25)!;
+        // Del tema: el acento; en el descanso, el acento más suave.
+        final body = focus ? p.accent : Color.lerp(p.accent, p.card, 0.45)!;
+        final visible = pomo.active || widget.alwaysVisible;
+        // Sin Tooltip: el tomate está por encima del Navigator (sin Overlay)
+        // y un Tooltip ahí rompía la pantalla entera al pasar el ratón.
         return AnimatedSwitcher(
           duration: Anim.medium,
           transitionBuilder: (c, a) => ScaleTransition(
               scale: CurvedAnimation(parent: a, curve: Curves.easeOutBack),
               child: FadeTransition(opacity: a, child: c)),
-          child: !pomo.active && !alwaysVisible
+          child: !visible
               ? const SizedBox.shrink(key: ValueKey('sin-tomate'))
-              : Tooltip(
+              : MouseRegion(
                   key: const ValueKey('tomate'),
-                  message: tr('Pomodoro'),
+                  cursor: SystemMouseCursors.click,
+                  onEnter: (_) => setState(() => _hover = true),
+                  onExit: (_) => setState(() => _hover = false),
                   child: GestureDetector(
-                    onTap: onTap,
-                    child: MouseRegion(
-                      cursor: SystemMouseCursors.click,
+                    onTap: widget.onTap,
+                    child: AnimatedScale(
+                      duration: Anim.fast,
+                      scale: _hover ? 1.06 : 1,
                       child: SizedBox(
-                        width: 74,
-                        height: 74,
+                        width: 116,
+                        height: 116,
                         child: CustomPaint(
-                          painter: _Tomato(body, pomo.progress,
-                              Theme.of(context).brightness == Brightness.dark),
+                          painter: _Tomato(
+                            body: body,
+                            leaf: Color.lerp(p.accent, Colors.black, 0.35)!,
+                            screen: p.card,
+                            ink: p.accent,
+                            progress: pomo.progress,
+                          ),
                           child: Padding(
-                            padding: const EdgeInsets.only(top: 12),
+                            padding: const EdgeInsets.only(top: 22),
                             child: Center(
                               child: Text(_mmss(pomo.left),
-                                  style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 14.5,
+                                  style: TextStyle(
+                                      color: Color.lerp(
+                                          p.accent, Colors.black, 0.25),
+                                      fontSize: 19,
                                       fontWeight: FontWeight.w800,
-                                      fontFeatures: [
+                                      fontFeatures: const [
                                         FontFeature.tabularFigures()
                                       ])),
                             ),
@@ -333,64 +351,92 @@ class PomodoroTomato extends StatelessWidget {
 }
 
 class _Tomato extends CustomPainter {
-  const _Tomato(this.color, this.progress, this.dark);
-  final Color color;
+  const _Tomato({
+    required this.body,
+    required this.leaf,
+    required this.screen,
+    required this.ink,
+    required this.progress,
+  });
+  final Color body, leaf, screen, ink;
   final double progress;
-  final bool dark;
 
   @override
   void paint(Canvas canvas, Size size) {
-    final c = Offset(size.width / 2, size.height / 2 + 5);
-    final r = size.width * 0.38;
-    final body = Rect.fromCenter(center: c, width: r * 2.15, height: r * 1.9);
+    final w = size.width, h = size.height;
+    final c = Offset(w / 2, h * 0.58);
+    final round = Rect.fromCenter(center: c, width: w * 0.88, height: h * 0.78);
+    // Sombra suave.
     canvas.drawOval(
-        body.shift(const Offset(0, 3)),
+        round.shift(const Offset(0, 4)),
         Paint()
-          ..color = Colors.black.withValues(alpha: 0.18)
-          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 5));
+          ..color = Colors.black.withValues(alpha: 0.20)
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 7));
+    // Cuerpo: el color del tema con un brillo arriba a la izquierda.
     canvas.drawOval(
-        body,
+        round,
         Paint()
           ..shader = RadialGradient(
-            center: const Alignment(-0.35, -0.45),
-            colors: [Color.lerp(color, Colors.white, 0.25)!, color],
-          ).createShader(body));
-    // Lo que queda de la fase: un arco claro por dentro del borde.
+            center: const Alignment(-0.4, -0.5),
+            radius: 0.95,
+            colors: [Color.lerp(body, Colors.white, 0.35)!, body],
+          ).createShader(round));
+    // Lo que queda de la fase, por dentro del borde.
     canvas.drawArc(
-        body.deflate(4),
+        round.deflate(5),
         -math.pi / 2,
         math.pi * 2 * (1 - progress.clamp(0.0, 1.0)),
         false,
         Paint()
           ..style = PaintingStyle.stroke
-          ..strokeWidth = 2.6
+          ..strokeWidth = 3
           ..strokeCap = StrokeCap.round
-          ..color = Colors.white.withValues(alpha: 0.75));
-    // Hojas y rabito.
-    final leaf = Paint()..color = const Color(0xFF3FA34D);
-    final top = Offset(c.dx, body.top + 2);
-    for (final a in [-0.9, -0.3, 0.3, 0.9]) {
-      final tip = top + Offset(math.sin(a) * r * 0.55, -math.cos(a) * r * 0.22);
+          ..color = Colors.white.withValues(alpha: 0.7));
+    // Dos hojas y el rabito (como en el boceto).
+    final top = Offset(w / 2, round.top + 3);
+    final leafPaint = Paint()..color = leaf;
+    void leafAt(double dir) {
+      final tip = top + Offset(dir * w * 0.26, -h * 0.13);
       canvas.drawPath(
           Path()
-            ..moveTo(top.dx - 4, top.dy)
-            ..quadraticBezierTo(tip.dx, tip.dy - 4, tip.dx, tip.dy)
-            ..quadraticBezierTo(tip.dx, tip.dy + 4, top.dx + 4, top.dy)
+            ..moveTo(top.dx, top.dy)
+            ..quadraticBezierTo(
+                top.dx + dir * w * 0.06, tip.dy - h * 0.07, tip.dx, tip.dy)
+            ..quadraticBezierTo(
+                top.dx + dir * w * 0.16, top.dy + h * 0.02, top.dx, top.dy)
             ..close(),
-          leaf);
+          leafPaint);
     }
+
+    leafAt(-1);
+    leafAt(1);
     canvas.drawLine(
         top,
-        top + const Offset(2, -9),
+        top + Offset(w * 0.03, -h * 0.09),
         Paint()
-          ..color = const Color(0xFF2E7D32)
-          ..strokeWidth = 3
+          ..color = leaf
+          ..strokeWidth = 3.5
           ..strokeCap = StrokeCap.round);
+    // Pantallita del tiempo.
+    final display = RRect.fromRectAndRadius(
+        Rect.fromCenter(
+            center: Offset(w / 2, c.dy + 2), width: w * 0.62, height: h * 0.26),
+        const Radius.circular(9));
+    canvas.drawRRect(display, Paint()..color = screen.withValues(alpha: 0.95));
+    canvas.drawRRect(
+        display,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.6
+          ..color = Color.lerp(ink, Colors.black, 0.3)!);
   }
 
   @override
   bool shouldRepaint(_Tomato o) =>
-      o.color != color || o.progress != progress || o.dark != dark;
+      o.body != body ||
+      o.progress != progress ||
+      o.leaf != leaf ||
+      o.screen != screen;
 }
 
 String _mmss(Duration d) {

@@ -767,25 +767,6 @@ class _NoteImageViewState extends State<NoteImageView> {
                     curve: Anim.curve,
                     child: _Frosted(
                       child: Row(mainAxisSize: MainAxisSize.min, children: [
-                        // Asa para mover la imagen entre el texto.
-                        if (widget.onMoveUp != null)
-                          Draggable<ImageMovePayload>(
-                            data: _payload,
-                            dragAnchorStrategy: pointerDragAnchorStrategy,
-                            feedback: _dragFeedback(),
-                            onDragStarted: HapticFeedback.selectionClick,
-                            child: Tooltip(
-                              message: tr('Arrastra para moverla'),
-                              child: const MouseRegion(
-                                cursor: SystemMouseCursors.grab,
-                                child: Padding(
-                                  padding: EdgeInsets.all(8),
-                                  child: Icon(Icons.drag_indicator_rounded,
-                                      size: 18, color: Colors.white),
-                                ),
-                              ),
-                            ),
-                          ),
                         _HoverBtn(Icons.open_in_full_rounded, tr('Ver imagen'),
                             () => _action('ver')),
                         if (widget.onCropped != null)
@@ -851,30 +832,36 @@ class _NoteImageViewState extends State<NoteImageView> {
       ),
     );
 
-    // Android: mantener pulsada y arrastrar mueve la imagen entre el texto;
-    // mantener pulsada y soltar sin moverla abre el menú.
-    if (!isDesktopWindows) {
-      content = Listener(
-        onPointerDown: (e) => _downAt = e.position,
-        onPointerUp: (e) => _upAt = e.position,
-        child: LongPressDraggable<ImageMovePayload>(
-          data: _payload,
-          maxSimultaneousDrags: widget.onMoveUp == null ? 0 : 1,
-          dragAnchorStrategy: pointerDragAnchorStrategy,
-          feedback: _dragFeedback(),
-          childWhenDragging: Opacity(opacity: 0.35, child: content),
-          onDragStarted: HapticFeedback.mediumImpact,
-          onDraggableCanceled: (_, __) {
-            final a = _downAt, b = _upAt;
-            if (a != null && b != null && (a - b).distance < 14) _menu(null);
-          },
-          child: content,
-        ),
-      );
-      if (widget.onMoveUp == null) {
-        content =
-            GestureDetector(onLongPress: () => _menu(null), child: content);
-      }
+    // Mantener pulsada y arrastrar mueve la imagen entre el texto (también
+    // en PC, sin asa). En el móvil, mantener y soltar sin moverla abre el
+    // menú.
+    content = Listener(
+      onPointerDown: (e) => _downAt = e.position,
+      onPointerUp: (e) => _upAt = e.position,
+      child: LongPressDraggable<ImageMovePayload>(
+        data: _payload,
+        delay: isDesktopWindows
+            ? const Duration(milliseconds: 300)
+            : const Duration(milliseconds: 500),
+        maxSimultaneousDrags: widget.onMoveUp == null ? 0 : 1,
+        dragAnchorStrategy: pointerDragAnchorStrategy,
+        feedback: _dragFeedback(),
+        childWhenDragging: Opacity(opacity: 0.35, child: content),
+        onDragStarted: HapticFeedback.mediumImpact,
+        onDraggableCanceled: (_, __) {
+          final a = _downAt, b = _upAt;
+          if (!isDesktopWindows &&
+              a != null &&
+              b != null &&
+              (a - b).distance < 14) {
+            _menu(null);
+          }
+        },
+        child: content,
+      ),
+    );
+    if (!isDesktopWindows && widget.onMoveUp == null) {
+      content = GestureDetector(onLongPress: () => _menu(null), child: content);
     }
 
     if (_animateIn) {

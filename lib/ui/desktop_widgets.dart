@@ -299,7 +299,7 @@ class _PomodoroWidget extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Transform.scale(
-              scale: 1.4,
+              scale: 1.1,
               child: PomodoroTomato(onTap: () {}, alwaysVisible: true)),
           const SizedBox(height: 18),
           Row(mainAxisAlignment: MainAxisAlignment.center, children: [

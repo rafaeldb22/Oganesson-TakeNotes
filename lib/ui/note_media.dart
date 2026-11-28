@@ -53,19 +53,15 @@ String _clock(Duration d) =>
 
 // ----------------------------------------------------------------- insertar
 
+/// Un adjunto va al final de la nota, en su propia línea (luego se puede
+/// mover manteniéndolo pulsado, como las fotos).
 void insertFileBlock(QuillController c, NoteFile f) {
-  final sel = c.selection;
-  final index = sel.isValid
-      ? min(sel.baseOffset, sel.extentOffset)
-      : c.document.length - 1;
-  c.replaceText(
-      index,
-      0,
-      BlockEmbed.custom(
-          CustomBlockEmbed(NoteFiles.embedType, f.toJsonString())),
-      null);
-  c.moveCursorToPosition(min(index + 2, c.document.length - 1));
+  final at = insertEmbedBlock(c, c.document.length - 1, fileBlockEmbed(f));
+  c.moveCursorToPosition(min(at + 2, c.document.length - 1));
 }
+
+BlockEmbed fileBlockEmbed(NoteFile f) =>
+    BlockEmbed.custom(CustomBlockEmbed(NoteFiles.embedType, f.toJsonString()));
 
 void _insertTextAtCursor(QuillController c, String text) {
   final sel = c.selection;
@@ -460,7 +456,7 @@ class NoteFileEmbedBuilder extends EmbedBuilder {
     final file = NoteFile.parse(e.node.value.data);
     if (file == null) return const SizedBox.shrink();
     final controller = e.controller;
-    return NoteFileCard(
+    final card = NoteFileCard(
       file: file,
       controller: controller,
       allowAi: NoteMediaScope.aiAllowed(context),
@@ -470,6 +466,25 @@ class NoteFileEmbedBuilder extends EmbedBuilder {
               final o = fileEmbedOffset(controller.document, file.path);
               if (o != null) removeEmbedLine(controller, o);
             },
+    );
+    if (e.readOnly) return card;
+    // Mantener pulsado y arrastrar: se mueve entre el texto, como las fotos.
+    return LongPressDraggable<ImageMovePayload>(
+      data: ImageMovePayload(file.path,
+          () => fileEmbedOffset(controller.document, file.path) ?? -1,
+          embed: fileBlockEmbed(file)),
+      delay: const Duration(milliseconds: 300),
+      dragAnchorStrategy: pointerDragAnchorStrategy,
+      onDragStarted: HapticFeedback.mediumImpact,
+      feedback: Material(
+        color: Colors.transparent,
+        child: Opacity(
+          opacity: 0.85,
+          child: SizedBox(width: 280, child: card),
+        ),
+      ),
+      childWhenDragging: Opacity(opacity: 0.35, child: card),
+      child: card,
     );
   }
 }
