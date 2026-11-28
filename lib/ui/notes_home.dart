@@ -851,6 +851,12 @@ class _NotesHomeState extends State<NotesHome> {
               false
             ),
             (
+              'link-ai',
+              Icons.auto_awesome_outlined,
+              tr('Enlazar con IA'),
+              false
+            ),
+            (
               'sub',
               Icons.account_tree_outlined,
               tr('Crear subnota enlazada'),
@@ -943,6 +949,8 @@ class _NotesHomeState extends State<NotesHome> {
         await showShareSheet(context, repo, n.id);
       case 'link':
         await showLinkNotesPicker(context, repo, n.id);
+      case 'link-ai':
+        await showLinkNotesPicker(context, repo, n.id, suggest: true);
       case 'sub':
         final sub = repo.createSubnote(n.id);
         _open(sub.id, autofocus: true);
@@ -1665,22 +1673,23 @@ class _NotesHomeState extends State<NotesHome> {
       header: _MenuHeader(email: email, version: v),
       entries: [
         MenuEntry.section(tr('Notas')),
-        MenuEntry('plantillas', Icons.dashboard_customize_outlined,
-            tr('Nueva desde plantilla')),
         MenuEntry('archivadas', Icons.archive_outlined, tr('Archivadas')),
         MenuEntry('completadas', Icons.task_alt_rounded, tr('Completadas')),
         MenuEntry('papelera', Icons.delete_outline, tr('Papelera')),
-        MenuEntry('asistente', Icons.auto_awesome_outlined, tr('Asistente IA'),
-            subtitle: tr('Con tu clave de Gemini')),
+        MenuEntry('plantillas', Icons.dashboard_customize_outlined,
+            tr('Nueva desde plantilla')),
+        null,
         MenuEntry('pomodoro', Icons.timer_outlined, tr('Pomodoro'),
             subtitle: Pomodoro.instance.running
                 ? tr('En marcha')
                 : tr('Concéntrate 25 minutos')),
         MenuEntry('productividad', Icons.insights_rounded, tr('Productividad')),
-        MenuEntry('mods', Icons.extension_outlined, tr('Mods'),
-            subtitle: tr('Temas, plantillas y más de la comunidad')),
+        null,
+        MenuEntry('asistente', Icons.auto_awesome_outlined, tr('Asistente IA'),
+            subtitle: tr('Con tu clave de Gemini')),
         MenuEntry('foto-tareas', Icons.add_a_photo_outlined,
             tr('Tareas desde una foto')),
+        null,
         MenuEntry('vault', Icons.shield_outlined, 'Vault',
             subtitle: vault.unlocked
                 ? tr('Abierto')
@@ -1688,6 +1697,9 @@ class _NotesHomeState extends State<NotesHome> {
         if (vault.unlocked)
           MenuEntry(
               'vault-lock', Icons.lock_outline_rounded, tr('Bloquear Vault')),
+        null,
+        MenuEntry('mods', Icons.extension_outlined, tr('Mods'),
+            subtitle: tr('Temas, plantillas y más de la comunidad')),
         null,
         MenuEntry('coffee', Icons.coffee_outlined, tr('Invítame a un café'),
             subtitle: tr('Apoya el proyecto (open source)')),
@@ -1741,9 +1753,21 @@ class _NotesHomeState extends State<NotesHome> {
         MenuEntry('amigos', Icons.group_outlined, tr('Tu @nombre y amigos')),
         MenuEntry('cuenta-pass', Icons.manage_accounts_outlined,
             tr('Cambiar contraseña de la cuenta')),
-        if (vault.state == VaultState.locked || vault.unlocked)
+        if (vault.state == VaultState.locked || vault.unlocked) ...[
+          MenuEntry(
+              'vault-modo',
+              vault.usePin ? Icons.dialpad_rounded : Icons.key_rounded,
+              tr('Abrir el Vault con'),
+              subtitle: vault.usePin
+                  ? tr('PIN · toca para usar la contraseña')
+                  : tr('Contraseña · toca para usar un PIN')),
           MenuEntry('vault-pass', Icons.password_rounded,
               tr('Cambiar contraseña del Vault')),
+          if (vault.hasPin)
+            MenuEntry(
+                'vault-pin', Icons.pin_outlined, tr('Cambiar PIN del Vault'),
+                subtitle: tr('Con un código por correo')),
+        ],
         MenuEntry.section(tr('Aplicación')),
         MenuEntry('avisos', Icons.notifications_active_outlined, tr('Avisos'),
             subtitle: tr('Cuándo recordarte tus tareas')),
@@ -1848,6 +1872,10 @@ class _NotesHomeState extends State<NotesHome> {
         vault.lock();
       case 'vault-pass':
         changeVaultPassword(context, vault);
+      case 'vault-modo':
+        await setVaultUnlockMode(context, vault, !vault.usePin);
+      case 'vault-pin':
+        await changeVaultPin(context, vault);
       case 'archivadas':
         showArchived(context, repo);
       case 'completadas':

@@ -6,6 +6,8 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 
 import '../models/note.dart';
+import 'note_board.dart';
+import 'note_images.dart';
 
 /// Copia completa de notas y carpetas. Nunca incluye el Vault, porque el
 /// archivo queda sin cifrar fuera de la app.
@@ -166,7 +168,33 @@ Future<pw.Font?> _systemFont(List<String> paths) async {
 
 /// PDF de una o varias notas. Usa la fuente del sistema para que salgan bien
 /// las tildes; si no la encuentra, usa Helvetica y sustituye lo que no tenga.
-Future<Uint8List> notesToPdf(List<Note> notes) async {
+/// Las pizarras de una nota como PNG (las vacías no salen).
+Future<List<Uint8List>> boardImages(Note n,
+    {Future<Uint8List?> Function(String path)? load}) async {
+  final out = <Uint8List>[];
+  for (final b in BoardData.all(n.rich)) {
+    final png = await renderBoardPng(b, load ?? NoteImages.instance.load,
+        maxSide: 2400);
+    if (png != null) out.add(png);
+  }
+  return out;
+}
+
+/// ¿La nota no tiene más texto que el título automático de la pizarra?
+bool isBoardOnly(Note n) =>
+    BoardData.all(n.rich).isNotEmpty &&
+    n.content
+        .split('\n')
+        .map((l) => l.replaceAll('\uFFFC', '').trim())
+        .where((l) => l.isNotEmpty)
+        .isEmpty;
+
+Future<Uint8List> notesToPdf(List<Note> notes,
+    {Future<Uint8List?> Function(String path)? load}) async {
+  final boards = {
+    for (final n in notes)
+      if (!n.vault) n.id: await boardImages(n, load: load)
+  };
   final regular = await _systemFont(const [
     r'C:\Windows\Fonts\segoeui.ttf',
     '/system/fonts/NotoSans-Regular.ttf',
@@ -199,10 +227,20 @@ Future<Uint8List> notesToPdf(List<Note> notes) async {
             style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold)),
         pw.SizedBox(height: 8),
         for (final line in n.content.split('\n').skip(1))
+          if (line.replaceAll('\uFFFC', '').trim().isNotEmpty)
+            pw.Padding(
+              padding: const pw.EdgeInsets.only(bottom: 3),
+              child: pw.Text(clean(line),
+                  style: const pw.TextStyle(fontSize: 11.5, lineSpacing: 2)),
+            ),
+        // Las pizarras de la nota, cada una como imagen.
+        for (final png in boards[n.id] ?? const <Uint8List>[])
           pw.Padding(
-            padding: const pw.EdgeInsets.only(bottom: 3),
-            child: pw.Text(clean(line),
-                style: const pw.TextStyle(fontSize: 11.5, lineSpacing: 2)),
+            padding: const pw.EdgeInsets.symmetric(vertical: 8),
+            child: pw.Center(
+              child: pw.Image(pw.MemoryImage(png),
+                  fit: pw.BoxFit.contain, height: 420),
+            ),
           ),
       ],
       if (list.isEmpty) pw.SizedBox(),

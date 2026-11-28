@@ -128,6 +128,12 @@ class EditorToolbar extends StatelessWidget {
           ],
           [
             _StyleMenu(current: header, onSelect: _setHeader),
+            _FontMenu(
+              current: _value(Attribute.font.key) as String?,
+              onSelect: (id) => controller.formatSelection(id == null
+                  ? Attribute.clone(Attribute.font, null)
+                  : Attribute.fromKeyValue(Attribute.font.key, id)!),
+            ),
           ],
           [
             _Btn(
@@ -945,6 +951,42 @@ class _BtnState extends State<_Btn> {
 }
 
 /// Menú de estilos de párrafo con vista previa de cada uno.
+/// Fuente del texto seleccionado (o de lo que se escriba a continuación).
+class _FontMenu extends StatelessWidget {
+  const _FontMenu({required this.current, required this.onSelect});
+  final String? current;
+  final void Function(String? id) onSelect;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = Palette.of(context);
+    return PopupMenuButton<String>(
+      tooltip: tr('Fuente'),
+      icon: Icon(Icons.font_download_outlined,
+          size: 21, color: current == null ? null : p.accent),
+      onSelected: (v) => onSelect(v == 'sistema' ? null : v),
+      itemBuilder: (_) => [
+        for (final f in appFonts)
+          PopupMenuItem(
+            value: f.id,
+            height: 40,
+            child: Row(children: [
+              SizedBox(
+                width: 22,
+                child: (current ?? 'sistema') == f.id
+                    ? Icon(Icons.check_rounded, size: 18, color: p.accent)
+                    : null,
+              ),
+              const SizedBox(width: 6),
+              Text(f.id == 'sistema' ? tr('Por defecto') : tr(f.name),
+                  style: fontStyleOf(f).copyWith(fontSize: 16)),
+            ]),
+          ),
+      ],
+    );
+  }
+}
+
 class _StyleMenu extends StatelessWidget {
   const _StyleMenu({required this.current, required this.onSelect});
   final int? current;

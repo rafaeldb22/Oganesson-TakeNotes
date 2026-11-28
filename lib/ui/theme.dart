@@ -715,18 +715,38 @@ class AppFont {
 List<AppFont> get appFonts => [..._builtInFonts, ...modFonts];
 final modFonts = <AppFont>[];
 
+/// Fuentes para las notas (las del sistema; cada una con alternativas para
+/// que en Android salga la más parecida).
 const _builtInFonts = <AppFont>[
   AppFont('sistema', 'Sistema', null),
   AppFont('serif', 'Serif', 'Georgia', ['Cambria', 'Noto Serif', 'serif']),
   AppFont('clasica', 'Clásica', 'Palatino Linotype',
       ['Book Antiqua', 'Times New Roman', 'serif']),
-  AppFont('mono', 'Monoespaciada', 'Cascadia Code',
-      ['Consolas', 'Cascadia Mono', 'monospace']),
+  AppFont('times', 'Times', 'Times New Roman', ['Noto Serif', 'serif']),
+  AppFont('garamond', 'Garamond', 'Garamond',
+      ['EB Garamond', 'Constantia', 'serif']),
+  AppFont('moderna', 'Moderna', 'Calibri', ['Carlito', 'sans-serif']),
+  AppFont('amplia', 'Amplia', 'Verdana', ['Tahoma', 'sans-serif']),
+  AppFont('suave', 'Suave', 'Candara', ['Corbel', 'sans-serif-light']),
   AppFont('condensada', 'Condensada', 'Bahnschrift',
       ['Arial Narrow', 'sans-serif-condensed']),
+  AppFont(
+      'impacto', 'Impacto', 'Impact', ['Haettenschweiler', 'sans-serif-black']),
+  AppFont('mono', 'Monoespaciada', 'Cascadia Code',
+      ['Consolas', 'Cascadia Mono', 'monospace']),
+  AppFont('maquina', 'Máquina de escribir', 'Courier New',
+      ['Courier', 'serif-monospace', 'monospace']),
   AppFont('manuscrita', 'Manuscrita', 'Segoe Print',
       ['Comic Sans MS', 'casual', 'cursive']),
+  AppFont('caligrafia', 'Caligrafía', 'Segoe Script', ['Gabriola', 'cursive']),
+  AppFont('rotulador', 'Rotulador', 'Ink Free', ['Segoe Print', 'casual']),
+  AppFont('infantil', 'Infantil', 'Comic Sans MS', ['casual']),
 ];
+
+/// Estilo de texto de una fuente (con sus alternativas).
+TextStyle fontStyleOf(AppFont f) => TextStyle(
+    fontFamily: f.family,
+    fontFamilyFallback: f.fallback.isEmpty ? null : f.fallback);
 
 AppFont fontById(String id) =>
     appFonts.firstWhere((f) => f.id == id, orElse: () => appFonts.first);
@@ -840,9 +860,6 @@ ThemeData buildTheme(AppTheme t, Brightness b, [AppFont? font]) {
 
   return ThemeData(
     useMaterial3: true,
-    fontFamily: font?.family,
-    fontFamilyFallback:
-        font == null || font.fallback.isEmpty ? null : font.fallback,
     colorScheme: scheme,
     scaffoldBackgroundColor: c.background,
     extensions: [c],

@@ -2644,25 +2644,28 @@ class AiTools {
       case 'read_note_board':
         final n = _note(a['id']);
         if (n == null) return {'error': 'No existe esa nota.'};
-        final board = BoardData.of(n.rich);
-        if (board == null) return {'error': 'Esa nota no tiene pizarra.'};
-        final drawn = board.encode();
-        final boardKey = 'board:${n.id}:${drawn.length}:${drawn.hashCode}';
-        final seen = _readCache[boardKey];
-        if (seen != null) {
-          sources.add(n.id);
-          return {'content': seen};
-        }
-        final png = await renderBoardPng(board, _loadImage);
-        if (png == null)
-          return {'content': '', 'note': 'La pizarra está vacía.'};
-        sources.add(n.id);
-        return {
-          'content': await _cachedRead(
+        // Una nota puede tener varias pizarras: se leen todas.
+        final boards = BoardData.all(n.rich);
+        if (boards.isEmpty) return {'error': 'Esa nota no tiene pizarra.'};
+        final parts = <String>[];
+        for (final (i, board) in boards.indexed) {
+          final drawn = board.encode();
+          final boardKey = 'board:${n.id}:${drawn.length}:${drawn.hashCode}';
+          final png = _readCache.containsKey(boardKey)
+              ? null
+              : await renderBoardPng(board, _loadImage);
+          if (png == null && !_readCache.containsKey(boardKey)) continue;
+          final text = await _cachedRead(
               boardKey,
               () async =>
-                  (await _readImage(png, 'image/png', aiBoardPrompt)).trim()),
-        };
+                  (await _readImage(png!, 'image/png', aiBoardPrompt)).trim());
+          parts.add(boards.length == 1 ? text : 'Pizarra ${i + 1}:\n$text');
+        }
+        if (parts.isEmpty) {
+          return {'content': '', 'note': 'La pizarra está vacía.'};
+        }
+        sources.add(n.id);
+        return {'content': parts.join('\n\n')};
 
       case 'set_dates':
         final n = _note(a['id']);

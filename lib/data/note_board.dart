@@ -312,6 +312,26 @@ void paintBoardStroke(Canvas canvas, BoardStroke s, Color ink) {
       r.add(math.max(0.25, s.width * f / 2));
     }
   }
+  // Grosor suavizado (sin saltos entre puntos) y afinado al empezar y al
+  // acabar, como la punta de una pluma.
+  for (var pass = 0; pass < 2; pass++) {
+    for (var i = 1; i < r.length - 1; i++) {
+      r[i] = (r[i - 1] + r[i] * 2 + r[i + 1]) / 4;
+    }
+  }
+  var total = 0.0;
+  final along = <double>[0];
+  for (var i = 1; i < c.length; i++) {
+    total += (c[i] - c[i - 1]).distance;
+    along.add(total);
+  }
+  final taper = math.min(total * 0.18, s.width * 3);
+  if (taper > 0) {
+    for (var i = 0; i < r.length; i++) {
+      final edge = math.min(along[i], total - along[i]) / taper;
+      if (edge < 1) r[i] *= 0.45 + 0.55 * math.sin(edge * math.pi / 2);
+    }
+  }
   final left = <Offset>[], right = <Offset>[];
   for (var i = 0; i < c.length; i++) {
     final d = c[math.min(i + 1, c.length - 1)] - c[math.max(i - 1, 0)];
@@ -330,11 +350,15 @@ void paintBoardStroke(Canvas canvas, BoardStroke s, Color ink) {
   }
 
   smooth(left);
-  path.arcToPoint(right.last, radius: Radius.circular(r.last));
+  path.lineTo(right.last.dx, right.last.dy);
   smooth(right.reversed.toList());
-  path.arcToPoint(left.first, radius: Radius.circular(r.first));
   path.close();
-  canvas.drawPath(path, paint..style = PaintingStyle.fill);
+  paint.style = PaintingStyle.fill;
+  canvas.drawPath(path, paint);
+  // Puntas redondas aparte: un arco dentro del contorno podía girar al revés
+  // y dejar un círculo "borrado" al principio y al final de la línea.
+  canvas.drawCircle(c.first, r.first, paint);
+  canvas.drawCircle(c.last, r.last, paint);
 }
 
 /// La pizarra como PNG sobre blanco, para que la lea la IA. null si está vacía.
@@ -402,11 +426,24 @@ class BoardData {
       List<BoardStroke>? strokes,
       List<BoardImage>? images,
       this.readText = '',
-      this.side = defaultSide})
+      this.side = defaultSide,
+      this.id = '',
+      this.name = ''})
       : strokes = strokes ?? [],
         images = images ?? [];
 
   static const embedType = 'oga-board';
+
+  /// Una nota puede tener varias pizarras: cada una con su id ('' en las
+  /// guardadas antes de la 3.12) y un nombre opcional.
+  final String id;
+  String name;
+
+  static String newId() {
+    final r = math.Random();
+    return List.generate(
+        8, (_) => 'abcdefghijkmnpqrstuvwxyz23456789'[r.nextInt(32)]).join();
+  }
 
   /// Lado mínimo de la hoja cuadrada (Normal / Grande / Enorme). Si el
   /// contenido no cabe, la hoja crece sola.
@@ -450,6 +487,8 @@ class BoardData {
         'i': [for (final i in images) i.toJson()],
         if (readText.isNotEmpty) 'rt': readText,
         if (side != defaultSide) 'sz': side,
+        if (id.isNotEmpty) 'id': id,
+        if (name.isNotEmpty) 'nm': name,
       });
 
   static BoardData? decode(Object? data) {
@@ -468,6 +507,8 @@ class BoardData {
         ],
         readText: j['rt'] is String ? j['rt'] as String : '',
         side: (j['sz'] as num?)?.toDouble() ?? defaultSide,
+        id: j['id'] is String ? j['id'] as String : '',
+        name: j['nm'] is String ? j['nm'] as String : '',
       );
     } catch (_) {
       return null;
@@ -487,15 +528,31 @@ class BoardData {
   }
 
   /// La pizarra guardada en el Delta de una nota, si tiene.
-  static BoardData? of(String? rich) {
-    if (rich == null || !rich.contains(embedType)) return null;
-    try {
-      for (final op in jsonDecode(rich) as List) {
-        final d = _dataIn(op);
-        if (d != null) return decode(d);
-      }
-    } catch (_) {}
+  /// La pizarra [id] de la nota (sin id: la primera).
+  static BoardData? of(String? rich, {String? id}) {
+    for (final b in all(rich)) {
+      if (id == null || b.id == id) return b;
+    }
     return null;
+  }
+
+  /// Todas las pizarras de la nota, en orden.
+  static List<BoardData> all(String? rich) {
+    if (rich == null || !rich.contains(embedType)) return const [];
+    try {
+      return [
+        for (final op in jsonDecode(rich) as List)
+          if (_dataIn(op) case final d?)
+            if (decode(d) case final b?) b,
+      ];
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  static bool _isBoard(Object? op, String id) {
+    final d = _dataIn(op);
+    return d != null && decode(d)?.id == id;
   }
 
   /// Guarda [board] en el Delta (sustituye la que hubiera o la añade al final)
@@ -519,7 +576,7 @@ class BoardData {
         'custom': jsonEncode({embedType: board.encode()})
       }
     };
-    final at = ops.indexWhere((o) => _dataIn(o) != null);
+    final at = ops.indexWhere((o) => _isBoard(o, board.id));
     if (at != -1) {
       ops[at] = embed;
     } else {
@@ -531,9 +588,11 @@ class BoardData {
   }
 
   /// Quita la pizarra del Delta, con su línea, sin tocar el resto de la nota.
-  static (String content, String rich) remove(String content, String rich) {
+  static (String content, String rich) remove(String content, String rich,
+      {String? id}) {
     final ops = List<Object?>.of(jsonDecode(rich) as List);
-    final at = ops.indexWhere((o) => _dataIn(o) != null);
+    final at = ops
+        .indexWhere((o) => id == null ? _dataIn(o) != null : _isBoard(o, id));
     if (at == -1) return (content, rich);
     ops.removeAt(at);
     final next = at < ops.length ? ops[at] : null;

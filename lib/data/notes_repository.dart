@@ -936,6 +936,10 @@ class NotesRepository extends ChangeNotifier {
         history.forget(id);
         changed = true;
       }
+      // Papelera: lo que otro dispositivo borró para siempre ya no está en
+      // la nube, y aquí seguía en la papelera. Solo con la lista completa
+      // (Supabase devuelve 1000 filas como mucho).
+      if (rows.length < 1000 && purgeMissing(alive)) changed = true;
       final before = jsonEncode([_incoming.keys.toList(), _sharedOut.toList()]);
       await _syncShares();
       if (before !=
@@ -963,6 +967,34 @@ class NotesRepository extends ChangeNotifier {
         unawaited(sync());
       }
     }
+  }
+
+  /// Borrada para siempre en otro dispositivo: fuera de aquí también (salvo
+  /// que tenga cambios sin subir).
+  bool _removeDeleted(String id) {
+    final n = _notes[id];
+    if (n == null || _dirty.contains(id) || isForeign(n)) return false;
+    _notes.remove(id);
+    history.forget(id);
+    return true;
+  }
+
+  /// Como si todo se hubiera subido ya (para pruebas).
+  @visibleForTesting
+  void debugMarkClean() => _dirty.clear();
+
+  /// Notas de la papelera que ya no están en la nube ([alive] = ids de la
+  /// nube): se borraron para siempre en otro dispositivo.
+  @visibleForTesting
+  bool purgeMissing(Set<Object?> alive) {
+    final gone = [
+      for (final n in _notes.values)
+        if (n.deleted && !alive.contains(n.id) && !_dirty.contains(n.id)) n.id
+    ];
+    for (final id in gone) {
+      _removeDeleted(id);
+    }
+    return gone.isNotEmpty;
   }
 
   bool get _isClean =>
@@ -1138,7 +1170,15 @@ class NotesRepository extends ChangeNotifier {
           table: 'notes',
           callback: (payload) {
             final rec = payload.newRecord;
-            if (_disposed || rec.isEmpty) return;
+            if (_disposed) return;
+            if (payload.eventType == PostgresChangeEvent.delete) {
+              if (_removeDeleted('${payload.oldRecord['id']}')) {
+                _schedulePersist();
+                _notify();
+              }
+              return;
+            }
+            if (rec.isEmpty) return;
             // Una pizarra grande puede llegar sin sus columnas largas: se
             // pide la nota entera en vez de sustituirla por una incompleta.
             if (payload.errors != null ||

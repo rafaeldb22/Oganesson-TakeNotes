@@ -23,7 +23,9 @@ class AppConfig {
   /// incluye `{{ .Token }}`: activa "¿Has olvidado la contraseña?" del Vault
   /// (código de 6 dígitos por correo). Con el SMTP por defecto el correo
   /// solo trae un enlace, así que va desactivado.
-  static const emailCodes = bool.fromEnvironment('EMAIL_CODES');
+  // SMTP propio (Brevo) configurado: los códigos por correo van activados.
+  static const emailCodes =
+      bool.fromEnvironment('EMAIL_CODES', defaultValue: true);
 
   static bool get isConfigured =>
       supabaseUrl.isNotEmpty && supabaseAnonKey.isNotEmpty;

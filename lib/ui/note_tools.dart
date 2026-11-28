@@ -452,12 +452,20 @@ Future<NoteFilters?> showFiltersSheet(
 // ------------------------------------------------------- exportar e importar
 
 /// La pizarra como PNG de alta calidad (hasta 3200 px de lado).
-Future<void> exportBoardPng(BuildContext context, BoardData d) =>
+Future<void> exportBoardPng(BuildContext context, BoardData d,
+        {String name = 'pizarra.png'}) =>
     _run(context, () async {
       final png =
           await renderBoardPng(d, NoteImages.instance.load, maxSide: 3200);
-      if (png == null || !context.mounted) return false;
-      return _deliver(context, png, 'pizarra.png', 'image/png', 'PNG', 'png');
+      if (png == null) {
+        if (context.mounted) {
+          showToast(context, tr('La pizarra está vacía'),
+              icon: Icons.info_outline_rounded);
+        }
+        return false;
+      }
+      if (!context.mounted) return false;
+      return _deliver(context, png, name, 'image/png', 'PNG', 'png');
     });
 
 /// En PC pregunta dónde guardar; en el móvil abre el menú de compartir.
@@ -498,6 +506,12 @@ Future<void> _run(BuildContext context, Future<bool> Function() job) async {
 
 /// Exportar una nota: Markdown o PDF.
 Future<void> showExportNote(BuildContext context, Note n) async {
+  // Solo una pizarra: se exporta tal cual, como imagen.
+  final boards = BoardData.all(n.rich);
+  if (isBoardOnly(n) && boards.length == 1) {
+    return exportBoardPng(context, boards.single,
+        name: safeFileName(n.title, 'png'));
+  }
   final kind = await showModalBottomSheet<String>(
     context: context,
     useSafeArea: true,
@@ -512,12 +526,25 @@ Future<void> showExportNote(BuildContext context, Note n) async {
         ListTile(
             leading: const Icon(Icons.picture_as_pdf_outlined),
             title: const Text('PDF'),
+            subtitle:
+                boards.isEmpty ? null : Text(tr('Con el texto y las pizarras')),
             onTap: () => Navigator.pop(ctx, 'pdf')),
+        for (var i = 0; i < boards.length; i++)
+          ListTile(
+              leading: const Icon(Icons.gesture_rounded),
+              title: Text(boards.length == 1
+                  ? tr('Solo la pizarra (PNG)')
+                  : trf('Pizarra {0} (PNG)', [i + 1])),
+              onTap: () => Navigator.pop(ctx, 'png:$i')),
         const SizedBox(height: 8),
       ],
     ),
   );
   if (kind == null || !context.mounted) return;
+  if (kind.startsWith('png:')) {
+    return exportBoardPng(context, boards[int.parse(kind.substring(4))],
+        name: safeFileName(n.title, 'png'));
+  }
   await _run(context, () async {
     if (kind == 'md') {
       return _deliver(

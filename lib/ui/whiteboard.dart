@@ -35,7 +35,13 @@ class BoardController extends ChangeNotifier {
       : strokes = List.of(data.strokes),
         images = List.of(data.images),
         readText = data.readText,
-        side = data.side;
+        side = data.side,
+        id = data.id,
+        name = data.name;
+
+  /// Qué pizarra de la nota es.
+  final String id;
+  String name;
 
   /// Tamaño mínimo elegido para la hoja.
   double side;
@@ -134,7 +140,9 @@ class BoardController extends ChangeNotifier {
       strokes: List.of(strokes),
       images: List.of(images),
       readText: readText,
-      side: side);
+      side: side,
+      id: id,
+      name: name);
 
   /// Lo que la IA aún no ha leído, de la selección o de toda la pizarra.
   BoardData unreadData() => BoardData(
@@ -170,6 +178,8 @@ class BoardController extends ChangeNotifier {
     strokes = List.of(d.strokes);
     images = List.of(d.images);
     readText = d.readText;
+    side = d.side;
+    name = d.name;
     selBox = null;
     selectedStrokes = {};
     selectedImages = {};
@@ -1341,77 +1351,105 @@ class _BoardPainter extends CustomPainter {
 
 // -------------------------------------------------- vista previa en la nota
 
-/// Tarjeta de la pizarra dentro de la nota en modo texto.
+/// La pizarra dentro del texto no se dibuja: las pizarras de la nota salen
+/// abajo, como tarjetas (`BoardThumb`). El embed sigue registrado para que
+/// Quill lo conozca.
 class NoteBoardEmbedBuilder extends EmbedBuilder {
-  const NoteBoardEmbedBuilder({required this.onOpen, required this.onRemove});
-  final VoidCallback onOpen;
-  final VoidCallback onRemove;
+  const NoteBoardEmbedBuilder();
 
   @override
   String get key => BoardData.embedType;
 
   @override
-  bool get expanded => true;
+  bool get expanded => false;
 
   @override
-  Widget build(BuildContext context, EmbedContext e) {
-    final data = BoardData.decode(e.node.value.data);
-    if (data == null) return const SizedBox.shrink();
+  Widget build(BuildContext context, EmbedContext e) => const SizedBox.shrink();
+}
+
+/// Tarjeta cuadrada de una pizarra, con vista previa.
+class BoardThumb extends StatelessWidget {
+  const BoardThumb({
+    super.key,
+    required this.data,
+    required this.label,
+    required this.onTap,
+    this.onRemove,
+    this.selected = false,
+    this.size = 120,
+  });
+  final BoardData data;
+  final String label;
+  final VoidCallback onTap;
+  final VoidCallback? onRemove;
+  final bool selected;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
     final p = Palette.of(context);
-    // Una tarjeta cuadrada (como la hoja), no un rectángulo de lado a lado.
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Align(
-        alignment: Alignment.centerLeft,
-        child: Material(
+    return Bouncy(
+      pressedScale: 0.95,
+      child: AnimatedContainer(
+        duration: Anim.medium,
+        curve: Anim.curve,
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
           color: p.background,
-          elevation: 1.5,
-          shadowColor: Colors.black26,
-          borderRadius: BorderRadius.circular(22),
-          clipBehavior: Clip.antiAlias,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+              color: selected ? p.accent : p.separator.withValues(alpha: 0.6),
+              width: selected ? 2 : 1),
+          boxShadow: [
+            BoxShadow(
+                color: Colors.black.withValues(alpha: selected ? 0.14 : 0.06),
+                blurRadius: selected ? 14 : 8,
+                offset: const Offset(0, 3)),
+          ],
+        ),
+        child: Material(
+          type: MaterialType.transparency,
           child: InkWell(
-            onTap: onOpen,
-            child: SizedBox(
-              width: 180,
-              height: 180,
-              child: Stack(
-                children: [
-                  Positioned.fill(
-                    child: CustomPaint(
-                      painter: _PreviewPainter(
-                          data, Theme.of(context).colorScheme.onSurface),
-                    ),
-                  ),
-                  Positioned(
-                    left: 10,
-                    bottom: 8,
-                    child: Row(
-                      children: [
-                        Icon(Icons.gesture_rounded, size: 16, color: p.accent),
-                        const SizedBox(width: 6),
-                        Text(tr('Nota de pizarra'),
-                            style: TextStyle(
-                                fontSize: 12.5,
-                                fontWeight: FontWeight.w600,
-                                color: p.secondary)),
-                      ],
-                    ),
-                  ),
-                  if (!e.readOnly)
-                    Positioned(
-                      top: 4,
-                      right: 4,
-                      child: IconButton(
-                        tooltip: tr('Eliminar pizarra'),
-                        visualDensity: VisualDensity.compact,
-                        icon: Icon(Icons.delete_outline_rounded,
-                            size: 19, color: p.secondary),
-                        onPressed: onRemove,
-                      ),
-                    ),
-                ],
+            borderRadius: BorderRadius.circular(20),
+            onTap: onTap,
+            child: Stack(children: [
+              Positioned.fill(
+                child: CustomPaint(
+                    painter: _PreviewPainter(
+                        data, Theme.of(context).colorScheme.onSurface)),
               ),
-            ),
+              Positioned(
+                left: 10,
+                bottom: 8,
+                right: 10,
+                child: Row(children: [
+                  Icon(Icons.gesture_rounded, size: 14, color: p.accent),
+                  const SizedBox(width: 5),
+                  Expanded(
+                    child: Text(label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w700,
+                            color: p.secondary)),
+                  ),
+                ]),
+              ),
+              if (onRemove != null)
+                Positioned(
+                  top: 2,
+                  right: 2,
+                  child: IconButton(
+                    tooltip: tr('Eliminar pizarra'),
+                    visualDensity: VisualDensity.compact,
+                    icon:
+                        Icon(Icons.close_rounded, size: 16, color: p.secondary),
+                    onPressed: onRemove,
+                  ),
+                ),
+            ]),
           ),
         ),
       ),

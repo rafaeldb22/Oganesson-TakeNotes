@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 
+import '../data/ai_actions.dart';
+import '../data/ai_assistant.dart';
 import '../data/note_attachments.dart';
 import '../data/note_links.dart';
 import '../data/notes_repository.dart';
@@ -10,17 +12,19 @@ import 'attachments_ui.dart';
 import 'i18n.dart';
 import 'text_menu.dart';
 import 'theme.dart';
+import 'toast.dart';
 
 /// Elegir con qué notas está enlazada [noteId] (casillas). Marca las que ya
 /// lo están (en cualquier sentido) y aplica los cambios al guardar.
 Future<void> showLinkNotesPicker(
-    BuildContext context, NotesRepository repo, String noteId) async {
+    BuildContext context, NotesRepository repo, String noteId,
+    {bool suggest = false}) async {
   final graph = NoteGraph.of(repo);
   final current = graph.neighbors(noteId);
   final result = await showDialog<Set<String>>(
     context: context,
-    builder: (_) =>
-        _LinkPicker(repo: repo, noteId: noteId, initial: {...current}),
+    builder: (_) => _LinkPicker(
+        repo: repo, noteId: noteId, initial: {...current}, suggest: suggest),
   );
   if (result == null) return;
   final added = result.difference(current);
@@ -33,10 +37,16 @@ Future<void> showLinkNotesPicker(
 
 class _LinkPicker extends StatefulWidget {
   const _LinkPicker(
-      {required this.repo, required this.noteId, required this.initial});
+      {required this.repo,
+      required this.noteId,
+      required this.initial,
+      this.suggest = false});
   final NotesRepository repo;
   final String noteId;
   final Set<String> initial;
+
+  /// Pedir sugerencias a la IA nada más abrir.
+  final bool suggest;
 
   @override
   State<_LinkPicker> createState() => _LinkPickerState();
@@ -45,6 +55,54 @@ class _LinkPicker extends StatefulWidget {
 class _LinkPickerState extends State<_LinkPicker> {
   final _query = TextEditingController();
   late final Set<String> _selected = {...widget.initial};
+
+  /// Las que ha sugerido la IA (salen primero y con un destello).
+  Set<String> _suggested = {};
+  bool _thinking = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.suggest) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _suggest());
+    }
+  }
+
+  Future<void> _suggest() async {
+    final note = widget.repo.byId(widget.noteId);
+    if (note == null || _thinking) return;
+    if (!AiSettings.instance.configured) {
+      await AiSettings.instance.load();
+    }
+    if (!AiSettings.instance.configured) {
+      if (mounted) {
+        showToast(
+            context, tr('Pon tu clave en el Asistente IA para usar esto.'),
+            icon: Icons.auto_awesome_outlined);
+      }
+      return;
+    }
+    setState(() => _thinking = true);
+    try {
+      final ids = await suggestLinks(widget.repo, note);
+      if (!mounted) return;
+      setState(() {
+        _suggested = ids.toSet();
+        _selected.addAll(ids);
+      });
+      showToast(
+          context,
+          ids.isEmpty
+              ? tr('La IA no ha encontrado notas relacionadas')
+              : trn(ids.length, 'La IA sugiere {0} nota',
+                  'La IA sugiere {0} notas'),
+          icon: Icons.auto_awesome_rounded);
+    } on AiException catch (e) {
+      if (mounted) showToast(context, e.message, icon: Icons.error_outline);
+    } finally {
+      if (mounted) setState(() => _thinking = false);
+    }
+  }
 
   @override
   void dispose() {
@@ -133,6 +191,9 @@ class _LinkPickerState extends State<_LinkPicker> {
         .toList()
       // Primero las ya enlazadas, luego las editadas hace menos.
       ..sort((a, b) {
+        final sa = _suggested.contains(a.id);
+        final sb = _suggested.contains(b.id);
+        if (sa != sb) return sa ? -1 : 1;
         final la = widget.initial.contains(a.id);
         final lb = widget.initial.contains(b.id);
         if (la != lb) return la ? -1 : 1;
@@ -153,7 +214,22 @@ class _LinkPickerState extends State<_LinkPicker> {
     final matches = _matches();
 
     return AlertDialog(
-      title: Text(tr('Enlazar notas y archivos')),
+      title: Row(children: [
+        Expanded(child: Text(tr('Enlazar notas y archivos'))),
+        if (note != null && !note.vault)
+          _thinking
+              ? const Padding(
+                  padding: EdgeInsets.all(10),
+                  child: SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2)))
+              : TextButton.icon(
+                  onPressed: _suggest,
+                  icon: const Icon(Icons.auto_awesome_rounded, size: 18),
+                  label: Text(tr('Sugerir con IA')),
+                ),
+      ]),
       contentPadding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
       content: SizedBox(
         width: 440,
@@ -217,15 +293,18 @@ class _LinkPickerState extends State<_LinkPicker> {
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                   style: TextStyle(color: p.secondary)),
-                          secondary: n.color == null
-                              ? null
-                              : Container(
-                                  width: 10,
-                                  height: 10,
-                                  decoration: BoxDecoration(
-                                      color: Color(n.color!),
-                                      shape: BoxShape.circle),
-                                ),
+                          secondary: _suggested.contains(n.id)
+                              ? Icon(Icons.auto_awesome_rounded,
+                                  size: 18, color: p.accent)
+                              : n.color == null
+                                  ? null
+                                  : Container(
+                                      width: 10,
+                                      height: 10,
+                                      decoration: BoxDecoration(
+                                          color: Color(n.color!),
+                                          shape: BoxShape.circle),
+                                    ),
                         )
                             .animate(delay: (12 * i.clamp(0, 20)).ms)
                             .fadeIn(duration: Anim.fast);

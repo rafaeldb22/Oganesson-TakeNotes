@@ -10,12 +10,22 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 /// Hash de la contraseña maestra (nunca se guarda la contraseña).
 class _PasswordHash {
-  _PasswordHash(this.salt, this.iterations, this.hash, this.updatedAt);
+  _PasswordHash(this.salt, this.iterations, this.hash, this.updatedAt,
+      {this.pinSalt, this.pinHash, this.usePin = false});
 
   final List<int> salt;
   final int iterations;
   final List<int> hash;
   final DateTime updatedAt;
+
+  /// PIN opcional (mismo PBKDF2) y si se abre con él. Va en el mismo JSON de
+  /// la tabla `vaults`, así que se sincroniza sin otra migración.
+  final List<int>? pinSalt, pinHash;
+  final bool usePin;
+
+  _PasswordHash withPin(List<int>? salt, List<int>? hash, bool use) =>
+      _PasswordHash(this.salt, iterations, this.hash, DateTime.now().toUtc(),
+          pinSalt: salt, pinHash: hash, usePin: use);
 
   String encode() => jsonEncode({
         'v': 1,
@@ -24,6 +34,9 @@ class _PasswordHash {
         'salt': base64Encode(salt),
         'hash': base64Encode(hash),
         'updated_at': updatedAt.toIso8601String(),
+        if (pinHash != null) 'pin_salt': base64Encode(pinSalt!),
+        if (pinHash != null) 'pin_hash': base64Encode(pinHash!),
+        if (usePin) 'use_pin': true,
       });
 
   static _PasswordHash? decode(String? raw) {
@@ -36,6 +49,13 @@ class _PasswordHash {
         (j['iter'] as num).toInt(),
         base64Decode(j['hash'] as String),
         DateTime.parse(j['updated_at'] as String).toUtc(),
+        pinSalt: j['pin_salt'] is String
+            ? base64Decode(j['pin_salt'] as String)
+            : null,
+        pinHash: j['pin_hash'] is String
+            ? base64Decode(j['pin_hash'] as String)
+            : null,
+        usePin: j['use_pin'] == true && j['pin_hash'] is String,
       );
     } catch (_) {
       return null;
@@ -178,11 +198,73 @@ class VaultLock extends ChangeNotifier {
 
   // ---------------------------------------------------- contraseña
 
-  /// Crea o cambia la contraseña maestra y deja el Vault abierto.
+  /// Tiene PIN y se abre con él (si no, con la contraseña maestra).
+  bool get hasPin => _hash?.pinHash != null;
+  bool get usePin => _hash?.usePin ?? false;
+
+  static const minPin = 4, maxPin = 8;
+  static bool validPin(String p) =>
+      RegExp('^[0-9]{$minPin,$maxPin}\$').hasMatch(p);
+
+  Future<void> _store(_PasswordHash h) async {
+    _hash = h;
+    await (await SharedPreferences.getInstance())
+        .setString(_prefsKey, h.encode());
+    await _upload(h);
+    notifyListeners();
+  }
+
+  /// Pone o cambia el PIN (con el Vault ya abierto o tras el código).
+  Future<void> setPin(String pin, {bool use = true}) async {
+    final h = _hash;
+    if (h == null || !validPin(pin)) return;
+    final salt = _randomBytes(16);
+    final hash = await _derive(pin, salt, h.iterations);
+    await _store(h.withPin(salt, hash, use));
+  }
+
+  /// Abrir con PIN o con contraseña (necesita un PIN para lo primero).
+  Future<void> setUsePin(bool use) async {
+    final h = _hash;
+    if (h == null || (use && h.pinHash == null) || h.usePin == use) return;
+    await _store(h.withPin(h.pinSalt, h.pinHash, use));
+  }
+
+  /// Abre el Vault si el PIN es correcto (mismos límites de intentos).
+  Future<bool> unlockWithPin(String pin) async {
+    final h = _hash;
+    if (h == null || h.pinHash == null || blockedSeconds > 0) return false;
+    final hash = await _derive(pin, h.pinSalt!, h.iterations);
+    return _result(_equals(hash, h.pinHash!));
+  }
+
+  bool _result(bool ok) {
+    if (ok) {
+      _failures = 0;
+      _blockedUntil = null;
+      _open();
+      return true;
+    }
+    // Tras 5 fallos seguidos, espera creciente (30 s, 60 s, …).
+    _failures++;
+    if (_failures >= 5) {
+      _blockedUntil =
+          DateTime.now().add(Duration(seconds: 30 * (_failures - 4)));
+    }
+    notifyListeners();
+    return false;
+  }
+
+  /// Crea o cambia la contraseña maestra y deja el Vault abierto. El PIN se
+  /// conserva.
   Future<void> setPassword(String password) async {
     final salt = _randomBytes(16);
     final hash = await _derive(password, salt, _iterations);
-    final h = _PasswordHash(salt, _iterations, hash, DateTime.now().toUtc());
+    final old = _hash;
+    final h = _PasswordHash(salt, _iterations, hash, DateTime.now().toUtc(),
+        pinSalt: old?.pinSalt,
+        pinHash: old?.pinHash,
+        usePin: old?.usePin ?? false);
     _hash = h;
     await (await SharedPreferences.getInstance())
         .setString(_prefsKey, h.encode());
@@ -198,20 +280,7 @@ class VaultLock extends ChangeNotifier {
     final h = _hash;
     if (h == null || blockedSeconds > 0) return false;
     final hash = await _derive(password, h.salt, h.iterations);
-    if (_equals(hash, h.hash)) {
-      _failures = 0;
-      _blockedUntil = null;
-      _open();
-      return true;
-    }
-    // Tras 5 fallos seguidos, espera creciente (30 s, 60 s, …).
-    _failures++;
-    if (_failures >= 5) {
-      _blockedUntil =
-          DateTime.now().add(Duration(seconds: 30 * (_failures - 4)));
-    }
-    notifyListeners();
-    return false;
+    return _result(_equals(hash, h.hash));
   }
 
   void lock() {

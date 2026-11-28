@@ -24,6 +24,116 @@ Future<bool> ensureVaultOpen(BuildContext context, VaultLock vault) async {
   return ok == true && vault.unlocked;
 }
 
+/// Cambiar el PIN: con un código enviado al correo de la cuenta.
+Future<void> changeVaultPin(BuildContext context, VaultLock vault) async {
+  await vault.load();
+  if (!context.mounted) return;
+  final ok = await showDialog<bool>(
+    context: context,
+    builder: (_) => _ResetDialog(vault: vault, pin: true),
+  );
+  if (ok == true && context.mounted) {
+    showToast(context, tr('PIN del Vault cambiado'),
+        icon: Icons.check_circle_outline_rounded);
+  }
+}
+
+/// Abrir el Vault con PIN o con contraseña. Para el PIN hace falta abrirlo
+/// primero (y crear el PIN si aún no hay).
+Future<void> setVaultUnlockMode(
+    BuildContext context, VaultLock vault, bool usePin) async {
+  if (!await ensureVaultOpen(context, vault) || !context.mounted) return;
+  if (usePin && !vault.hasPin) {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (_) => _NewPinDialog(vault: vault),
+    );
+    if (ok != true) return;
+  }
+  await vault.setUsePin(usePin);
+  if (context.mounted) {
+    showToast(
+        context,
+        usePin
+            ? tr('El Vault se abrirá con tu PIN')
+            : tr('El Vault se abrirá con la contraseña'),
+        icon: Icons.shield_outlined);
+  }
+}
+
+/// PIN nuevo (dos veces).
+class _NewPinDialog extends StatefulWidget {
+  const _NewPinDialog({required this.vault});
+  final VaultLock vault;
+
+  @override
+  State<_NewPinDialog> createState() => _NewPinDialogState();
+}
+
+class _NewPinDialogState extends State<_NewPinDialog> {
+  final _a = TextEditingController(), _b = TextEditingController();
+  bool _busy = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _a.dispose();
+    _b.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    if (_busy) return;
+    if (!VaultLock.validPin(_a.text)) {
+      setState(() => _error = trf('El PIN debe tener de {0} a {1} números.',
+          [VaultLock.minPin, VaultLock.maxPin]));
+      return;
+    }
+    if (_a.text != _b.text) {
+      setState(() => _error = tr('Los PIN no coinciden'));
+      return;
+    }
+    setState(() => _busy = true);
+    await widget.vault.setPin(_a.text, use: true);
+    if (mounted) Navigator.pop(context, true);
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+        content: SizedBox(
+          width: 360,
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            _header(context, Icons.dialpad_rounded, tr('PIN del Vault'),
+                tr('Un número para abrir el Vault más rápido. La contraseña sigue sirviendo.')),
+            _PasswordField(
+                controller: _a,
+                hint: tr('PIN nuevo'),
+                icon: Icons.dialpad_rounded,
+                number: true,
+                autofocus: autoKeyboard,
+                enabled: !_busy),
+            const SizedBox(height: 10),
+            _PasswordField(
+                controller: _b,
+                hint: tr('Repite el PIN'),
+                icon: Icons.dialpad_rounded,
+                number: true,
+                enabled: !_busy,
+                onSubmitted: _submit),
+            _errorText(context, _error),
+          ]),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: Text(tr('Cancelar'))),
+          FilledButton(
+              onPressed: _busy ? null : _submit,
+              child: _busyLabel(_busy, tr('Guardar'))),
+        ],
+      );
+}
+
 /// Cambiar la contraseña maestra (con el Vault abierto).
 Future<void> changeVaultPassword(BuildContext context, VaultLock vault) async {
   final ok = await showDialog<bool>(
@@ -90,7 +200,9 @@ class _PasswordField extends StatefulWidget {
     this.autofocus = false,
     this.onSubmitted,
     this.enabled = true,
+    this.number = false,
   });
+  final bool number;
   final TextEditingController controller;
   final String hint;
   final IconData icon;
@@ -112,9 +224,12 @@ class _PasswordFieldState extends State<_PasswordField> {
         autofocus: widget.autofocus,
         enabled: widget.enabled,
         obscureText: !_show,
+        keyboardType: widget.number ? TextInputType.number : null,
+        maxLength: widget.number ? VaultLock.maxPin : null,
         onSubmitted: (_) => widget.onSubmitted?.call(),
         decoration: InputDecoration(
           hintText: widget.hint,
+          counterText: '',
           prefixIcon: Icon(widget.icon),
           suffixIcon: IconButton(
             tooltip: _show ? tr('Ocultar') : tr('Mostrar'),
@@ -146,6 +261,7 @@ class _UnlockDialogState extends State<_UnlockDialog> {
   final _pass = TextEditingController();
   bool _busy = false;
   String? _error;
+  late bool _pin = widget.vault.usePin;
 
   @override
   void dispose() {
@@ -164,7 +280,9 @@ class _UnlockDialogState extends State<_UnlockDialog> {
       _busy = true;
       _error = null;
     });
-    final ok = await widget.vault.unlock(_pass.text);
+    final ok = _pin
+        ? await widget.vault.unlockWithPin(_pass.text)
+        : await widget.vault.unlock(_pass.text);
     if (!mounted) return;
     if (ok) {
       Navigator.pop(context, true);
@@ -172,7 +290,7 @@ class _UnlockDialogState extends State<_UnlockDialog> {
       _pass.clear();
       setState(() {
         _busy = false;
-        _error = tr('Contraseña incorrecta');
+        _error = _pin ? tr('PIN incorrecto') : tr('Contraseña incorrecta');
       });
     }
   }
@@ -197,16 +315,40 @@ class _UnlockDialogState extends State<_UnlockDialog> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            _header(context, Icons.lock_outline_rounded, tr('Vault bloqueado'),
-                tr('Escribe la contraseña maestra para ver las notas del Vault.')),
+            _header(
+                context,
+                _pin ? Icons.dialpad_rounded : Icons.lock_outline_rounded,
+                tr('Vault bloqueado'),
+                _pin
+                    ? tr('Escribe tu PIN para ver las notas del Vault.')
+                    : tr(
+                        'Escribe la contraseña maestra para ver las notas del Vault.')),
             _PasswordField(
+              key: ValueKey(_pin),
               controller: _pass,
-              hint: tr('Contraseña maestra'),
+              hint: _pin ? tr('PIN') : tr('Contraseña maestra'),
+              icon: _pin ? Icons.dialpad_rounded : Icons.key_rounded,
+              number: _pin,
               autofocus: autoKeyboard,
               enabled: !_busy,
               onSubmitted: _submit,
             ),
             _errorText(context, _error),
+            if (widget.vault.hasPin)
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton(
+                  onPressed: _busy
+                      ? null
+                      : () => setState(() {
+                            _pin = !_pin;
+                            _pass.clear();
+                            _error = null;
+                          }),
+                  child:
+                      Text(_pin ? tr('Usar la contraseña') : tr('Usar el PIN')),
+                ),
+              ),
             const SizedBox(height: 4),
             // Restablecer con la contraseña de la cuenta (o por correo, solo
             // con SMTP propio configurado en Supabase: AppConfig.emailCodes).
@@ -401,6 +543,27 @@ class _NewPasswordDialogState extends State<_NewPasswordDialog> {
                 )
               else
                 const SizedBox(height: 10),
+              // O sin saber ninguna: con un código al correo.
+              if (widget.mode == _Mode.change && AppConfig.emailCodes)
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton.icon(
+                    onPressed: _busy
+                        ? null
+                        : () async {
+                            final ok = await showDialog<bool>(
+                              context: context,
+                              builder: (_) => _ResetDialog(vault: widget.vault),
+                            );
+                            if (ok == true && context.mounted) {
+                              Navigator.pop(context, true);
+                            }
+                          },
+                    icon:
+                        const Icon(Icons.mark_email_unread_outlined, size: 18),
+                    label: Text(tr('Con un código por correo')),
+                  ),
+                ),
             ],
             _PasswordField(
                 controller: _a,
@@ -442,8 +605,11 @@ class _NewPasswordDialogState extends State<_NewPasswordDialog> {
 // ------------------------------------- olvidé la contraseña (código)
 
 class _ResetDialog extends StatefulWidget {
-  const _ResetDialog({required this.vault});
+  const _ResetDialog({required this.vault, this.pin = false});
   final VaultLock vault;
+
+  /// Tras el código: PIN nuevo en vez de contraseña nueva.
+  final bool pin;
 
   @override
   State<_ResetDialog> createState() => _ResetDialogState();
@@ -505,8 +671,9 @@ class _ResetDialogState extends State<_ResetDialog> {
     final changed = await showDialog<bool>(
       context: context,
       barrierDismissible: false,
-      builder: (_) =>
-          _NewPasswordDialog(vault: widget.vault, mode: _Mode.reset),
+      builder: (_) => widget.pin
+          ? _NewPinDialog(vault: widget.vault)
+          : _NewPasswordDialog(vault: widget.vault, mode: _Mode.reset),
     );
     if (mounted) Navigator.pop(context, changed == true);
   }
@@ -526,16 +693,21 @@ class _ResetDialogState extends State<_ResetDialog> {
               _header(
                   context,
                   Icons.mark_email_unread_outlined,
-                  tr('Cambiar contraseña'),
+                  widget.pin ? tr('Cambiar PIN') : tr('Cambiar contraseña'),
                   _sent
                       ? trf(
                           'Hemos enviado un código de 6 dígitos a {0}. '
                           'Escríbelo aquí.',
                           [mail])
-                      : trf(
-                          'Te enviaremos un código a {0} para poner una '
-                          'contraseña maestra nueva.',
-                          [mail])),
+                      : widget.pin
+                          ? trf(
+                              'Te enviaremos un código a {0} para poner un '
+                              'PIN nuevo.',
+                              [mail])
+                          : trf(
+                              'Te enviaremos un código a {0} para poner una '
+                              'contraseña maestra nueva.',
+                              [mail])),
               if (_sent)
                 TextField(
                   contextMenuBuilder: textFieldMenu,

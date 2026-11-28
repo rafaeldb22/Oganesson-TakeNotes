@@ -388,21 +388,30 @@ class _GraphViewState extends State<GraphView> with TickerProviderStateMixin {
     _reheat(0.8);
   }
 
-  /// Arrastrar el fondo: las notas cerca del dedo se dejan llevar un poco,
-  /// como en el agua, y luego vuelven a su sitio con los muelles.
+  /// Arrastrar el fondo: como en el espacio, cada nota tiene su propia
+  /// inercia (se queda un poco atrás, cada una distinto y con un ángulo
+  /// propio) y después vuelve flotando a su sitio. Nada reacciona igual ni
+  /// alrededor de un mismo punto.
   void _wake(Offset screen, Offset delta) {
     if (delta == Offset.zero) return;
-    final at = _toWorld(screen);
-    const sigma = 170.0;
+    final world = delta / _scale;
     for (final n in _nodes.values) {
       if (n.pinned) continue;
-      final d2 = (n.pos - at).distanceSquared;
-      final pull = math.exp(-d2 / (2 * sigma * sigma));
-      if (pull < 0.02) continue;
-      n.vel += delta / _scale * (0.22 * pull);
+      final h = n.id.hashCode;
+      // Masa e inclinación fijas por nota (siempre las mismas para cada una).
+      final lag = 0.06 + (h & 0xff) / 255 * 0.32;
+      final turn = (((h >> 8) & 0xff) / 255 - 0.5) * 0.9;
+      final c = math.cos(turn), s = math.sin(turn);
+      final v =
+          Offset(world.dx * c - world.dy * s, world.dx * s + world.dy * c);
+      n.vel -= v * lag;
     }
-    _reheat(0.12);
+    _drift = 1;
+    _reheat(0.08);
   }
+
+  /// Tras arrastrar el fondo, menos rozamiento un rato: flotan.
+  double _drift = 0;
 
   void _reheat([double a = 0.5]) {
     _alpha = math.max(_alpha, a);
@@ -466,7 +475,7 @@ class _GraphViewState extends State<GraphView> with TickerProviderStateMixin {
         if (dist == 0) continue;
         f += d / dist * ((dist - springLength) * spring);
       }
-      a.vel = (a.vel + f * _alpha) * _damping;
+      a.vel = (a.vel + f * _alpha) * (_damping + 0.09 * _drift);
     }
     var energy = 0.0;
     for (final n in list) {
@@ -481,6 +490,7 @@ class _GraphViewState extends State<GraphView> with TickerProviderStateMixin {
       energy += v.distanceSquared;
     }
     _alpha = math.max(0.02, _alpha * decay);
+    _drift *= 0.97;
     return energy;
   }
 

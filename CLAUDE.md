@@ -232,6 +232,12 @@ that it still arrives. On Windows, check toasts are enabled first:
   Global shortcuts that must work inside the editor go through `HardwareKeyboard` in `notes_home.dart`
   (`_onKey`); mouse side buttons use a global pointer route (`_sideButtons`).
 
+- 3.11–3.12: `lib/data/mods.dart` (.ogmod mods, see docs/MODS.md; `appThemes`/`appFonts` are getters over built-ins + mods).
+  Several whiteboards per note: each `BoardData` has an `id` ('' for pre-3.12 boards); `BoardData.all/of(id:)/store/remove(id:)`;
+  the inline embed renders nothing and the editor shows a `BoardThumb` strip. Fonts apply to notes only (Quill `font`
+  attribute = font id, mapped in the editor's `customStyleBuilder`). Vault PIN lives in the same `vaults.data` JSON.
+  Hard deletes sync: realtime DELETE + `purgeMissing` on full sync (only for trashed notes).
+
 ## Conventions
 
 - Bump `version:` in `pubspec.yaml` and add a section to `CHANGELOG.md` for each release.

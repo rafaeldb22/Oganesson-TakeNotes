@@ -241,22 +241,32 @@ class _NoteEditorState extends State<NoteEditor> {
     ).animate().fadeIn(duration: Anim.fast).slideY(begin: -0.3);
   }
 
-  void _enterBoard() {
+  /// Abre la pizarra [id] (sin id, la primera; con [fresh], una nueva).
+  void _enterBoard({String? id, bool fresh = false}) {
     final n = repo.byId(widget.noteId);
-    if (n == null || _board != null) return;
+    if (n == null) return;
+    if (_board != null) {
+      if (!fresh && _board!.id == id) return;
+      _leaveBoard();
+    }
     _focus.unfocus();
     _titleCtrl.text = n.title;
+    final data = (fresh ? null : BoardData.of(n.rich, id: id)) ??
+        BoardData(id: BoardData.newId());
     setState(() {
-      _board = BoardController(BoardData.of(n.rich) ?? BoardData(),
-          onChanged: _queueBoardSave);
+      _board = BoardController(data, onChanged: _queueBoardSave);
     });
     _saveBoard();
   }
 
-  /// Título editable arriba mientras se ve la pizarra.
+  /// Título editable arriba mientras se ve la pizarra. Se guarda mientras se
+  /// escribe (y al cerrar): antes solo con Intro, y al salir con Esc o cambiar
+  /// de nota se perdía y no llegaba a los otros dispositivos.
   final _titleCtrl = TextEditingController();
+  Timer? _titleSave;
 
   void _renameFromBoard() {
+    _titleSave?.cancel();
     final n = repo.byId(widget.noteId);
     final title = _titleCtrl.text.replaceAll('\n', ' ').trim();
     if (n == null || !repo.canEdit(n) || title.isEmpty || title == n.title) {
@@ -288,9 +298,10 @@ class _NoteEditorState extends State<NoteEditor> {
         c.isEmpty &&
         saved != null &&
         repo.canEdit(saved) &&
-        BoardData.of(saved.rich) != null;
+        BoardData.of(saved.rich, id: c.id) != null;
     if (removed) {
-      final (content, rich) = BoardData.remove(saved.content, saved.rich!);
+      final (content, rich) =
+          BoardData.remove(saved.content, saved.rich!, id: c.id);
       repo.updateContent(widget.noteId, content, rich: rich);
     }
     _saveBoard(active: false);
@@ -313,8 +324,10 @@ class _NoteEditorState extends State<NoteEditor> {
     WidgetsBinding.instance.addPostFrameCallback((_) => old?.dispose());
   }
 
-  /// Quita la pizarra de la nota; el texto no se toca.
-  Future<void> _removeBoard() async {
+  /// Quita una pizarra de la nota (la abierta si no se dice cuál); el texto
+  /// no se toca.
+  Future<void> _removeBoard([String? id]) async {
+    final which = id ?? _board?.id;
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -339,8 +352,16 @@ class _NoteEditorState extends State<NoteEditor> {
     final n = repo.byId(widget.noteId);
     if (n == null || !repo.canEdit(n)) return;
     repo.history.record(n, force: true);
-    final (content, rich) = BoardData.remove(n.content, n.rich ?? _richJson());
-    final old = _board;
+    final (content, rich) =
+        BoardData.remove(n.content, n.rich ?? _richJson(), id: which);
+    final old = which == _board?.id ? _board : null;
+    if (old == null && _board != null) {
+      // Se quitó otra pizarra: la abierta sigue.
+      _lastSaved = rich;
+      repo.updateContent(widget.noteId, content, rich: rich);
+      setState(() {});
+      return;
+    }
     _applyingRemote = true;
     _lastSaved = rich;
     repo.updateContent(widget.noteId, content, rich: rich);
@@ -366,7 +387,7 @@ class _NoteEditorState extends State<NoteEditor> {
     final n = repo.byId(widget.noteId);
     if (c == null || n == null || !repo.canEdit(n)) return;
     // Abrir la pizarra sin dibujar no convierte una nota vacía en nota real.
-    if (c.isEmpty && BoardData.of(n.rich) == null) return;
+    if (c.isEmpty && BoardData.of(n.rich, id: c.id) == null) return;
     final (content, rich) = BoardData.store(
         n.content, n.rich ?? _richJson(), c.toData(active: active));
     if (rich == n.rich) return;
@@ -409,7 +430,7 @@ class _NoteEditorState extends State<NoteEditor> {
   void _syncBoard(Note n) {
     final c = _board;
     if (c == null || c.busy) return;
-    final remote = BoardData.of(n.rich);
+    final remote = BoardData.of(n.rich, id: c.id);
     if (remote == null) {
       // Eliminada en otro dispositivo. Si aquí hay trazos sin guardar, ganan.
       if (c.isEmpty || (_boardSave?.isActive ?? false)) return;
@@ -493,9 +514,11 @@ class _NoteEditorState extends State<NoteEditor> {
     repo.addListener(_onRepo);
     _focus.addListener(_onFocus);
     _findSub = noteFindRequests.stream.listen((_) => _openFind());
-    final saved = BoardData.of(n?.rich);
-    if (saved?.active == true) {
-      _board = BoardController(saved!, onChanged: _queueBoardSave);
+    // La fuente de las notas puede cambiar con la nota abierta.
+    themeSettings.addListener(_onTheme);
+    final saved = BoardData.all(n?.rich).where((b) => b.active).firstOrNull;
+    if (saved != null) {
+      _board = BoardController(saved, onChanged: _queueBoardSave);
     }
   }
 
@@ -709,8 +732,17 @@ class _NoteEditorState extends State<NoteEditor> {
     setState(() {});
   }
 
+  void _onTheme() {
+    if (mounted) setState(() {});
+  }
+
   @override
   void dispose() {
+    themeSettings.removeListener(_onTheme);
+    if (_titleSave?.isActive ?? false) {
+      _titleSave!.cancel();
+      _renameFromBoard();
+    }
     _dupTimer?.cancel();
     _titleCtrl.dispose();
     _findSub?.cancel();
@@ -739,9 +771,11 @@ class _NoteEditorState extends State<NoteEditor> {
     final dark = Theme.of(context).brightness == Brightness.dark;
     final fg = dark ? Colors.white : const Color(0xFF151515);
     // La fuente del tema, como el resto de la app.
-    final body = Theme.of(context).textTheme.bodyMedium;
-    final font = body?.fontFamily;
-    final fallback = body?.fontFamilyFallback;
+    // Fuente de las notas (Tema y colores), no la de la app.
+    final note = themeSettings.font;
+    final font =
+        note.family ?? Theme.of(context).textTheme.bodyMedium?.fontFamily;
+    final fallback = note.family == null ? null : note.fallback;
     const h0 = HorizontalSpacing(0, 0);
     const v0 = VerticalSpacing(0, 0);
     DefaultTextBlockStyle block(
@@ -786,6 +820,11 @@ class _NoteEditorState extends State<NoteEditor> {
 
   static TextStyle _highlight(BuildContext context, Attribute a) {
     final v = a.value;
+    // Fuente puesta a un trozo de texto: su familia con alternativas.
+    if (a.key == Attribute.font.key && v is String) {
+      final f = fontById(v);
+      return f.id == v ? fontStyleOf(f) : const TextStyle();
+    }
     if (a.key != Attribute.background.key || v is! String) {
       return const TextStyle();
     }
@@ -796,6 +835,66 @@ class _NoteEditorState extends State<NoteEditor> {
     return TextStyle(
         backgroundColor: c.withValues(alpha: dark ? 0.32 : 0.75),
         decorationColor: c);
+  }
+
+  /// Las pizarras de la nota, abajo: tocar una la abre, + crea otra.
+  Widget _boardsStrip(BuildContext context, Note n, bool writable) {
+    final boards = BoardData.all(n.rich);
+    final current = _board?.id;
+    if (boards.isEmpty && _board == null) return const SizedBox.shrink();
+    final shown = [
+      ...boards,
+      // Una pizarra nueva aún sin trazos también sale (resaltada).
+      if (_board != null && !boards.any((b) => b.id == current))
+        _board!.toData(),
+    ];
+    return SizedBox(
+      height: _board == null ? 136 : 96,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        children: [
+          for (final (i, b) in shown.indexed)
+            Padding(
+              padding: const EdgeInsets.only(right: 10),
+              child: BoardThumb(
+                key: ValueKey('pizarra-${b.id}'),
+                data: b.id == current ? _board!.toData() : b,
+                label: b.name.isNotEmpty ? b.name : trf('Pizarra {0}', [i + 1]),
+                selected: b.id == current,
+                size: _board == null ? 120 : 80,
+                onTap: () =>
+                    b.id == current ? _leaveBoard() : _enterBoard(id: b.id),
+                onRemove: !writable || _board != null
+                    ? null
+                    : () => _removeBoard(b.id),
+              ).animate(delay: (40 * i).ms).fadeIn(duration: Anim.medium).scale(
+                  begin: const Offset(0.9, 0.9), curve: Curves.easeOutBack),
+            ),
+          if (writable)
+            Tooltip(
+              message: tr('Nueva pizarra'),
+              child: Bouncy(
+                pressedScale: 0.92,
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(20),
+                  onTap: () => _enterBoard(fresh: true),
+                  child: Container(
+                    width: _board == null ? 120 : 80,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                          color: Palette.separator(context), width: 1.4),
+                    ),
+                    child: Icon(Icons.add_rounded,
+                        size: 28, color: Palette.accent(context)),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
   }
 
   Future<void> _draw() async {
@@ -860,6 +959,11 @@ class _NoteEditorState extends State<NoteEditor> {
                   border: InputBorder.none,
                   hintText: tr('Título de la pizarra'),
                 ),
+                onChanged: (_) {
+                  _titleSave?.cancel();
+                  _titleSave = Timer(
+                      const Duration(milliseconds: 700), _renameFromBoard);
+                },
                 onSubmitted: (_) => _renameFromBoard(),
                 onTapOutside: (_) => _renameFromBoard(),
               ).animate().fadeIn(duration: Anim.medium),
@@ -1208,6 +1312,11 @@ class _NoteEditorState extends State<NoteEditor> {
             if (_board != null && n != null)
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: _boardsStrip(context, n, writable),
+              ),
+            if (_board != null && n != null)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: _LinksBar(
                   graph: NoteGraph.of(repo),
                   noteId: n.id,
@@ -1304,9 +1413,7 @@ class _NoteEditorState extends State<NoteEditor> {
                                         embedBuilders: [
                                           const NoteImageEmbedBuilder(),
                                           const NoteFileEmbedBuilder(),
-                                          NoteBoardEmbedBuilder(
-                                              onOpen: _enterBoard,
-                                              onRemove: _removeBoard),
+                                          const NoteBoardEmbedBuilder(),
                                         ],
                                         customShortcuts:
                                             widget.onCommandPalette == null
@@ -1360,6 +1467,7 @@ class _NoteEditorState extends State<NoteEditor> {
                               ),
                             ),
                           ),
+                          if (n != null) _boardsStrip(context, n, writable),
                           if (n != null)
                             _LinksBar(
                               graph: NoteGraph.of(repo),

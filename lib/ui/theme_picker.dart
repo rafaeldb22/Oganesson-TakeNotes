@@ -94,9 +94,13 @@ class _ThemePicker extends StatelessWidget {
                   ),
                 ).animate().fadeIn(delay: 250.ms, duration: Anim.medium),
                 const SizedBox(height: 22),
-                Text(tr('Fuente'),
+                Text(tr('Fuente de las notas'),
                     style:
                         TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                const SizedBox(height: 4),
+                Text(tr('La que usan las notas por defecto. Puedes cambiar la de cualquier texto con el botón de fuente de la barra.'),
+                    style: TextStyle(
+                        color: Palette.secondary(context), fontSize: 12.5)),
                 const SizedBox(height: 10),
                 Wrap(
                   spacing: 10,

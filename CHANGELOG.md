@@ -2,6 +2,33 @@
 
 All notable changes to Oganesson TakeNotes (formerly *Notas* / *BabuNotes*).
 
+## [3.12.0] — 2026-11-28
+
+### Added
+- **Several whiteboards per note**: they show at the bottom of the note as rounded square cards with
+  a preview. Tap one to open it, tap **+** to add another, and switch between them from the strip at
+  the bottom of the whiteboard.
+- **Smart linking with AI**: right-click a note → *Link with AI*, or *Suggest with AI* in the link
+  window (also from the note's link button). Suggested notes come first, ticked and marked.
+- **Vault PIN**: Settings → *Open the Vault with* PIN or password. Change the PIN — or the password,
+  if you forgot it — with a code sent to your email.
+- **More fonts, now for notes**: 16 fonts. Pick the default note font in Theme and colours, and change
+  the font of any text with the new font button in the toolbar. The app itself keeps its font.
+- Exporting a note includes its whiteboards in the PDF, or exports a single whiteboard as an image.
+  A note that is only a whiteboard exports straight to PNG.
+
+### Changed
+- **Pen**: smoother ink with a fountain-pen taper at the start and end of each stroke.
+- **Note network**: dragging the background feels like zero gravity — each note has its own inertia
+  and angle, drifts a little and floats back.
+- **⋯ menu** in groups: Archived/Completed/Trash, Pomodoro/Productivity, AI, Vault, Mods.
+
+### Fixed
+- Pen strokes no longer start and end with an "erased" circle.
+- The whiteboard title is saved while you type (it was lost when leaving with Esc or switching
+  notes, so it never reached other devices).
+- **Trash in sync**: notes deleted forever on one device disappear from the other's trash too.
+
 ## [3.11.0] — 2026-11-28
 
 ### Added
