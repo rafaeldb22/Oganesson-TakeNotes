@@ -13,6 +13,7 @@ import 'package:window_manager/window_manager.dart';
 
 import 'config.dart';
 import 'data/desktop_integration.dart';
+import 'data/mods.dart';
 import 'data/reminders.dart';
 import 'data/widget_bridge.dart';
 import 'ui/anim.dart' show ResumeFade;
@@ -48,6 +49,8 @@ Future<void> main(List<String> args) async {
     windowManager.addListener(_RepaintOnWindowChange());
   }
 
+  // Antes que el tema: el elegido puede venir de un mod.
+  await Mods.instance.load();
   await themeSettings.load();
   await appLanguage.load();
   // Bandeja del sistema, Ctrl+Alt+N y cerrar = ocultar.

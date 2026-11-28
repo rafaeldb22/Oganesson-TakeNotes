@@ -2,6 +2,19 @@
 
 All notable changes to Oganesson TakeNotes (formerly *Notas* / *BabuNotes*).
 
+## [3.11.0] — 2026-11-28
+
+### Added
+- **Gemini 4 Hydrogen**: Google's newest model is in the model list. It reasons at the "low" level
+  (fast answers, fewer tokens), which is the only thinking setting it accepts besides medium/high/xhigh.
+- **Mods** (⋯ → Mods): install community `.ogmod` files with themes, note templates, AI actions and
+  fonts. Mods are data only — never code — and are validated before installing. Format in
+  `docs/MODS.md`.
+
+### Fixed
+- Saving a Gemini key with a reasoning model (Gemini 4) no longer fails the quick check because the
+  test answer was capped at 8 tokens.
+
 ## [3.10.0] — 2026-11-28
 
 ### Added

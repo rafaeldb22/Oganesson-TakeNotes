@@ -1195,4 +1195,27 @@ const enStrings = <String, String>{
   'Desconectar notas': 'Disconnect notes',
   'Desconectar {0}': 'Disconnect {0}',
   'Exportar como imagen': 'Export as image',
+  'Mods': 'Mods',
+  'Temas, plantillas y más de la comunidad':
+      'Themes, templates and more from the community',
+  'Mod de Oganesson': 'Oganesson mod',
+  'Mod instalado: {0}': 'Mod installed: {0}',
+  'No se pudo instalar el mod': 'The mod could not be installed',
+  '¿Quitar «{0}»?': 'Remove “{0}”?',
+  'Sus temas, plantillas, fuentes y acciones de IA dejarán de estar disponibles.':
+      'Its themes, templates, fonts and AI actions will no longer be available.',
+  '{0} tema': '{0} theme',
+  '{0} temas': '{0} themes',
+  '{0} plantilla': '{0} template',
+  '{0} plantillas': '{0} templates',
+  '{0} acción de IA': '{0} AI action',
+  '{0} acciones de IA': '{0} AI actions',
+  '{0} fuente': '{0} font',
+  '{0} fuentes': '{0} fonts',
+  'Instalar': 'Install',
+  'Temas, plantillas, fuentes y acciones de IA creados por la comunidad. Un mod es un archivo .ogmod; nunca lleva código.':
+      'Themes, templates, fonts and AI actions made by the community. A mod is an .ogmod file; it never contains code.',
+  'Aún no tienes mods instalados.': 'You have no mods installed yet.',
+  'por {0}': 'by {0}',
+  'Cómo crear un mod': 'How to make a mod',
 };

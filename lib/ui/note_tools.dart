@@ -9,6 +9,9 @@ import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' show Supabase;
 
+import '../data/markdown.dart';
+import '../data/mods.dart';
+import '../data/note_attachments.dart';
 import '../data/note_board.dart';
 import '../data/note_export.dart';
 import '../data/note_images.dart';
@@ -194,6 +197,21 @@ class NoteTemplate {
   final String? rich;
 }
 
+/// Plantillas de los mods instalados (Markdown → formato).
+List<NoteTemplate> modTemplates() => [
+      for (final t in Mods.instance.templates)
+        () {
+          final clean = t.text.replaceAll('\r\n', '\n').trim();
+          final cut = clean.indexOf('\n');
+          final title =
+              stripMarkdown(cut == -1 ? clean : clean.substring(0, cut));
+          final (text, rich) =
+              withText(title, null, cut == -1 ? '' : clean.substring(cut + 1));
+          return NoteTemplate(t.name, Icons.extension_outlined, text,
+              rich: rich);
+        }(),
+    ];
+
 List<NoteTemplate> builtInTemplates() => [
       NoteTemplate(
           tr('Reunión'),
@@ -294,7 +312,7 @@ Future<Note?> pickTemplate(BuildContext context, NotesRepository repo) async {
                   style: const TextStyle(
                       fontSize: 22, fontWeight: FontWeight.w800)),
             ),
-            for (final t in [...mine, ...builtInTemplates()])
+            for (final t in [...mine, ...modTemplates(), ...builtInTemplates()])
               ListTile(
                 shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12)),

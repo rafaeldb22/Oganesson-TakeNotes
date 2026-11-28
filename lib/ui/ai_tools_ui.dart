@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
+
+import '../data/mods.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 
@@ -349,6 +351,18 @@ class _AiActionsSheetState extends State<_AiActionsSheet> {
               ),
             ),
           ).animate().fadeIn(duration: Anim.medium, delay: 40.ms),
+          if (Mods.instance.aiActions.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Wrap(spacing: 8, runSpacing: 8, children: [
+              for (final a in Mods.instance.aiActions)
+                ActionChip(
+                  avatar: const Icon(Icons.extension_outlined, size: 17),
+                  label: Text(a.name),
+                  onPressed: () =>
+                      Navigator.pop(context, (NoteAiAction.ask, a.prompt)),
+                ),
+            ]),
+          ],
           const SizedBox(height: 14),
           LayoutBuilder(builder: (context, c) {
             final columns = c.maxWidth < 340 ? 1 : 2;

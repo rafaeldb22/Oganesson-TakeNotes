@@ -200,7 +200,11 @@ class AppTheme {
       _soft.putIfAbsent(id, () => light.softened(soft));
 }
 
-const appThemes = <AppTheme>[
+/// Temas de serie + los de los mods instalados.
+List<AppTheme> get appThemes => [..._builtInThemes, ...modThemes];
+final modThemes = <AppTheme>[];
+
+const _builtInThemes = <AppTheme>[
   AppTheme(
     id: 'clasico',
     name: 'Clásico',
@@ -707,7 +711,11 @@ class AppFont {
   final List<String> fallback;
 }
 
-const appFonts = <AppFont>[
+/// Fuentes de serie + las de los mods instalados.
+List<AppFont> get appFonts => [..._builtInFonts, ...modFonts];
+final modFonts = <AppFont>[];
+
+const _builtInFonts = <AppFont>[
   AppFont('sistema', 'Sistema', null),
   AppFont('serif', 'Serif', 'Georgia', ['Cambria', 'Noto Serif', 'serif']),
   AppFont('clasica', 'Clásica', 'Palatino Linotype',
@@ -736,6 +744,9 @@ class ThemeSettings extends ChangeNotifier {
 
   AppTheme get theme => themeById(themeId);
   AppFont get font => fontById(fontId);
+
+  /// Se han instalado o quitado mods: repintar con las listas nuevas.
+  void refresh() => notifyListeners();
 
   Future<void> setFont(String id) async {
     if (id == fontId) return;

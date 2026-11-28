@@ -69,6 +69,8 @@ extension AiProviderInfo on AiProvider {
                 'Rápido y con más peticiones gratis al día'),
             AiModel('gemini-3.8-flash', 'Gemini Flash',
                 'Más listo, pero con pocas peticiones gratis al día'),
+            AiModel('gemini-4-hydrogen', 'Gemini 4 Hydrogen',
+                'El más nuevo y listo de Google (de pago por uso)'),
           ],
         AiProvider.openai => const [
             AiModel('gpt-5-mini', 'GPT-5 mini', 'Rápido y barato'),
@@ -93,6 +95,7 @@ extension AiProviderInfo on AiProvider {
             'gemini-2.5-flash-lite',
             'gemini-3.6-flash',
             'gemini-3.8-flash',
+            'gemini-4-hydrogen',
           ],
         AiProvider.openai => const [
             'gpt-5-mini',
@@ -854,6 +857,7 @@ class GeminiClient extends AiClient {
           ],
         }
       ],
+      if (_thinking(model) case final t?) 'generationConfig': t,
     });
     if (code != 200) throw _error(code, res, model: model);
     final cands = res['candidates'];
@@ -867,6 +871,16 @@ class GeminiClient extends AiClient {
         .join();
   }
 
+  /// Gemini 4 (Hydrogen) solo acepta `thinkingLevel` (low, medium, high,
+  /// xhigh; por defecto high) y rechaza `thinkingBudget`. Para notas basta
+  /// con "low": contesta mucho antes y gasta menos.
+  static bool _thinks(String model) => model.startsWith('gemini-4');
+  static Map<String, dynamic>? _thinking(String model) => _thinks(model)
+      ? {
+          'thinkingConfig': {'thinkingLevel': 'low'}
+        }
+      : null;
+
   @override
   Future<Map<String, dynamic>> webSearch({
     required String apiKey,
@@ -875,6 +889,7 @@ class GeminiClient extends AiClient {
   }) async {
     final (code, res) = await call(
         'POST', _base.resolve('models/$model:generateContent'), _h(apiKey), {
+      if (_thinking(model) case final t?) 'generationConfig': t,
       'contents': [
         {
           'role': 'user',
@@ -944,7 +959,11 @@ class GeminiClient extends AiClient {
       _h(apiKey),
       {
         'contents': [userMessage('ok')],
-        'generationConfig': {'maxOutputTokens': 8},
+        // Con 8 tokens un modelo que razona (Gemini 4) no llega a contestar.
+        'generationConfig': {
+          'maxOutputTokens': _thinks(model) ? 512 : 8,
+          ...?_thinking(model),
+        },
       },
     );
     if (code != 200) throw _error(code, json, model: model);
@@ -975,6 +994,7 @@ class GeminiClient extends AiClient {
           'tools': [
             {'functionDeclarations': tools}
           ],
+        if (_thinking(model) case final t?) 'generationConfig': t,
       },
       const {},
       (t) => _GeminiStream(t, model),
@@ -3115,6 +3135,7 @@ Guía de Oganesson (para dudas sobre la app):
 - Pizarra: el botón del garabato en la nota. Garabatear encima borra. Se puede pasar a texto con la IA.
 - Vault: ⋯ → Vault, notas con contraseña (la IA no las ve).
 - Pomodoro y Productividad: menú ⋯. Atajos: Ctrl+N nueva, Ctrl+K comandos, Ctrl+J asistente, Ctrl+Tab cambiar de nota, Ctrl+W cerrar, Ctrl+Q ocultar el panel, Ctrl+Alt+N nota rápida, Ctrl+Alt+O abrir la app. Todos en ⋯ → Teclas rápidas.
+- Mods de la comunidad (temas, plantillas, fuentes y acciones de IA): ⋯ → Mods, archivos .ogmod.
 - Papelera y Completadas guardan las 10 últimas. Compartir: clic derecho → Compartir, por @nombre.
 
 Cómo responder:

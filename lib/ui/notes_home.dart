@@ -36,6 +36,7 @@ import 'context_menu.dart';
 import 'folders.dart';
 import '../data/smart_groups.dart';
 import 'focus_tools.dart';
+import 'mods_sheet.dart';
 import 'folder_group.dart';
 import 'drop_zone.dart';
 import 'format.dart';
@@ -1676,6 +1677,8 @@ class _NotesHomeState extends State<NotesHome> {
                 ? tr('En marcha')
                 : tr('Concéntrate 25 minutos')),
         MenuEntry('productividad', Icons.insights_rounded, tr('Productividad')),
+        MenuEntry('mods', Icons.extension_outlined, tr('Mods'),
+            subtitle: tr('Temas, plantillas y más de la comunidad')),
         MenuEntry('foto-tareas', Icons.add_a_photo_outlined,
             tr('Tareas desde una foto')),
         MenuEntry('vault', Icons.shield_outlined, 'Vault',
@@ -1819,6 +1822,8 @@ class _NotesHomeState extends State<NotesHome> {
         await _confirmDeleteAll();
       case 'pomodoro':
         await showPomodoro(context);
+      case 'mods':
+        await showModsSheet(context);
       case 'productividad':
         await showProductivity(context, repo);
       case 'foto-tareas':
