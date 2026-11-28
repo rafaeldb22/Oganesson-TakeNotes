@@ -777,25 +777,32 @@ class TempCard extends StatelessWidget {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                IconButton(
-                  visualDensity: VisualDensity.compact,
-                  tooltip: note.done ? tr('Marcar pendiente') : tr('Completar'),
-                  onPressed: onToggleDone,
-                  icon: AnimatedSwitcher(
-                    duration: Anim.medium,
-                    transitionBuilder: (c, a) => ScaleTransition(
-                        scale: CurvedAnimation(
-                            parent: a, curve: Curves.easeOutBack),
-                        child: c),
-                    child: Icon(
-                      note.done
-                          ? Icons.check_circle
-                          : Icons.radio_button_unchecked,
-                      key: ValueKey(note.done),
-                      color: note.done ? color : Palette.secondary(context),
+                if (!note.checkable && !note.done)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(10, 8, 6, 8),
+                    child: Icon(Icons.event_rounded, size: 22, color: color),
+                  )
+                else
+                  IconButton(
+                    visualDensity: VisualDensity.compact,
+                    tooltip:
+                        note.done ? tr('Marcar pendiente') : tr('Completar'),
+                    onPressed: onToggleDone,
+                    icon: AnimatedSwitcher(
+                      duration: Anim.medium,
+                      transitionBuilder: (c, a) => ScaleTransition(
+                          scale: CurvedAnimation(
+                              parent: a, curve: Curves.easeOutBack),
+                          child: c),
+                      child: Icon(
+                        note.done
+                            ? Icons.check_circle
+                            : Icons.radio_button_unchecked,
+                        key: ValueKey(note.done),
+                        color: note.done ? color : Palette.secondary(context),
+                      ),
                     ),
                   ),
-                ),
                 const SizedBox(width: 2),
                 Expanded(
                   child: Column(

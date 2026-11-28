@@ -107,6 +107,28 @@ class Note {
 
   bool get isTemporal => dueAt != null;
 
+  /// Marca en [links] de las tareas que se completan. Lo normal es que una
+  /// nota temporal sea solo de calendario (con avisos, sin completar).
+  /// shortcut: va en `links` para no necesitar otra migración; pasar a una
+  /// columna si se añaden más opciones por nota.
+  static const checkToken = 'opt:check';
+  bool get checkable => links.contains(checkToken);
+
+  /// Fin de la barra: las de un solo día acaban a las 24:00 de ese día.
+  DateTime? get barEnd {
+    final d = dueAt;
+    if (d == null || !isSingleDay) return d;
+    final l = d.toLocal();
+    return DateTime(l.year, l.month, l.day + 1).toUtc();
+  }
+
+  /// ¿Estamos dentro del día de una nota de un solo día?
+  bool isToday([DateTime? now]) {
+    if (!isSingleDay) return false;
+    final n = (now ?? DateTime.now()).toUtc();
+    return !n.isBefore(remindAt!) && n.isBefore(barEnd!);
+  }
+
   /// 00:00 (hora local) del día de [due].
   static DateTime dayStart(DateTime due) {
     final d = due.toLocal();
@@ -160,7 +182,7 @@ class Note {
 
   /// Fracción del tiempo ya consumido (0 = recién empezada, 1 = vencida).
   double progress([DateTime? now]) {
-    final d = dueAt;
+    final d = barEnd;
     if (d == null) return 0;
     final n = (now ?? DateTime.now()).toUtc();
     final total = d.difference(periodStart).inSeconds;
@@ -168,8 +190,16 @@ class Note {
     return (n.difference(periodStart).inSeconds / total).clamp(0.0, 1.0);
   }
 
+  /// Vencida: solo las tareas que se completan (un evento simplemente acaba).
   bool isOverdue([DateTime? now]) =>
-      dueAt != null && !done && (now ?? DateTime.now()).toUtc().isAfter(dueAt!);
+      dueAt != null &&
+      checkable &&
+      !done &&
+      (now ?? DateTime.now()).toUtc().isAfter(barEnd!);
+
+  /// Ya pasó su fecha (tarea o evento).
+  bool isPast([DateTime? now]) =>
+      dueAt != null && (now ?? DateTime.now()).toUtc().isAfter(barEnd!);
 
   /// Las imágenes ocupan un carácter U+FFFC en el texto plano: no cuentan
   /// para el título ni para la vista previa.

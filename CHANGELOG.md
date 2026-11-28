@@ -2,6 +2,27 @@
 
 All notable changes to Oganesson TakeNotes (formerly *Notas* / *BabuNotes*).
 
+## [3.6.0] — 2026-11-28
+
+### Added
+- **Pomodoro** (⋯ menu or Ctrl+K): 25 minutes of focus and 5 of rest, a ring that fills up, rounds,
+  and a notification when each phase ends. It keeps running if you close the sheet.
+- **Productivity**: tasks done, notes created and focus minutes for the week or the month, with
+  animated bars.
+- **Tick every box → finish the task**: when all the checkboxes of a task are ticked, the app asks
+  whether the task is done.
+- **New date picker**: a sliding *One day / Several days* switch, chips for *All day / With time*
+  and *To complete*, and a live summary of the dates at the top.
+
+### Changed
+- **Tasks don't need completing by default**: a note with dates is a calendar item with reminders.
+  Turn on *To complete* in the date picker to get the check button (and the *Done* button in the
+  notification). Only those can be overdue.
+- **One-day notes** run until 24:00 of that day and say "Today · X left" while the day lasts.
+- **Calendar colours follow the folder**: a new task in a coloured folder uses its colour, and
+  moving it to another folder updates it (unless you picked a colour yourself).
+- Softer, more readable **text highlight**, especially in dark mode.
+
 ## [3.5.0] — 2026-11-28
 
 ### Added

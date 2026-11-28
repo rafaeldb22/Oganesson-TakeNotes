@@ -35,7 +35,11 @@ Future<void> showNoteInfo(BuildContext context, NotesRepository repo, Note n) {
     if (n.dueAt != null)
       (Icons.event_outlined, tr('Vence'), fechaLarga(n.dueAt!)),
     (Icons.notes_rounded, tr('Texto'), textStats(n.content)),
-    (Icons.hub_outlined, tr('Enlaces'), '${n.links.length}'),
+    (
+      Icons.hub_outlined,
+      tr('Enlaces'),
+      '${n.links.where((l) => !l.contains(':')).length}'
+    ),
   ];
   return showModalBottomSheet<void>(
     context: context,

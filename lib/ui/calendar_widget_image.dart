@@ -347,7 +347,7 @@ class WidgetTaskRow extends StatelessWidget {
         else
           const SizedBox(height: 3.5),
         const SizedBox(height: 2),
-        Text(tiempoRestante(note.dueAt!),
+        Text(tiempoNota(note),
             style: TextStyle(
                 color: c, fontSize: 8.5, fontWeight: FontWeight.w700)),
       ],

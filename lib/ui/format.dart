@@ -134,6 +134,22 @@ String tiempoRestante(DateTime dueUtc, {bool done = false}) {
   return diff.isNegative ? 'vencida hace $txt' : 'quedan $txt';
 }
 
+/// Tiempo de una nota temporal: "Hoy · quedan 5 h" en su día, "terminó hace
+/// 2 días" para un evento pasado, o lo que queda / lo vencido.
+String tiempoNota(Note n) {
+  if (n.done) return tiempoRestante(n.dueAt!, done: true);
+  final end = n.barEnd!;
+  if (n.isToday()) {
+    final left = duracionTexto(end.difference(DateTime.now().toUtc()));
+    return _en ? 'Today · $left left' : 'Hoy · quedan $left';
+  }
+  if (!n.checkable && n.isPast()) {
+    final ago = duracionTexto(DateTime.now().toUtc().difference(end));
+    return _en ? 'ended $ago ago' : 'terminó hace $ago';
+  }
+  return tiempoRestante(end);
+}
+
 /// Grupo temporal para ordenar las notas temporales por tiempo.
 String grupoTemporal(DateTime dueUtc, {bool done = false}) {
   if (done) return 'Completadas';

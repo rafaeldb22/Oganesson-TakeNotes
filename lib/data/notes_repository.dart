@@ -215,7 +215,7 @@ class NotesRepository extends ChangeNotifier {
   /// posición del orden personalizado.
   void moveNote(String id, {required String? folderId, double? position}) =>
       _edit(id, (n) {
-        n.folderId = folderId;
+        _refolder(n, folderId);
         if (position != null) n.position = position;
       });
 
@@ -491,7 +491,7 @@ class NotesRepository extends ChangeNotifier {
       folderId: folderId,
       dueAt: dueAt,
       remindAt: remindAt,
-      color: dueAt == null ? null : _nextTimelineColor(),
+      color: dueAt == null ? null : _timelineColorFor(folderId),
     );
     _notes[n.id] = n;
     _fresh.add(n.id);
@@ -511,6 +511,11 @@ class NotesRepository extends ChangeNotifier {
 
   /// Color para una línea temporal nueva: el menos usado por las activas y,
   /// entre esos, el que más se distingue de los que ya están en uso.
+  /// Color de una tarea nueva: el de su carpeta si tiene; si no, el menos
+  /// usado.
+  int _timelineColorFor(String? folderId) =>
+      folderById(folderId)?.color ?? _nextTimelineColor();
+
   int _nextTimelineColor() {
     final used = <int, int>{};
     for (final n in _notes.values) {
@@ -710,14 +715,32 @@ class NotesRepository extends ChangeNotifier {
   /// Todas las notas activas, también las del Vault (para los avisos).
   List<Note> get allActive => _notes.values.where((n) => !n.deleted).toList();
 
+  /// Al cambiar de carpeta, una tarea con el color de la carpeta de antes
+  /// (o sin color) toma el de la nueva.
   void moveToFolder(String id, String? folderId) =>
-      _edit(id, (n) => n.folderId = folderId);
+      _edit(id, (n) => _refolder(n, folderId));
+
+  void _refolder(Note n, String? folderId) {
+    final was = folderById(n.folderId)?.color;
+    final next = folderById(folderId)?.color;
+    if (n.isTemporal && next != null && (n.color == null || n.color == was)) {
+      n.color = next;
+    }
+    n.folderId = folderId;
+  }
+
+  /// Tarea que se completa (true) o nota solo de calendario (false).
+  void setCheckable(String id, bool on) => _edit(id, (n) {
+        n.links.remove(Note.checkToken);
+        if (on) n.links.add(Note.checkToken);
+        if (!on) n.done = false;
+      });
 
   void setSchedule(String id, {DateTime? remindAt, DateTime? dueAt}) =>
       _edit(id, (n) {
         // Solo al convertirse en línea: "Automático" elegido después se respeta.
         if (n.dueAt == null && dueAt != null && n.color == null) {
-          n.color = _nextTimelineColor();
+          n.color = _timelineColorFor(n.folderId);
         }
         n.remindAt = remindAt?.toUtc();
         n.dueAt = dueAt?.toUtc();

@@ -2490,6 +2490,8 @@ class AiTools {
                   ? trf('Tarea hecha: {0}', [n.title])
                   : trf('Tarea pendiente: {0}', [n.title]),
               n);
+          // Completar una nota de calendario la convierte en tarea.
+          if (done && !n.checkable) repo.setCheckable(n.id, true);
           repo.toggleDone(n.id);
         }
         return {'ok': true};

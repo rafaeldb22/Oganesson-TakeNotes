@@ -478,6 +478,7 @@ class _NoteEditorState extends State<NoteEditor> {
       _ctrl.formatSelection(Attribute.h1);
     }
     _lastSaved = _richJson();
+    _allChecked = _everyBoxChecked();
     // Va antes que el listener del editor: en el móvil, los cambios que no
     // vienen de tocar el texto no deben abrir el teclado.
     _ctrl.addListener(_guardKeyboard);
@@ -528,6 +529,55 @@ class _NoteEditorState extends State<NoteEditor> {
     _lastSaved = rich;
     _lastTyped = DateTime.now();
     repo.updateContent(widget.noteId, _plain(), rich: rich);
+    _checkTasks();
+  }
+
+  /// Todas las casillas marcadas en una nota temporal: ¿tarea hecha?
+  bool _allChecked = false;
+  bool _askingDone = false;
+
+  bool _everyBoxChecked() {
+    var checked = 0, open = 0;
+    for (final op in _ctrl.document.toDelta().toList()) {
+      final l = op.attributes?['list'];
+      if (l == 'checked') checked++;
+      if (l == 'unchecked') open++;
+    }
+    return checked > 0 && open == 0;
+  }
+
+  Future<void> _checkTasks() async {
+    final all = _everyBoxChecked();
+    final was = _allChecked;
+    _allChecked = all;
+    final n = repo.byId(widget.noteId);
+    if (!all || was || _askingDone || n == null || !n.isTemporal || n.done) {
+      return;
+    }
+    if (repo.isForeign(n)) return;
+    _askingDone = true;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        icon: Icon(Icons.task_alt_rounded,
+            size: 40, color: Palette.accent(context)),
+        title: Text(tr('¿Has completado la tarea?')),
+        content:
+            Text(trf('Has marcado todas las casillas de «{0}».', [n.title])),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: Text(tr('Todavía no'))),
+          FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: Text(tr('Sí, completar'))),
+        ],
+      ),
+    );
+    _askingDone = false;
+    if (ok != true || !mounted) return;
+    if (!n.checkable) repo.setCheckable(n.id, true);
+    completeTask(context, repo, n.id);
   }
 
   void _onCaret() {
@@ -650,6 +700,20 @@ class _NoteEditorState extends State<NoteEditor> {
         ),
       ),
     );
+  }
+
+  static TextStyle _highlight(BuildContext context, Attribute a) {
+    final v = a.value;
+    if (a.key != Attribute.background.key || v is! String) {
+      return const TextStyle();
+    }
+    final hex = int.tryParse(v.replaceFirst('#', ''), radix: 16);
+    if (hex == null) return const TextStyle();
+    final c = Color(0xFF000000 | hex);
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    return TextStyle(
+        backgroundColor: c.withValues(alpha: dark ? 0.32 : 0.75),
+        decorationColor: c);
   }
 
   Future<void> _draw() async {
@@ -1115,6 +1179,10 @@ class _NoteEditorState extends State<NoteEditor> {
                                       padding:
                                           const EdgeInsets.only(bottom: 40),
                                       customStyles: _styles(context),
+                                      // Resaltado como un rotulador: suave
+                                      // y legible también en modo oscuro.
+                                      customStyleBuilder: (a) =>
+                                          _highlight(context, a),
                                       // Markdown al escribir: "# ", "- ",
                                       // "1. ", **negrita**, *cursiva*…
                                       // ignore: experimental_member_use
@@ -1286,21 +1354,28 @@ class _TemporalBanner extends StatelessWidget {
       ),
       child: Row(
         children: [
-          IconButton(
-            tooltip: note.done ? tr('Marcar pendiente') : tr('Completar'),
-            onPressed: onToggleDone,
-            icon: AnimatedSwitcher(
-              duration: Anim.medium,
-              transitionBuilder: (c, a) => ScaleTransition(
-                  scale: CurvedAnimation(parent: a, curve: Curves.easeOutBack),
-                  child: c),
-              child: Icon(
-                note.done ? Icons.check_circle : Icons.radio_button_unchecked,
-                key: ValueKey(note.done),
-                color: color,
+          if (!note.checkable && !note.done)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(10, 8, 6, 8),
+              child: Icon(Icons.event_rounded, size: 22, color: color),
+            )
+          else
+            IconButton(
+              tooltip: note.done ? tr('Marcar pendiente') : tr('Completar'),
+              onPressed: onToggleDone,
+              icon: AnimatedSwitcher(
+                duration: Anim.medium,
+                transitionBuilder: (c, a) => ScaleTransition(
+                    scale:
+                        CurvedAnimation(parent: a, curve: Curves.easeOutBack),
+                    child: c),
+                child: Icon(
+                  note.done ? Icons.check_circle : Icons.radio_button_unchecked,
+                  key: ValueKey(note.done),
+                  color: color,
+                ),
               ),
             ),
-          ),
           Expanded(
             child: InkWell(
               onTap: onEdit,

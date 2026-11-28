@@ -230,7 +230,9 @@ class Reminders {
   bool get supported => !kIsWeb && (Platform.isAndroid || Platform.isWindows);
 
   /// Botones del aviso. En Windows cada botón lleva su orden y la nota.
-  NotificationDetails _details(String noteId) => NotificationDetails(
+  /// Las notas solo de calendario no tienen botón "Hecha".
+  NotificationDetails _details(String noteId, {bool done = true}) =>
+      NotificationDetails(
         android: AndroidNotificationDetails(
           'recordatorios',
           'Recordatorios',
@@ -239,15 +241,17 @@ class Reminders {
           priority: Priority.high,
           category: AndroidNotificationCategory.reminder,
           actions: [
-            AndroidNotificationAction('done', tr('Hecha'),
-                showsUserInterface: true, cancelNotification: true),
+            if (done)
+              AndroidNotificationAction('done', tr('Hecha'),
+                  showsUserInterface: true, cancelNotification: true),
             AndroidNotificationAction('snooze', tr('Posponer 10 min'),
                 showsUserInterface: true, cancelNotification: true),
           ],
         ),
         windows: WindowsNotificationDetails(
           actions: [
-            WindowsAction(content: tr('Hecha'), arguments: 'done|$noteId'),
+            if (done)
+              WindowsAction(content: tr('Hecha'), arguments: 'done|$noteId'),
             WindowsAction(
                 content: tr('Posponer 10 min'), arguments: 'snooze|$noteId'),
           ],
@@ -388,6 +392,29 @@ class Reminders {
   }
 
   /// Lanza un aviso ahora. false si el sistema los tiene desactivados.
+  /// Aviso inmediato sin nota (p. ej. fin de un pomodoro).
+  Future<void> notify(String title, String body) async {
+    await init();
+    if (!_ready) return;
+    try {
+      await _plugin.show(
+          0x7ffffffd,
+          title,
+          body,
+          const NotificationDetails(
+            android: AndroidNotificationDetails(
+              'recordatorios',
+              'Recordatorios',
+              importance: Importance.high,
+              priority: Priority.high,
+            ),
+            windows: WindowsNotificationDetails(),
+          ));
+    } catch (e) {
+      debugPrint('Aviso: $e');
+    }
+  }
+
   Future<bool> sendTest() async {
     await init();
     if (!_ready || await windowsToastsOff()) return false;
@@ -543,7 +570,7 @@ class Reminders {
           _titleOf(n),
           body,
           tz.TZDateTime.from(at, tz.UTC),
-          _details(n.id),
+          _details(n.id, done: n.checkable),
           androidScheduleMode: exact
               ? AndroidScheduleMode.exactAllowWhileIdle
               : AndroidScheduleMode.inexactAllowWhileIdle,
@@ -593,7 +620,7 @@ class Reminders {
   Future<void> _showNow(Note n, String body) async {
     final id = _nextShownId;
     _nextShownId = id >= 100000 ? 1 : id + 1;
-    await _plugin.show(id, _titleOf(n), body, _details(n.id),
+    await _plugin.show(id, _titleOf(n), body, _details(n.id, done: n.checkable),
         payload: 'open|${n.id}');
   }
 }

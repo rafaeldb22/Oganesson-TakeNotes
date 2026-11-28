@@ -209,7 +209,7 @@ class NextTaskWidgetImage extends StatelessWidget {
     final p = n.progress();
     final color = readableOn(n.isOverdue() ? stops.last : paletteAt(stops, p),
         light: !dark);
-    final remaining = tiempoRestante(n.dueAt!);
+    final remaining = tiempoNota(n);
 
     final bar = ClipRRect(
       borderRadius: BorderRadius.circular(4),

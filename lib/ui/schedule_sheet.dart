@@ -67,13 +67,16 @@ class _ScheduleSheetState extends State<_ScheduleSheet> {
   String? _repeat;
   bool _oneDay = false;
   bool _allDay = true;
+  bool _checkable = false;
 
   @override
   void initState() {
     super.initState();
     final n = widget.repo.byId(widget.noteId);
     _repeat = n?.repeat;
-    _oneDay = n?.isSingleDay ?? false;
+    _checkable = n?.checkable ?? false;
+    // Nota nueva en el calendario: lo normal es un solo día.
+    _oneDay = n?.isSingleDay ?? (n?.dueAt == null);
     // Sin hora clave salvo que la nota ya tenga una hora exacta.
     _allDay = n?.dueAt == null || n!.isAllDay;
     final now = DateTime.now();
@@ -141,6 +144,19 @@ class _ScheduleSheetState extends State<_ScheduleSheet> {
     });
   }
 
+  /// "Hoy, todo el día" · "3–8 dic · 6 días" (cambia con animación).
+  String get _summary {
+    String day(DateTime x) => fechaCorta(x.toUtc());
+    String hm(DateTime x) => '${x.hour}:${x.minute.toString().padLeft(2, '0')}';
+    if (_oneDay) {
+      return _allDay
+          ? trf('{0}, todo el día', [day(_end)])
+          : trf('{0} a las {1}', [day(_end), hm(_end)]);
+    }
+    final days = _d(_end).difference(_d(_start)).inDays + 1;
+    return '${day(_start)} → ${day(_end)} · ${trn(days, '{0} día', '{0} días')}';
+  }
+
   DateTime get _savedStart => _allDay ? _d(_start) : _start;
   DateTime get _savedEnd => _allDay ? Note.dayEnd(_end) : _end;
 
@@ -155,6 +171,7 @@ class _ScheduleSheetState extends State<_ScheduleSheet> {
     widget.repo
         .setSchedule(widget.noteId, remindAt: _savedStart, dueAt: _savedEnd);
     widget.repo.setRepeat(widget.noteId, _repeat);
+    widget.repo.setCheckable(widget.noteId, _checkable);
     Reminders.instance.askPermission();
     Navigator.pop(context);
   }
@@ -178,23 +195,85 @@ class _ScheduleSheetState extends State<_ScheduleSheet> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(tr('Fechas'),
-                style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800)),
-            const SizedBox(height: 6),
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              title: Text(tr('Solo ese día')),
-              subtitle: Text(tr('Sin barra hasta ese día y con un solo aviso')),
-              value: _oneDay,
-              onChanged: _setOneDay,
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(tr('Fechas'),
+                    style:
+                        TextStyle(fontSize: 22, fontWeight: FontWeight.w800)),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: AnimatedSwitcher(
+                    duration: Anim.medium,
+                    transitionBuilder: (c, a) => FadeTransition(
+                        opacity: a,
+                        child: SlideTransition(
+                            position: Tween(
+                                    begin: const Offset(0, 0.4),
+                                    end: Offset.zero)
+                                .animate(CurvedAnimation(
+                                    parent: a, curve: Anim.curve)),
+                            child: c)),
+                    child: Text(
+                      _summary,
+                      key: ValueKey(_summary),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                          color: Palette.secondary(context),
+                          fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ),
+              ],
             ),
-            SwitchListTile(
-              key: const ValueKey('todo-el-dia'),
-              contentPadding: EdgeInsets.zero,
-              title: Text(tr('Todo el día')),
-              subtitle: Text(tr('Desactívalo para poner una hora exacta')),
-              value: _allDay,
-              onChanged: _setAllDay,
+            const SizedBox(height: 14),
+            _Segmented(
+              options: [tr('Un día'), tr('Varios días')],
+              icons: const [Icons.today_rounded, Icons.date_range_rounded],
+              value: _oneDay ? 0 : 1,
+              onChanged: (i) => _setOneDay(i == 0),
+            ),
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                _ToggleChip(
+                  key: const ValueKey('todo-el-dia'),
+                  icon: _allDay
+                      ? Icons.wb_sunny_outlined
+                      : Icons.schedule_rounded,
+                  label: _allDay ? tr('Todo el día') : tr('Con hora'),
+                  on: !_allDay,
+                  onTap: () => _setAllDay(!_allDay),
+                ),
+                _ToggleChip(
+                  icon: _checkable
+                      ? Icons.task_alt_rounded
+                      : Icons.radio_button_unchecked_rounded,
+                  label: tr('Para completar'),
+                  on: _checkable,
+                  onTap: () => setState(() => _checkable = !_checkable),
+                ),
+              ],
+            ),
+            AnimatedSize(
+              duration: Anim.medium,
+              curve: Anim.curve,
+              alignment: Alignment.topLeft,
+              child: Padding(
+                padding: const EdgeInsets.only(top: 6, bottom: 4),
+                child: Text(
+                  _checkable
+                      ? tr(
+                          'Tarea: se marca como hecha y luego pasa a Completadas.')
+                      : tr('Solo calendario: con avisos, sin completar.'),
+                  key: ValueKey(_checkable),
+                  style: TextStyle(
+                      fontSize: 12.5, color: Palette.secondary(context)),
+                ),
+              ),
             ),
             const SizedBox(height: 6),
             // Inicio / fin: tocar uno para editarlo.
@@ -338,6 +417,150 @@ class _ScheduleSheetState extends State<_ScheduleSheet> {
               ],
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Selector de dos o más opciones con una pastilla que se desliza.
+class _Segmented extends StatelessWidget {
+  const _Segmented({
+    required this.options,
+    required this.icons,
+    required this.value,
+    required this.onChanged,
+  });
+  final List<String> options;
+  final List<IconData> icons;
+  final int value;
+  final ValueChanged<int> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = Palette.of(context);
+    return Container(
+      height: 46,
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: p.background,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: LayoutBuilder(builder: (context, c) {
+        final w = c.maxWidth / options.length;
+        return Stack(children: [
+          AnimatedPositioned(
+            duration: Anim.medium,
+            curve: Curves.easeOutBack,
+            left: w * value,
+            top: 0,
+            bottom: 0,
+            width: w,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: p.card,
+                borderRadius: BorderRadius.circular(11),
+                boxShadow: [
+                  BoxShadow(
+                      color:
+                          Theme.of(context).shadowColor.withValues(alpha: 0.12),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2)),
+                ],
+              ),
+            ),
+          ),
+          Row(children: [
+            for (var i = 0; i < options.length; i++)
+              Expanded(
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => onChanged(i),
+                  child: AnimatedDefaultTextStyle(
+                    duration: Anim.fast,
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 14,
+                      color: i == value ? p.accent : p.secondary,
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        AnimatedScale(
+                          duration: Anim.medium,
+                          curve: Curves.easeOutBack,
+                          scale: i == value ? 1.12 : 1,
+                          child: Icon(icons[i],
+                              size: 18,
+                              color: i == value ? p.accent : p.secondary),
+                        ),
+                        const SizedBox(width: 6),
+                        Text(options[i]),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+          ]),
+        ]);
+      }),
+    );
+  }
+}
+
+/// Opción que se enciende y se apaga (con color y un pequeño rebote).
+class _ToggleChip extends StatelessWidget {
+  const _ToggleChip({
+    super.key,
+    required this.icon,
+    required this.label,
+    required this.on,
+    required this.onTap,
+  });
+  final IconData icon;
+  final String label;
+  final bool on;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = Palette.of(context);
+    return Bouncy(
+      pressedScale: 0.94,
+      child: AnimatedContainer(
+        duration: Anim.medium,
+        curve: Anim.curve,
+        decoration: BoxDecoration(
+          color: on ? p.accent.withValues(alpha: 0.14) : p.background,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+              color: on ? p.accent.withValues(alpha: 0.6) : Colors.transparent,
+              width: 1.4),
+        ),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(20),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              AnimatedSwitcher(
+                duration: Anim.medium,
+                transitionBuilder: (c, a) => ScaleTransition(
+                    scale:
+                        CurvedAnimation(parent: a, curve: Curves.easeOutBack),
+                    child: c),
+                child: Icon(icon,
+                    key: ValueKey(icon),
+                    size: 18,
+                    color: on ? p.accent : p.secondary),
+              ),
+              const SizedBox(width: 7),
+              Text(label,
+                  style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      color: on ? p.accent : null)),
+            ]),
+          ),
         ),
       ),
     );

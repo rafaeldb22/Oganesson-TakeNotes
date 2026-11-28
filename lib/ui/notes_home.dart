@@ -34,6 +34,7 @@ import 'completed_sheet.dart';
 import 'friends_sheet.dart';
 import 'context_menu.dart';
 import 'folders.dart';
+import 'focus_tools.dart';
 import 'folder_group.dart';
 import 'drop_zone.dart';
 import 'format.dart';
@@ -387,6 +388,10 @@ class _NotesHomeState extends State<NotesHome> {
       commands: [
         PaletteCommand(Icons.sticky_note_2_rounded, tr('Nueva nota'), _newNote,
             shortcut: 'Ctrl+N'),
+        PaletteCommand(
+            Icons.timer_outlined, tr('Pomodoro'), () => showPomodoro(context)),
+        PaletteCommand(Icons.insights_rounded, tr('Productividad'),
+            () => showProductivity(context, repo)),
         PaletteCommand(Icons.add_a_photo_outlined, tr('Tareas desde una foto'),
             () => tasksFromPhoto(context, repo, onOpen: _open)),
         PaletteCommand(Icons.dashboard_customize_outlined,
@@ -1604,6 +1609,11 @@ class _NotesHomeState extends State<NotesHome> {
         MenuEntry('papelera', Icons.delete_outline, tr('Papelera')),
         MenuEntry('asistente', Icons.auto_awesome_outlined, tr('Asistente IA'),
             subtitle: tr('Con tu clave de Gemini')),
+        MenuEntry('pomodoro', Icons.timer_outlined, tr('Pomodoro'),
+            subtitle: Pomodoro.instance.running
+                ? tr('En marcha')
+                : tr('Concéntrate 25 minutos')),
+        MenuEntry('productividad', Icons.insights_rounded, tr('Productividad')),
         MenuEntry('foto-tareas', Icons.add_a_photo_outlined,
             tr('Tareas desde una foto')),
         MenuEntry('vault', Icons.shield_outlined, 'Vault',
@@ -1745,6 +1755,10 @@ class _NotesHomeState extends State<NotesHome> {
         await showShortcuts(context);
       case 'borrar-todo':
         await _confirmDeleteAll();
+      case 'pomodoro':
+        await showPomodoro(context);
+      case 'productividad':
+        await showProductivity(context, repo);
       case 'foto-tareas':
         await tasksFromPhoto(context, repo, onOpen: _open);
       case 'plantillas':
@@ -2297,7 +2311,7 @@ class _NoteTileState extends State<_NoteTile> {
                                 Expanded(
                                     child: TimeBar(note: n, compact: true)),
                                 const SizedBox(width: 8),
-                                Text(tiempoRestante(n.dueAt!, done: n.done),
+                                Text(tiempoNota(n),
                                     style: TextStyle(
                                         fontSize: 11,
                                         fontWeight: FontWeight.w600,
