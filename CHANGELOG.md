@@ -2,6 +2,15 @@
 
 All notable changes to Oganesson TakeNotes (formerly *Notas* / *BabuNotes*).
 
+## [3.15.0] — 2026-11-28
+
+### Added
+- **Google Calendar** (Settings → Google Calendar, on Windows): connect your Google account in the
+  browser and Oganesson syncs both ways — your dated notes appear in Google Calendar (and update or
+  disappear with them), and your Google events appear in the Oganesson calendar. It syncs when the app
+  opens, every 10 minutes and with *Sync now*. On the phone the Google events already show up through
+  your account; connecting from the phone comes next.
+
 ## [3.14.1] — 2026-11-28
 
 ### Changed

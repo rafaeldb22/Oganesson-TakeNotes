@@ -691,6 +691,56 @@ class NotesRepository extends ChangeNotifier {
     return (added: added, existing: existing);
   }
 
+  /// Eventos de Google Calendar: se crean o se actualizan (Google manda), y
+  /// los que ya no están en Google se quitan. Devuelve los ids importados.
+  Set<String> syncGoogleEvents(List<IcsEvent> events, Set<String> previous) {
+    final now = DateTime.now().toUtc();
+    final ids = <String>{};
+    var changed = false;
+    for (final e in events) {
+      final id = icsNoteId(userId, e.uid);
+      ids.add(id);
+      final old = _notes[id];
+      if (old != null && old.deleted) continue; // lo quitaste aquí: se respeta
+      if (old != null &&
+          old.content == e.content &&
+          old.remindAt == e.remindAt &&
+          old.dueAt == e.dueAt) {
+        continue;
+      }
+      _purge.remove(id);
+      _notes[id] = Note(
+        id: id,
+        content: e.content,
+        createdAt: old?.createdAt ?? now,
+        updatedAt: _nextStamp(old?.updatedAt ?? now),
+        remindAt: e.remindAt,
+        dueAt: e.dueAt,
+        color: old?.color ?? _nextTimelineColor(),
+        ownerId: userId,
+      );
+      _dirty.add(id);
+      changed = true;
+    }
+    for (final id in previous.difference(ids)) {
+      final n = _notes[id];
+      if (n == null || n.deleted) continue;
+      n.deleted = true;
+      n.updatedAt = _nextStamp(n.updatedAt);
+      _dirty.add(id);
+      changed = true;
+    }
+    if (changed) {
+      _notify();
+      _schedulePersist();
+      unawaited(sync());
+    }
+    return ids;
+  }
+
+  /// Al desconectar Google Calendar sus eventos desaparecen de aquí.
+  void removeGoogleEvents(Set<String> ids) => syncGoogleEvents(const [], ids);
+
   /// Enlaza dos notas (enlace manual, se ve en la red y en el panel).
   void addLinks(String id, Iterable<String> targets) => _edit(id, (n) {
         for (final t in targets) {

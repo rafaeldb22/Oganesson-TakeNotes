@@ -36,7 +36,9 @@ import 'context_menu.dart';
 import 'folders.dart';
 import '../data/smart_groups.dart';
 import 'focus_tools.dart';
+import '../data/google_calendar.dart';
 import 'desktop_widgets.dart';
+import 'google_sheet.dart';
 import 'mods_sheet.dart';
 import 'folder_group.dart';
 import 'drop_zone.dart';
@@ -171,6 +173,7 @@ class _NotesHomeState extends State<NotesHome> {
     GestureBinding.instance.pointerRouter.addGlobalRoute(_sideButtons);
     HardwareKeyboard.instance.addHandler(_onKey);
     activeRepo = repo;
+    unawaited(GoogleCalendar.instance.attach(repo));
     SmartGroups.instance.addListener(_onGroups);
     _widgetSub = WidgetBridge.clicks.listen(_onWidgetUri);
     // Al pulsar un aviso: abrir la nota o marcarla como hecha.
@@ -1784,6 +1787,10 @@ class _NotesHomeState extends State<NotesHome> {
             tr('Importar calendario'),
             subtitle: tr('Archivo .ics')),
         MenuEntry('sync', Icons.sync, tr('Sincronizar ahora')),
+        MenuEntry('google', Icons.event_note_rounded, tr('Google Calendar'),
+            subtitle: GoogleCalendar.instance.connected
+                ? tr('Conectado')
+                : tr('Sincroniza tus tareas con Google')),
         MenuEntry.section(tr('Cuenta')),
         MenuEntry('amigos', Icons.group_outlined, tr('Tu @nombre y amigos')),
         MenuEntry('cuenta-pass', Icons.manage_accounts_outlined,
@@ -1921,6 +1928,9 @@ class _NotesHomeState extends State<NotesHome> {
         showTrash(context, repo);
       case 'sync':
         repo.sync();
+        unawaited(GoogleCalendar.instance.sync(repo));
+      case 'google':
+        await showGoogleCalendarSheet(context, repo);
       case 'update':
         checkForUpdatesManually(context);
       case 'amigos':

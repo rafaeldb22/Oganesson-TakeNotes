@@ -1306,4 +1306,21 @@ const enStrings = <String, String>{
   'Widgets': 'Widgets',
   'Tareas, calendario o pomodoro en el escritorio':
       'Tasks, calendar or pomodoro on your desktop',
+  'Google Calendar': 'Google Calendar',
+  'Conectado': 'Connected',
+  'Conectado como {0}': 'Connected as {0}',
+  'Sin conectar': 'Not connected',
+  'Tus notas con fecha aparecen en tu Google Calendar, y los eventos de Google en el calendario de Oganesson. Se sincroniza al abrir la app y cada 10 minutos.':
+      'Your dated notes show up in your Google Calendar, and your Google events in the Oganesson calendar. It syncs when the app opens and every 10 minutes.',
+  'En el móvil llegará en la próxima versión. Mientras, conéctalo en el PC: los eventos se ven también aquí.':
+      'Coming to the phone in the next version. Meanwhile, connect it on your PC: the events show up here too.',
+  'Esta versión no trae la clave de Google Calendar.':
+      'This build does not include the Google Calendar key.',
+  'Google Calendar conectado': 'Google Calendar connected',
+  'No se pudo conectar con Google': 'Could not connect to Google',
+  'Conectar con Google': 'Connect with Google',
+  'Aún sin sincronizar': 'Not synced yet',
+  'Última sincronización: {0}': 'Last sync: {0}',
+  'Desconectar': 'Disconnect',
+  'Sincroniza tus tareas con Google': 'Sync your tasks with Google',
 };

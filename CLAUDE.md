@@ -238,6 +238,12 @@ that it still arrives. On Windows, check toasts are enabled first:
   attribute = font id, mapped in the editor's `customStyleBuilder`). Vault PIN lives in the same `vaults.data` JSON.
   Hard deletes sync: realtime DELETE + `purgeMissing` on full sync (only for trashed notes).
 
+- Google Calendar (3.15): `lib/data/google_calendar.dart` (desktop OAuth with PKCE on a loopback port; the
+  client secret comes from `--dart-define=GOOGLE_CLIENT_SECRET`, GitHub secret of the same name; never commit it).
+  Pushes own dated notes as events tagged `extendedProperties.private.oganesson`, pulls the rest as v5-id calendar
+  events via `repo.syncGoogleEvents`. Android needs its own OAuth client (package com.rafa.notas + SHA-1 of
+  platform/android/debug.keystore).
+
 ## Conventions
 
 - Bump `version:` in `pubspec.yaml` and add a section to `CHANGELOG.md` for each release.
