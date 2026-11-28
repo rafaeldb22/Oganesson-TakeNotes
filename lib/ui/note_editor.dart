@@ -7,6 +7,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_quill/flutter_quill.dart';
+// ignore: implementation_imports
+import 'package:flutter_quill/src/editor/widgets/text/text_selection.dart'
+    show DragTextSelection;
 
 import '../data/note_attachments.dart';
 import '../data/note_board.dart';
@@ -486,6 +489,7 @@ class _NoteEditorState extends State<NoteEditor> {
     _guardKeyboard();
     _ctrl.addListener(_onEdit);
     _ctrl.addListener(_onCaret);
+    _ctrl.addListener(_dragReveal);
     repo.addListener(_onRepo);
     _focus.addListener(_onFocus);
     _findSub = noteFindRequests.stream.listen((_) => _openFind());
@@ -635,6 +639,23 @@ class _NoteEditorState extends State<NoteEditor> {
     completeTask(context, repo, n.id);
   }
 
+  /// Seleccionando con el ratón: Quill hace scroll hasta el *inicio* de una
+  /// selección normal, así que al arrastrar hacia abajo volvía a subir (el
+  /// "bucle"). Como selección de arrastre enseña el extremo que se mueve.
+  bool _mouseDown = false;
+
+  void _dragReveal() {
+    final s = _ctrl.selection;
+    if (!_mouseDown || s.isCollapsed || s is DragTextSelection) return;
+    _ctrl.updateSelection(
+        DragTextSelection(
+            baseOffset: s.baseOffset,
+            extentOffset: s.extentOffset,
+            affinity: s.affinity,
+            first: s.extentOffset < s.baseOffset),
+        ChangeSource.local);
+  }
+
   void _onCaret() {
     final by = caretNextToImage(_ctrl);
     if (by != _caretByImage && mounted) setState(() => _caretByImage = by);
@@ -704,6 +725,7 @@ class _NoteEditorState extends State<NoteEditor> {
     _ctrl.removeListener(_guardKeyboard);
     _ctrl.removeListener(_onEdit);
     _ctrl.removeListener(_onCaret);
+    _ctrl.removeListener(_dragReveal);
     _focus.removeListener(_onFocus);
     _ctrl.dispose();
     _focus.dispose();
@@ -1233,97 +1255,105 @@ class _NoteEditorState extends State<NoteEditor> {
                                 editorKey: _editorKey,
                                 child: NoteMediaScope(
                                   allowAi: n != null && !n.vault && !foreign,
-                                  child: QuillEditor(
-                                    controller: _ctrl,
-                                    focusNode: _focus,
-                                    scrollController: _scroll,
-                                    config: QuillEditorConfig(
-                                      editorKey: _editorKey,
-                                      showCursor: !_caretByImage,
-                                      placeholder: tr('Escribe algo…'),
-                                      // En el móvil el teclado solo sale al
-                                      // tocar el texto.
-                                      autoFocus:
-                                          widget.autofocus && autoKeyboard,
-                                      expands: true,
-                                      padding:
-                                          const EdgeInsets.only(bottom: 40),
-                                      customStyles: _styles(context),
-                                      // Resaltado como un rotulador: suave
-                                      // y legible también en modo oscuro.
-                                      customStyleBuilder: (a) =>
-                                          _highlight(context, a),
-                                      // Markdown al escribir: "# ", "- ",
-                                      // "1. ", **negrita**, *cursiva*…
-                                      // ignore: experimental_member_use
-                                      characterShortcutEvents:
-                                          standardCharactersShortcutEvents,
-                                      // ignore: experimental_member_use
-                                      spaceShortcutEvents:
-                                          standardSpaceShorcutEvents,
-                                      // Un clic en un enlace lo abre en el
-                                      // navegador (Quill pedía Ctrl+clic).
-                                      customRecognizerBuilder: (a, _) =>
-                                          a.key != Attribute.link.key ||
-                                                  a.value is! String
-                                              ? null
-                                              : (TapGestureRecognizer()
-                                                ..onTap = () => openLink(
-                                                    context,
-                                                    webUrl(a.value as String))),
-                                      // Imágenes: se dibujan con su propio estilo,
-                                      // Ctrl+V pega capturas y el teclado de Android
-                                      // puede insertar imágenes directamente.
-                                      embedBuilders: [
-                                        const NoteImageEmbedBuilder(),
-                                        const NoteFileEmbedBuilder(),
-                                        NoteBoardEmbedBuilder(
-                                            onOpen: _enterBoard,
-                                            onRemove: _removeBoard),
-                                      ],
-                                      customShortcuts:
-                                          widget.onCommandPalette == null
-                                              ? null
-                                              : const {
-                                                  SingleActivator(
-                                                    LogicalKeyboardKey.keyK,
-                                                    control: true,
-                                                  ): _PaletteIntent(),
-                                                },
-                                      customActions: widget.onCommandPalette ==
-                                              null
-                                          ? null
-                                          : {
-                                              _PaletteIntent: CallbackAction<
-                                                  _PaletteIntent>(
-                                                onInvoke: (_) {
-                                                  widget.onCommandPalette!();
-                                                  return null;
-                                                },
-                                              ),
-                                            },
-                                      contentInsertionConfiguration:
-                                          ContentInsertionConfiguration(
-                                        allowedMimeTypes: const [
-                                          'image/png',
-                                          'image/jpeg',
-                                          'image/gif',
-                                          'image/webp',
+                                  child: Listener(
+                                    onPointerDown: (e) => _mouseDown =
+                                        e.kind == PointerDeviceKind.mouse,
+                                    onPointerUp: (_) => _mouseDown = false,
+                                    onPointerCancel: (_) => _mouseDown = false,
+                                    child: QuillEditor(
+                                      controller: _ctrl,
+                                      focusNode: _focus,
+                                      scrollController: _scroll,
+                                      config: QuillEditorConfig(
+                                        editorKey: _editorKey,
+                                        showCursor: !_caretByImage,
+                                        placeholder: tr('Escribe algo…'),
+                                        // En el móvil el teclado solo sale al
+                                        // tocar el texto.
+                                        autoFocus:
+                                            widget.autofocus && autoKeyboard,
+                                        expands: true,
+                                        padding:
+                                            const EdgeInsets.only(bottom: 40),
+                                        customStyles: _styles(context),
+                                        // Resaltado como un rotulador: suave
+                                        // y legible también en modo oscuro.
+                                        customStyleBuilder: (a) =>
+                                            _highlight(context, a),
+                                        // Markdown al escribir: "# ", "- ",
+                                        // "1. ", **negrita**, *cursiva*…
+                                        // ignore: experimental_member_use
+                                        characterShortcutEvents:
+                                            standardCharactersShortcutEvents,
+                                        // ignore: experimental_member_use
+                                        spaceShortcutEvents:
+                                            standardSpaceShorcutEvents,
+                                        // Un clic en un enlace lo abre en el
+                                        // navegador (Quill pedía Ctrl+clic).
+                                        customRecognizerBuilder: (a, _) => a
+                                                        .key !=
+                                                    Attribute.link.key ||
+                                                a.value is! String
+                                            ? null
+                                            : (TapGestureRecognizer()
+                                              ..onTap = () => openLink(context,
+                                                  webUrl(a.value as String))),
+                                        // Imágenes: se dibujan con su propio estilo,
+                                        // Ctrl+V pega capturas y el teclado de Android
+                                        // puede insertar imágenes directamente.
+                                        embedBuilders: [
+                                          const NoteImageEmbedBuilder(),
+                                          const NoteFileEmbedBuilder(),
+                                          NoteBoardEmbedBuilder(
+                                              onOpen: _enterBoard,
+                                              onRemove: _removeBoard),
                                         ],
-                                        onContentInserted: (c) {
-                                          final data = c.data;
-                                          if (data != null && data.isNotEmpty) {
-                                            insertImages(
-                                                context, _ctrl, [data]);
-                                          }
-                                        },
+                                        customShortcuts:
+                                            widget.onCommandPalette == null
+                                                ? null
+                                                : const {
+                                                    SingleActivator(
+                                                      LogicalKeyboardKey.keyK,
+                                                      control: true,
+                                                    ): _PaletteIntent(),
+                                                  },
+                                        customActions: widget
+                                                    .onCommandPalette ==
+                                                null
+                                            ? null
+                                            : {
+                                                _PaletteIntent: CallbackAction<
+                                                    _PaletteIntent>(
+                                                  onInvoke: (_) {
+                                                    widget.onCommandPalette!();
+                                                    return null;
+                                                  },
+                                                ),
+                                              },
+                                        contentInsertionConfiguration:
+                                            ContentInsertionConfiguration(
+                                          allowedMimeTypes: const [
+                                            'image/png',
+                                            'image/jpeg',
+                                            'image/gif',
+                                            'image/webp',
+                                          ],
+                                          onContentInserted: (c) {
+                                            final data = c.data;
+                                            if (data != null &&
+                                                data.isNotEmpty) {
+                                              insertImages(
+                                                  context, _ctrl, [data]);
+                                            }
+                                          },
+                                        ),
+                                        // Menú de cortar/copiar/pegar con el estilo de la app.
+                                        contextMenuBuilder: (context, state) =>
+                                            buildTextMenu(
+                                                context,
+                                                state.contextMenuButtonItems,
+                                                state.contextMenuAnchors),
                                       ),
-                                      // Menú de cortar/copiar/pegar con el estilo de la app.
-                                      contextMenuBuilder: (context, state) =>
-                                          buildTextMenu(
-                                              context,
-                                              state.contextMenuButtonItems,
-                                              state.contextMenuAnchors),
                                     ),
                                   ),
                                 ),

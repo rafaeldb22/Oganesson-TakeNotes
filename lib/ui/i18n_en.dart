@@ -1189,4 +1189,10 @@ const enStrings = <String, String>{
   'Hoja normal': 'Normal sheet',
   'Hoja grande': 'Large sheet',
   'Hoja enorme': 'Huge sheet',
+  'Atrás 10 s': 'Back 10 s',
+  'Adelante 10 s': 'Forward 10 s',
+  'Desconectar notas…': 'Disconnect notes…',
+  'Desconectar notas': 'Disconnect notes',
+  'Desconectar {0}': 'Disconnect {0}',
+  'Exportar como imagen': 'Export as image',
 };

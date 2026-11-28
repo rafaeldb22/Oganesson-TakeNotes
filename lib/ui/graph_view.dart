@@ -142,6 +142,9 @@ class _GraphViewState extends State<GraphView> with TickerProviderStateMixin {
           if (!foreign)
             MenuEntry(
                 'enlazar', Icons.hub_outlined, tr('Conectar con otras notas…')),
+          if (!foreign && _graph!.neighbors(id).isNotEmpty)
+            MenuEntry('desconectar', Icons.link_off_rounded,
+                tr('Desconectar notas…')),
           if (canAttach) ...[
             MenuEntry.section(tr('Conectar con archivos')),
             MenuEntry('imagen', Icons.image_outlined, tr('Imagen')),
@@ -156,9 +159,58 @@ class _GraphViewState extends State<GraphView> with TickerProviderStateMixin {
         widget.onOpenNote(id);
       case 'enlazar':
         await showLinkNotesPicker(context, widget.repo, id);
+      case 'desconectar':
+        await _disconnect(id);
       default:
         await pickAndConnect(context, widget.repo, id, choice);
     }
+  }
+
+  /// Quitar varias conexiones de una nota con una sola confirmación.
+  Future<void> _disconnect(String id) async {
+    final others = [
+      for (final o in _graph!.neighbors(id))
+        if (widget.repo.byId(o) case final n?) n
+    ];
+    final off = <String>{};
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, set) => AlertDialog(
+          icon: const Icon(Icons.link_off_rounded),
+          title: Text(tr('Desconectar notas')),
+          contentPadding: const EdgeInsets.fromLTRB(8, 12, 8, 0),
+          content: SizedBox(
+            width: 380,
+            child: ListView(shrinkWrap: true, children: [
+              for (final n in others)
+                CheckboxListTile(
+                  dense: true,
+                  controlAffinity: ListTileControlAffinity.leading,
+                  value: off.contains(n.id),
+                  title: Text(n.title,
+                      maxLines: 1, overflow: TextOverflow.ellipsis),
+                  onChanged: (v) =>
+                      set(() => v == true ? off.add(n.id) : off.remove(n.id)),
+                ),
+            ]),
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: Text(tr('Cancelar'))),
+            FilledButton(
+                onPressed: off.isEmpty ? null : () => Navigator.pop(ctx, true),
+                child: Text(trf('Desconectar {0}', [off.length]))),
+          ],
+        ),
+      ),
+    );
+    if (ok != true || !mounted) return;
+    for (final o in off) {
+      widget.repo.removeLink(id, o);
+    }
+    _reheat(0.4);
   }
 
   final _rnd = math.Random(7);
@@ -334,6 +386,22 @@ class _GraphViewState extends State<GraphView> with TickerProviderStateMixin {
                   (_rnd.nextDouble() - 0.5) * spread));
     }
     _reheat(0.8);
+  }
+
+  /// Arrastrar el fondo: las notas cerca del dedo se dejan llevar un poco,
+  /// como en el agua, y luego vuelven a su sitio con los muelles.
+  void _wake(Offset screen, Offset delta) {
+    if (delta == Offset.zero) return;
+    final at = _toWorld(screen);
+    const sigma = 170.0;
+    for (final n in _nodes.values) {
+      if (n.pinned) continue;
+      final d2 = (n.pos - at).distanceSquared;
+      final pull = math.exp(-d2 / (2 * sigma * sigma));
+      if (pull < 0.02) continue;
+      n.vel += delta / _scale * (0.22 * pull);
+    }
+    _reheat(0.12);
   }
 
   void _reheat([double a = 0.5]) {
@@ -614,7 +682,9 @@ class _GraphViewState extends State<GraphView> with TickerProviderStateMixin {
                                       (_startScale * d.scale).clamp(0.2, 4.0);
                                   _offset = d.localFocalPoint - world * _scale;
                                 } else {
-                                  _offset += d.localFocalPoint - last;
+                                  final delta = d.localFocalPoint - last;
+                                  _offset += delta;
+                                  _wake(d.localFocalPoint, delta);
                                 }
                               });
                             },

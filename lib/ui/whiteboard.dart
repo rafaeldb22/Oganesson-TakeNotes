@@ -13,6 +13,7 @@ import 'anim.dart';
 import 'context_menu.dart';
 import 'i18n.dart';
 import 'note_image.dart';
+import 'note_tools.dart' show exportBoardPng;
 import 'theme.dart';
 import 'toast.dart';
 
@@ -1022,6 +1023,8 @@ class _WhiteboardState extends State<Whiteboard>
       ],
       MenuEntry(
           'vista', Icons.center_focus_strong_rounded, tr('Restablecer vista')),
+      if (!_c.isEmpty)
+        MenuEntry('png', Icons.image_outlined, tr('Exportar como imagen')),
       if (!widget.readOnly) ...[
         null,
         for (final (i, v) in BoardData.sides.indexed)
@@ -1060,6 +1063,8 @@ class _WhiteboardState extends State<Whiteboard>
         _c.selectAll();
       case 'vista':
         _resetView();
+      case 'png':
+        await exportBoardPng(context, _c.toData());
       case final String t when t.startsWith('tam-'):
         _c.setSide(BoardData.sides[int.parse(t.substring(4))]);
         _fitView();

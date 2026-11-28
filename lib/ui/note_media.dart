@@ -606,6 +606,19 @@ class _NoteFileCardState extends State<NoteFileCard> {
     }
   }
 
+  Future<void> _seekTo(Duration d) async {
+    final p = _player;
+    if (p == null) return;
+    final to = d < Duration.zero ? Duration.zero : (d > _total ? _total : d);
+    setState(() {
+      _pos = to;
+      _ended = false;
+    });
+    try {
+      await p.seek(to);
+    } catch (_) {}
+  }
+
   Future<void> _openFile() => openNoteFile(context, _f);
 
   Future<void> _saveAs() async {
@@ -719,13 +732,28 @@ class _NoteFileCardState extends State<NoteFileCard> {
                               fontSize: 14.5, fontWeight: FontWeight.w600)),
                       const SizedBox(height: 3),
                       if (audio && _player != null)
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(2),
-                          child: LinearProgressIndicator(
+                        // Barra que se arrastra para ir a cualquier punto.
+                        SizedBox(
+                          height: 18,
+                          child: SliderTheme(
+                            data: SliderTheme.of(context).copyWith(
+                              trackHeight: 3,
+                              activeTrackColor: p.accent,
+                              inactiveTrackColor: p.separator,
+                              thumbColor: p.accent,
+                              overlayShape: const RoundSliderOverlayShape(
+                                  overlayRadius: 12),
+                              thumbShape: const RoundSliderThumbShape(
+                                  enabledThumbRadius: 6),
+                              padding: EdgeInsets.zero,
+                            ),
+                            child: Slider(
                               value: progress,
-                              minHeight: 3,
-                              color: p.accent,
-                              backgroundColor: p.separator),
+                              onChanged: _total == Duration.zero
+                                  ? null
+                                  : (v) => _seekTo(_total * v),
+                            ),
+                          ),
                         )
                       else
                         Text(formatBytes(_f.size),
@@ -734,6 +762,22 @@ class _NoteFileCardState extends State<NoteFileCard> {
                     ],
                   ),
                 ),
+                if (audio && _player != null) ...[
+                  IconButton(
+                    tooltip: tr('Atrás 10 s'),
+                    visualDensity: VisualDensity.compact,
+                    icon: const Icon(Icons.replay_10_rounded, size: 19),
+                    onPressed: () =>
+                        _seekTo(_pos - const Duration(seconds: 10)),
+                  ),
+                  IconButton(
+                    tooltip: tr('Adelante 10 s'),
+                    visualDensity: VisualDensity.compact,
+                    icon: const Icon(Icons.forward_10_rounded, size: 19),
+                    onPressed: () =>
+                        _seekTo(_pos + const Duration(seconds: 10)),
+                  ),
+                ],
                 if (audio && _player != null)
                   Padding(
                     padding: const EdgeInsets.only(left: 8),

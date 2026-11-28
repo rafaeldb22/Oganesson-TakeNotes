@@ -11,7 +11,10 @@ Widget buildTextMenu(BuildContext context, List<ContextMenuButtonItem> items,
     TextSelectionToolbarAnchors anchors) {
   if (items.isEmpty) return const SizedBox.shrink();
   return TextFieldTapRegion(
-    child: _TextMenu(items: items, anchor: anchors.primaryAnchor),
+    child: _TextMenu(
+        items: items,
+        anchor: anchors.primaryAnchor,
+        below: anchors.secondaryAnchor),
   );
 }
 
@@ -21,9 +24,12 @@ Widget textFieldMenu(BuildContext context, EditableTextState state) =>
         context, state.contextMenuButtonItems, state.contextMenuAnchors);
 
 class _TextMenu extends StatelessWidget {
-  const _TextMenu({required this.items, required this.anchor});
+  const _TextMenu({required this.items, required this.anchor, this.below});
   final List<ContextMenuButtonItem> items;
   final Offset anchor;
+
+  /// Debajo de la selección (en el móvil, si arriba no cabe).
+  final Offset? below;
 
   static const _width = 210.0;
 
@@ -33,13 +39,20 @@ class _TextMenu extends StatelessWidget {
     return LayoutBuilder(builder: (context, c) {
       final size = c.biggest;
       final left = anchor.dx.clamp(8.0, size.width - _width - 8);
-      final openUp = anchor.dy > size.height - 220;
+      // En el móvil, encima de la selección y con espacio: así no tapa los
+      // tiradores para seleccionar más. Si arriba no cabe, debajo de ellos.
+      final platform = Theme.of(context).platform;
+      final touch =
+          platform == TargetPlatform.android || platform == TargetPlatform.iOS;
+      final openUp = touch ? anchor.dy > 240 : anchor.dy > size.height - 220;
+      final gap = touch ? 14.0 : 4.0;
+      final top = touch ? (below ?? anchor).dy + 30 : anchor.dy + gap;
       return Stack(
         children: [
           Positioned(
             left: left,
-            top: openUp ? null : anchor.dy + 4,
-            bottom: openUp ? size.height - anchor.dy + 4 : null,
+            top: openUp ? null : top,
+            bottom: openUp ? size.height - anchor.dy + gap : null,
             width: _width,
             child: TweenAnimationBuilder<double>(
               tween: Tween(begin: 0, end: 1),

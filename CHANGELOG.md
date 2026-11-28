@@ -2,6 +2,24 @@
 
 All notable changes to Oganesson TakeNotes (formerly *Notas* / *BabuNotes*).
 
+## [3.10.0] — 2026-11-28
+
+### Added
+- **Skip through voice notes**: drag the progress bar to any point, or jump 10 seconds back or forward.
+- **Disconnect notes** in the note network (right-click a note): tick the connections to remove and
+  confirm once.
+- **Export the whiteboard as an image** (high-quality PNG) from its right-click menu.
+
+### Changed
+- **The note network feels like water**: dragging the background makes the nearby notes drift along
+  and settle back smoothly.
+- On the phone, the copy/paste menu appears **above the selection with some space**, so the handles
+  to select more stay free.
+
+### Fixed
+- Selecting text by dragging the mouse down past the bottom no longer jumps up and down in a loop:
+  the view now follows the end you are dragging.
+
 ## [3.9.0] — 2026-11-28
 
 ### Added

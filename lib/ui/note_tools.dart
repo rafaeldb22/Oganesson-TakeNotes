@@ -9,7 +9,9 @@ import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' show Supabase;
 
+import '../data/note_board.dart';
 import '../data/note_export.dart';
+import '../data/note_images.dart';
 import '../data/note_factory.dart';
 import '../data/note_filters.dart';
 import '../data/note_ics.dart';
@@ -430,6 +432,15 @@ Future<NoteFilters?> showFiltersSheet(
 }
 
 // ------------------------------------------------------- exportar e importar
+
+/// La pizarra como PNG de alta calidad (hasta 3200 px de lado).
+Future<void> exportBoardPng(BuildContext context, BoardData d) =>
+    _run(context, () async {
+      final png =
+          await renderBoardPng(d, NoteImages.instance.load, maxSide: 3200);
+      if (png == null || !context.mounted) return false;
+      return _deliver(context, png, 'pizarra.png', 'image/png', 'PNG', 'png');
+    });
 
 /// En PC pregunta dónde guardar; en el móvil abre el menú de compartir.
 Future<bool> _deliver(BuildContext context, Uint8List bytes, String name,
