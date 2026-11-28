@@ -179,6 +179,35 @@ class EditorToolbar extends StatelessWidget {
                     _toggleBlock(Attribute.list.key, Attribute.unchecked)),
           ],
           [
+            // Alineación: cada pulsación pasa a la siguiente.
+            Builder(builder: (_) {
+              final align = _value(Attribute.align.key) as String?;
+              const next = {
+                null: Attribute.centerAlignment,
+                'left': Attribute.centerAlignment,
+                'center': Attribute.rightAlignment,
+                'right': Attribute.justifyAlignment,
+                'justify': Attribute.leftAlignment,
+              };
+              return _Btn(
+                  icon: switch (align) {
+                    'center' => Icons.format_align_center_rounded,
+                    'right' => Icons.format_align_right_rounded,
+                    'justify' => Icons.format_align_justify_rounded,
+                    _ => Icons.format_align_left_rounded,
+                  },
+                  tooltip: tr('Alineación'),
+                  active: align != null && align != 'left',
+                  onTap: () {
+                    final a = next[align]!;
+                    // "Izquierda" es lo normal: se quita el atributo.
+                    controller.formatSelection(a == Attribute.leftAlignment
+                        ? Attribute.clone(Attribute.align, null)
+                        : a);
+                  });
+            }),
+          ],
+          [
             _Btn(
                 icon: Icons.format_quote_rounded,
                 tooltip: tr('Cita'),

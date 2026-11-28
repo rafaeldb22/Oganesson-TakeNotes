@@ -234,6 +234,9 @@ class NotesRepository extends ChangeNotifier {
   static const completedAfterMinutes = 10;
   static const completedKeepDays = 30;
 
+  /// Máximo de notas en Completadas y en la papelera: la más antigua sobra.
+  static const keepMax = 10;
+
   DateTime _doneSince(Note n) => n.doneAt ?? n.updatedAt;
 
   /// Completada hace 10 minutos o más: ya no sale en las listas.
@@ -267,16 +270,24 @@ class NotesRepository extends ChangeNotifier {
   DateTime completedUntil(Note n) =>
       _doneSince(n).add(const Duration(days: completedKeepDays));
 
-  /// Las completadas hace más de 30 días van a la papelera.
+  /// Las completadas hace más de 30 días, o más allá de las 10 últimas, van
+  /// a la papelera.
   void _expireCompleted() {
     final limit = DateTime.now()
         .toUtc()
         .subtract(const Duration(days: completedKeepDays));
+    final extra = (_notes.values
+            .where((n) => !n.deleted && !n.isEmpty && isArchived(n))
+            .toList()
+          ..sort((a, b) => _doneSince(b).compareTo(_doneSince(a))))
+        .skip(keepMax)
+        .map((n) => n.id)
+        .toSet();
     for (final n in _notes.values) {
       if (n.done &&
           !n.deleted &&
           !isForeign(n) &&
-          _doneSince(n).isBefore(limit)) {
+          (_doneSince(n).isBefore(limit) || extra.contains(n.id))) {
         n.deleted = true;
         n.updatedAt = _nextStamp(n.updatedAt);
         _dirty.add(n.id);
@@ -367,12 +378,21 @@ class NotesRepository extends ChangeNotifier {
     _changed();
   }
 
-  /// Pasa a borrado definitivo lo que lleva más de 3 días en la papelera.
+  /// Pasa a borrado definitivo lo que lleva más de 3 días en la papelera, o
+  /// lo que queda más allá de las 10 más recientes.
   void _autoPurge() {
     final limit =
         DateTime.now().toUtc().subtract(const Duration(days: trashDays));
+    final extra = (_notes.values
+            .where((n) => n.deleted && !n.isEmpty && !isForeign(n))
+            .toList()
+          ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt)))
+        .skip(keepMax)
+        .map((n) => n.id)
+        .toSet();
     final old = _notes.values
-        .where((n) => n.deleted && !n.updatedAt.isAfter(limit))
+        .where((n) =>
+            n.deleted && (!n.updatedAt.isAfter(limit) || extra.contains(n.id)))
         .map((n) => n.id)
         .toList();
     final gone = <Note>[];
@@ -949,8 +969,8 @@ class NotesRepository extends ChangeNotifier {
   }
 
   Future<void> _pushDirty() async {
-    _autoPurge();
     _expireCompleted();
+    _autoPurge();
     // Borrados definitivos.
     if (_purge.isNotEmpty) {
       final ids = _purge.toList();

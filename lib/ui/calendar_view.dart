@@ -456,12 +456,16 @@ class _MonthGrid extends StatelessWidget {
     }).toList();
     // Filas de todo el mes: una línea no cambia de fila al pasar de semana.
     final rows = assignLanes(visible);
+    // Las filas que caben bajo el número del día: el resto va a "+N".
+    final lanes = ((cellHeight - 41) / (_barHeight + _barGap))
+        .floor()
+        .clamp(1, _maxLanes);
     final weeks = [
       for (var w = 0; w < 6; w++)
         layoutWeek(
             DateTime(gridStart.year, gridStart.month, gridStart.day + w * 7),
             visible,
-            lanes: _maxLanes,
+            lanes: lanes,
             assigned: rows),
     ];
 
@@ -493,7 +497,8 @@ class _MonthGrid extends StatelessWidget {
                             context,
                             DateTime(gridStart.year, gridStart.month,
                                 gridStart.day + w * 7),
-                            weeks[w])),
+                            weeks[w],
+                            lanes)),
                       ),
                     ),
                   ),
@@ -507,11 +512,11 @@ class _MonthGrid extends StatelessWidget {
 
   /// Una línea por tarea y semana: pintada de una pieza no deja marcas entre
   /// días. Cada día lleva su tono, y al cambiar de mes se funden.
-  List<_WeekLine> _linesOfWeek(
-      BuildContext context, DateTime monday, Map<DateTime, DaySlots> week) {
+  List<_WeekLine> _linesOfWeek(BuildContext context, DateTime monday,
+      Map<DateTime, DaySlots> week, int lanes) {
     DateTime at(int d) => DateTime(monday.year, monday.month, monday.day + d);
     final lines = <_WeekLine>[];
-    for (var lane = 0; lane < _maxLanes; lane++) {
+    for (var lane = 0; lane < lanes; lane++) {
       for (var d = 0; d < 7; d++) {
         final n = week[at(d)]!.notes[lane];
         if (n == null) continue;
@@ -599,13 +604,21 @@ class _MonthGrid extends StatelessWidget {
           ),
           if (extra > 0)
             Positioned(
-              top: 7,
-              right: 7,
-              child: Text('+$extra',
-                  style: TextStyle(
-                      fontSize: 9.5,
-                      fontWeight: FontWeight.w700,
-                      color: Palette.secondary(context))),
+              top: 5,
+              right: 5,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                decoration: BoxDecoration(
+                  color: accent.withValues(alpha: 0.16),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text('+$extra',
+                    style: TextStyle(
+                        fontSize: 9.5,
+                        height: 1.2,
+                        fontWeight: FontWeight.w800,
+                        color: accent)),
+              ),
             ),
         ],
       ),
@@ -638,11 +651,16 @@ class _WeekLines extends CustomPainter {
       final paint = Paint()..color = l.tones.first;
       if (l.tones.toSet().length > 1) {
         paint.shader = LinearGradient(
-          colors: l.tones,
+          colors: [
+            for (final t in l.tones) ...[t, t]
+          ],
           stops: [
-            for (var i = 0; i < l.tones.length; i++)
-              (((l.first + i + 0.5) * day - rect.left) / rect.width)
+            for (var i = 0; i < l.tones.length; i++) ...[
+              (((l.first + i) * day + 4 - rect.left) / rect.width)
                   .clamp(0.0, 1.0),
+              (((l.first + i + 1) * day - 4 - rect.left) / rect.width)
+                  .clamp(0.0, 1.0),
+            ],
           ],
         ).createShader(rect);
       }

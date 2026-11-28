@@ -68,6 +68,15 @@ String fechaCorta(DateTime utc) {
       : '${d.day}/${d.month}/${_two(d.year % 100)}';
 }
 
+/// "120 palabras · 640 caracteres" (sin contar imágenes ni saltos de línea).
+String textStats(String text) {
+  final t = text.replaceAll('￼', '');
+  final words = RegExp(r'\S+').allMatches(t).length;
+  final chars = t.replaceAll('\n', '').length;
+  return '${trn(words, '{0} palabra', '{0} palabras')} · '
+      '${trn(chars, '{0} carácter', '{0} caracteres')}';
+}
+
 /// "21 de noviembre de 2026, 0:14"
 String fechaLarga(DateTime utc) {
   final d = utc.toLocal();

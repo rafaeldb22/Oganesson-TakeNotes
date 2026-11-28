@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import '../models/note.dart';
+import 'markdown.dart';
 import 'note_factory.dart';
 import 'note_files.dart';
 import 'note_images.dart';
@@ -151,10 +152,11 @@ List<MediaItem> mediaIn(String? rich) {
   return _result(ops);
 }
 
-/// Añade texto normal al final, sin heredar el formato de la última línea.
+/// Añade texto al final, sin heredar el formato de la última línea. El
+/// Markdown (listas, títulos, negrita…) se convierte en formato.
 (String content, String rich) withText(
     String content, String? rich, String text) {
-  final ops = _ops(content, rich)..add({'insert': '${text.trimRight()}\n'});
+  final ops = _ops(content, rich)..addAll(markdownOps(text.trimRight()));
   return _result(ops);
 }
 

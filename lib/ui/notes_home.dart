@@ -164,6 +164,8 @@ class _NotesHomeState extends State<NotesHome> {
   @override
   void initState() {
     super.initState();
+    GestureBinding.instance.pointerRouter.addGlobalRoute(_sideButtons);
+    HardwareKeyboard.instance.addHandler(_onKey);
     _widgetSub = WidgetBridge.clicks.listen(_onWidgetUri);
     // Al pulsar un aviso: abrir la nota o marcarla como hecha.
     Reminders.instance.attach(
@@ -213,6 +215,8 @@ class _NotesHomeState extends State<NotesHome> {
 
   @override
   void dispose() {
+    GestureBinding.instance.pointerRouter.removeGlobalRoute(_sideButtons);
+    HardwareKeyboard.instance.removeHandler(_onKey);
     Reminders.instance.detach();
     _widgetSub?.cancel();
     _newNoteSub?.cancel();
@@ -383,8 +387,6 @@ class _NotesHomeState extends State<NotesHome> {
       commands: [
         PaletteCommand(Icons.sticky_note_2_rounded, tr('Nueva nota'), _newNote,
             shortcut: 'Ctrl+N'),
-        PaletteCommand(Icons.wb_sunny_outlined, tr('Resumen de hoy'),
-            () => showDailyBrief(context, repo, onOpen: _open)),
         PaletteCommand(Icons.add_a_photo_outlined, tr('Tareas desde una foto'),
             () => tasksFromPhoto(context, repo, onOpen: _open)),
         PaletteCommand(Icons.dashboard_customize_outlined,
@@ -603,6 +605,91 @@ class _NotesHomeState extends State<NotesHome> {
     _visitedAt = _visited.length - 1;
   }
 
+  /// Botones laterales del ratón, en toda la app (también con un diálogo o
+  /// el asistente encima: entonces "atrás" lo cierra).
+  void _sideButtons(PointerEvent e) {
+    if (e is! PointerDownEvent || e.kind != PointerDeviceKind.mouse) return;
+    final back = e.buttons & kBackMouseButton != 0;
+    if (!back && e.buttons & kForwardMouseButton == 0) return;
+    if (!mounted) return;
+    if (ModalRoute.of(context)?.isCurrent == false) {
+      if (back) Navigator.of(context).maybePop();
+      return;
+    }
+    _walk(back ? -1 : 1);
+  }
+
+  /// Atajos que deben funcionar también con el cursor dentro de la nota
+  /// (el editor se quedaría con ellos): Ctrl+Tab, Ctrl+↑/↓, Ctrl+W, Ctrl+Q
+  /// y Ctrl+F para buscar dentro de la nota abierta.
+  bool _onKey(KeyEvent e) {
+    if (e is! KeyDownEvent && e is! KeyRepeatEvent) return false;
+    final k = HardwareKeyboard.instance;
+    if (!k.isControlPressed || k.isAltPressed || k.isMetaPressed) return false;
+    if (!mounted || ModalRoute.of(context)?.isCurrent == false) return false;
+    final key = e.logicalKey;
+    if (key == LogicalKeyboardKey.tab) {
+      _stepNote(k.isShiftPressed ? -1 : 1, wrap: true);
+      return true;
+    }
+    if (k.isShiftPressed ||
+        e is KeyRepeatEvent &&
+            key != LogicalKeyboardKey.arrowUp &&
+            key != LogicalKeyboardKey.arrowDown) {
+      return false;
+    }
+    if (key == LogicalKeyboardKey.arrowDown ||
+        key == LogicalKeyboardKey.arrowUp) {
+      _stepNote(key == LogicalKeyboardKey.arrowDown ? 1 : -1);
+      return true;
+    }
+    if (key == LogicalKeyboardKey.keyW && _openId != null) {
+      _close();
+      return true;
+    }
+    if (key == LogicalKeyboardKey.keyQ) {
+      _toggleSidebar();
+      return true;
+    }
+    if (key == LogicalKeyboardKey.keyF && _openId != null) {
+      noteFindRequests.add(null);
+      return true;
+    }
+    return false;
+  }
+
+  /// Notas en el orden en que se ven en la lista (lo rellena `_buildList`).
+  List<String> _order = const [];
+
+  void _stepNote(int d, {bool wrap = false}) {
+    final ids = _order;
+    if (ids.isEmpty) return;
+    final i = _openId == null ? -1 : ids.indexOf(_openId!);
+    var j = i == -1 ? (d > 0 ? 0 : ids.length - 1) : i + d;
+    if (wrap) j %= ids.length;
+    if (j < 0 || j >= ids.length || ids[j] == _openId) return;
+    _open(ids[j]);
+  }
+
+  bool _listHidden = false;
+
+  void _toggleSidebar() {
+    if (MediaQuery.sizeOf(context).width < _wideBreakpoint) return;
+    setState(() => _listHidden = !_listHidden);
+  }
+
+  Widget _sidebarButton({required bool open}) => IconButton(
+        tooltip:
+            open ? tr('Ocultar panel (Ctrl+Q)') : tr('Mostrar panel (Ctrl+Q)'),
+        onPressed: _toggleSidebar,
+        icon: AnimatedRotation(
+          turns: open ? 0 : 0.5,
+          duration: Anim.medium,
+          curve: Anim.curve,
+          child: const Icon(Icons.keyboard_double_arrow_left_rounded),
+        ),
+      );
+
   void _walk(int step) {
     for (var i = _visitedAt + step; i >= 0 && i < _visited.length; i += step) {
       final (filter, id) = _visited[i];
@@ -743,6 +830,13 @@ class _NotesHomeState extends State<NotesHome> {
               n.isTemporal ? tr('Cambiar fechas') : tr('Hacer temporal'),
               false
             ),
+            if (n.isTemporal)
+              (
+                'untimed',
+                Icons.event_busy_outlined,
+                tr('Quitar fechas'),
+                false
+              ),
             // El color solo se ve en la línea de tiempo.
             if (n.isTemporal)
               ('color', Icons.palette_outlined, tr('Color'), false),
@@ -754,6 +848,7 @@ class _NotesHomeState extends State<NotesHome> {
             ),
             ('-', Icons.remove, '', false),
             ('select', Icons.check_circle_outline, tr('Seleccionar'), false),
+            ('vault', Icons.shield_outlined, tr('Enviar al Vault'), false),
             ('-', Icons.remove, '', false),
             ('delete', Icons.delete_outline, tr('Eliminar'), true),
           ];
@@ -770,13 +865,17 @@ class _NotesHomeState extends State<NotesHome> {
         ],
       );
     } else {
+      // Con scroll: en un móvil pequeño las opciones no caben.
       choice = await showModalBottomSheet<String>(
         context: context,
         useSafeArea: true,
         showDragHandle: true,
+        isScrollControlled: true,
+        constraints:
+            BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.85),
         builder: (ctx) => SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
+          child: ListView(
+            shrinkWrap: true,
             children: [
               for (final (id, icon, label, danger) in actions)
                 if (id == '-')
@@ -814,6 +913,15 @@ class _NotesHomeState extends State<NotesHome> {
         repo.togglePin(n.id);
       case 'dates':
         showScheduleSheet(context, repo, n.id);
+      case 'untimed':
+        repo.setSchedule(n.id);
+      case 'vault':
+        if (await ensureVaultOpen(context, vault) && mounted) {
+          if (_openId == n.id) _close();
+          repo.setVault(n.id, true);
+          showToast(context, tr('Nota enviada al Vault'),
+              icon: Icons.shield_outlined);
+        }
       case 'color':
         showNoteColorSheet(context, repo, n.id);
       case 'folder':
@@ -911,9 +1019,6 @@ class _NotesHomeState extends State<NotesHome> {
       // Cualquier toque cuenta como actividad para el bloqueo del Vault.
       onPointerDown: (e) {
         vault.touch();
-        if (e.kind != PointerDeviceKind.mouse) return;
-        if (e.buttons & kBackMouseButton != 0) _walk(-1);
-        if (e.buttons & kForwardMouseButton != 0) _walk(1);
       },
       onPointerSignal: (_) => vault.touch(),
       child: CallbackShortcuts(
@@ -982,6 +1087,11 @@ class _NotesHomeState extends State<NotesHome> {
                           minLeft: 300,
                           maxLeft: 560,
                           minRight: 380,
+                          collapsed: _listHidden,
+                          rail: Column(children: [
+                            const SizedBox(height: 6),
+                            _sidebarButton(open: false),
+                          ]),
                           left: _list(context, true),
                           right: AnimatedSwitcher(
                             duration: Anim.medium,
@@ -1109,6 +1219,20 @@ class _NotesHomeState extends State<NotesHome> {
     _prevKnownIds = known;
     final pinned = all.where((n) => n.pinned).toList();
     final others = all.where((n) => !n.pinned).toList();
+    final shownFolders = {
+      for (final f in repo.folders)
+        if (q.isNotEmpty || _openFolders.contains(f.id)) f.id
+    };
+    final anyFolder = {for (final f in repo.folders) f.id};
+    _order = [
+      for (final n in pinned) n.id,
+      for (final f in repo.folders)
+        if (shownFolders.contains(f.id))
+          for (final n in others)
+            if (n.folderId == f.id) n.id,
+      for (final n in others)
+        if (n.folderId == null || !anyFolder.contains(n.folderId)) n.id,
+    ];
     final noteOpen = _openId != null && repo.byId(_openId!) != null;
 
     Widget body;
@@ -1144,6 +1268,7 @@ class _NotesHomeState extends State<NotesHome> {
               padding: const EdgeInsets.fromLTRB(6, 2, 0, 0),
               child: Row(
                 children: [
+                  if (wide) _sidebarButton(open: true),
                   const Spacer(),
                   _sortMenu(context),
                 ],
@@ -1460,9 +1585,6 @@ class _NotesHomeState extends State<NotesHome> {
   Future<void> _openMainMenu(BuildContext btnContext) async {
     final box = btnContext.findRenderObject() as RenderBox;
     final at = box.localToGlobal(box.size.bottomRight(Offset.zero));
-    final done = repo.completed.length;
-    final archived = repo.archivedNotes.length;
-    final trash = repo.trash.length;
     final email = Supabase.instance.client.auth.currentUser?.email;
     final v = await Updater.instance.currentVersion().catchError((_) => '');
     final desktop = DesktopIntegration.instance;
@@ -1477,15 +1599,11 @@ class _NotesHomeState extends State<NotesHome> {
         MenuEntry.section(tr('Notas')),
         MenuEntry('plantillas', Icons.dashboard_customize_outlined,
             tr('Nueva desde plantilla')),
-        MenuEntry('archivadas', Icons.archive_outlined, tr('Archivadas'),
-            badge: archived == 0 ? null : '$archived'),
-        MenuEntry('completadas', Icons.task_alt_rounded, tr('Completadas'),
-            badge: done == 0 ? null : '$done'),
-        MenuEntry('papelera', Icons.delete_outline, tr('Papelera'),
-            badge: trash == 0 ? null : '$trash'),
+        MenuEntry('archivadas', Icons.archive_outlined, tr('Archivadas')),
+        MenuEntry('completadas', Icons.task_alt_rounded, tr('Completadas')),
+        MenuEntry('papelera', Icons.delete_outline, tr('Papelera')),
         MenuEntry('asistente', Icons.auto_awesome_outlined, tr('Asistente IA'),
             subtitle: tr('Con tu clave de Gemini')),
-        MenuEntry('resumen', Icons.wb_sunny_outlined, tr('Resumen de hoy')),
         MenuEntry('foto-tareas', Icons.add_a_photo_outlined,
             tr('Tareas desde una foto')),
         MenuEntry('vault', Icons.shield_outlined, 'Vault',
@@ -1627,8 +1745,6 @@ class _NotesHomeState extends State<NotesHome> {
         await showShortcuts(context);
       case 'borrar-todo':
         await _confirmDeleteAll();
-      case 'resumen':
-        await showDailyBrief(context, repo, onOpen: _open);
       case 'foto-tareas':
         await tasksFromPhoto(context, repo, onOpen: _open);
       case 'plantillas':
@@ -1870,6 +1986,14 @@ class _NotesHomeState extends State<NotesHome> {
     final dragged = repo.byId(draggedId);
     if (dragged == null || draggedId == target.id) return;
     _ensureManualOrder();
+    // Notas sin posición (p. ej. tareas creadas desde el calendario o la IA
+    // después de ordenar): se numeran como se ven antes de colocar nada, si
+    // no la nota soltada acababa lejos de donde se dejó.
+    if (group.any((n) => n.position == null)) {
+      final seen = group.toList()..sort(_byPosition);
+      repo.setPositions(
+          {for (var i = 0; i < seen.length; i++) seen[i].id: i * 1000.0});
+    }
     final g = group.where((n) => n.id != draggedId).toList()..sort(_byPosition);
     final i = g.indexWhere((n) => n.id == target.id);
     final cur = target.position ?? 0;

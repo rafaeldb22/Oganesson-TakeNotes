@@ -5,6 +5,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import '../data/ai_assistant.dart';
 import '../data/notes_repository.dart';
 import 'anim.dart';
+import 'format.dart' show fechaMedia;
 import 'i18n.dart';
 import 'text_menu.dart';
 import 'theme.dart';
@@ -181,17 +182,20 @@ class _AssistantPanelState extends State<AssistantPanel> {
   Future<bool> _confirm(String q) async =>
       await showDialog<bool>(
         context: context,
-        builder: (ctx) => AlertDialog(
-          icon: const AiBadge(size: 40),
-          content: Text(q, textAlign: TextAlign.center),
-          actions: [
-            TextButton(
-                onPressed: () => Navigator.pop(ctx, false),
-                child: Text(tr('No'))),
-            FilledButton(
-                onPressed: () => Navigator.pop(ctx, true),
-                child: Text(tr('Sí'))),
-          ],
+        builder: (ctx) => _SpaceToApprove(
+          onApprove: () => Navigator.pop(ctx, true),
+          child: AlertDialog(
+            icon: const AiBadge(size: 40),
+            content: Text(q, textAlign: TextAlign.center),
+            actions: [
+              TextButton(
+                  onPressed: () => Navigator.pop(ctx, false),
+                  child: Text(tr('No'))),
+              FilledButton(
+                  onPressed: () => Navigator.pop(ctx, true),
+                  child: Text(tr('Sí'))),
+            ],
+          ),
         ),
       ) ==
       true;
@@ -246,6 +250,31 @@ class _AssistantPanelState extends State<AssistantPanel> {
                   ],
                 ),
               ),
+              if (settings.configured && !_settings && s.past.isNotEmpty)
+                PopupMenuButton<int>(
+                  tooltip: tr('Conversaciones anteriores'),
+                  enabled: !s.busy,
+                  icon: const Icon(Icons.history_rounded),
+                  onSelected: s.restore,
+                  itemBuilder: (_) => [
+                    for (final (i, c) in s.past.indexed)
+                      PopupMenuItem(
+                        value: i,
+                        child: ListTile(
+                          dense: true,
+                          contentPadding: EdgeInsets.zero,
+                          leading: const Icon(Icons.chat_bubble_outline_rounded,
+                              size: 19),
+                          title: Text('${c['title'] ?? ''}',
+                              maxLines: 1, overflow: TextOverflow.ellipsis),
+                          subtitle: DateTime.tryParse('${c['at']}') == null
+                              ? null
+                              : Text(fechaMedia(
+                                  DateTime.parse('${c['at']}').toUtc())),
+                        ),
+                      ),
+                  ],
+                ),
               if (settings.configured && !_settings && s.messages.isNotEmpty)
                 IconButton(
                   tooltip: tr('Nueva conversación'),
@@ -431,10 +460,7 @@ class _Welcome extends StatelessWidget {
     final ideas = [
       (Icons.event_note_outlined, tr('¿Qué tengo pendiente esta semana?')),
       (Icons.warning_amber_rounded, tr('¿Tengo alguna tarea vencida?')),
-      (
-        Icons.note_add_outlined,
-        tr('Crea una nota con la lista de la compra: leche, pan y huevos')
-      ),
+      (Icons.wb_sunny_outlined, tr('Hazme un resumen de mi día')),
       (Icons.summarize_outlined, tr('Resume mis notas más recientes')),
     ];
     return ListView(
@@ -1245,37 +1271,57 @@ class _ChangesDialogState extends State<_ChangesDialog> {
   @override
   Widget build(BuildContext context) {
     final total = widget.changes.length;
-    return AlertDialog(
-      icon: const AiBadge(size: 40),
-      title: Text(trf('La IA quiere hacer {0} cambios', [total]),
-          textAlign: TextAlign.center),
-      contentPadding: const EdgeInsets.fromLTRB(8, 12, 8, 0),
-      content: SizedBox(
-        width: 420,
-        child: ListView.builder(
-          shrinkWrap: true,
-          itemCount: total,
-          itemBuilder: (_, i) => CheckboxListTile(
-            dense: true,
-            value: _on.contains(i),
-            controlAffinity: ListTileControlAffinity.leading,
-            title: Text(widget.changes[i],
-                maxLines: 2, overflow: TextOverflow.ellipsis),
-            onChanged: (v) =>
-                setState(() => v == true ? _on.add(i) : _on.remove(i)),
+    return _SpaceToApprove(
+      onApprove: () {
+        if (_on.isNotEmpty) Navigator.pop(context, _on);
+      },
+      child: AlertDialog(
+        icon: const AiBadge(size: 40),
+        title: Text(trf('La IA quiere hacer {0} cambios', [total]),
+            textAlign: TextAlign.center),
+        contentPadding: const EdgeInsets.fromLTRB(8, 12, 8, 0),
+        content: SizedBox(
+          width: 420,
+          child: ListView.builder(
+            shrinkWrap: true,
+            itemCount: total,
+            itemBuilder: (_, i) => CheckboxListTile(
+              dense: true,
+              value: _on.contains(i),
+              controlAffinity: ListTileControlAffinity.leading,
+              title: Text(widget.changes[i],
+                  maxLines: 2, overflow: TextOverflow.ellipsis),
+              onChanged: (v) =>
+                  setState(() => v == true ? _on.add(i) : _on.remove(i)),
+            ),
           ),
         ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context, <int>{}),
+              child: Text(tr('Cancelar'))),
+          FilledButton(
+              onPressed: _on.isEmpty ? null : () => Navigator.pop(context, _on),
+              child: Text(_on.length == total
+                  ? trf('Aplicar los {0}', [total])
+                  : trf('Aplicar {0} de {1}', [_on.length, total]))),
+        ],
       ),
-      actions: [
-        TextButton(
-            onPressed: () => Navigator.pop(context, <int>{}),
-            child: Text(tr('Cancelar'))),
-        FilledButton(
-            onPressed: _on.isEmpty ? null : () => Navigator.pop(context, _on),
-            child: Text(_on.length == total
-                ? trf('Aplicar los {0}', [total])
-                : trf('Aplicar {0} de {1}', [_on.length, total]))),
-      ],
     );
   }
+}
+
+/// Barra espaciadora = aprobar (atajo rápido, sin mostrarlo en pantalla).
+class _SpaceToApprove extends StatelessWidget {
+  const _SpaceToApprove({required this.onApprove, required this.child});
+  final VoidCallback onApprove;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => CallbackShortcuts(
+        bindings: {
+          const SingleActivator(LogicalKeyboardKey.space): onApprove,
+        },
+        child: Focus(autofocus: true, child: child),
+      );
 }

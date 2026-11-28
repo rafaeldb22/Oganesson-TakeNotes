@@ -58,7 +58,8 @@ void main() {
     });
 
     test('varios días es un periodo, también con DURATION', () {
-      final e = _one('DTSTART:20300315T100000Z\r\nDURATION:P2DT1H\r\nSUMMARY:X');
+      final e =
+          _one('DTSTART:20300315T100000Z\r\nDURATION:P2DT1H\r\nSUMMARY:X');
       expect(e.remindAt, DateTime.utc(2030, 3, 15, 10));
       expect(e.dueAt, DateTime.utc(2030, 3, 17, 11));
     });
@@ -82,7 +83,8 @@ void main() {
             _ev('p', 'DTSTART:20200101T100000\r\nSUMMARY:Pasado'),
             _ev('c', 'DTSTART:20300401T100000\r\nSTATUS:CANCELLED'),
             _ev('i', 'DTSTART:20301399T100000\r\nSUMMARY:Mal'),
-            _ev('r', 'DTSTART:20300401T100000\r\nRECURRENCE-ID:20300401T100000'),
+            _ev('r',
+                'DTSTART:20300401T100000\r\nRECURRENCE-ID:20300401T100000'),
             _ev('ok', 'DTSTART:20300401T100000\r\nSUMMARY:Bien'),
           ].join('\r\n')),
           now: _now);
@@ -114,11 +116,11 @@ void main() {
   group('exportar', () {
     test('ida y vuelta conserva el día, el periodo y la repetición', () {
       final due = DateTime(2030, 3, 15, 23, 30);
-      final single = _note('s', 'Peluquería, centro\nCorte; barba',
-          Note.dayStart(due), due)
+      final single = _note(
+          's', 'Peluquería, centro\nCorte; barba', Note.dayStart(due), due)
         ..repeat = 'weekdays';
-      final period = _note('p', 'Proyecto', DateTime(2030, 3, 12, 9),
-          DateTime(2030, 3, 20, 18));
+      final period = _note(
+          'p', 'Proyecto', DateTime(2030, 3, 12, 9), DateTime(2030, 3, 20, 18));
       final f = parseIcs(notesToIcs([single, period]), now: _now);
       expect(f.events, hasLength(2));
       final a = f.events[0], b = f.events[1];
@@ -178,14 +180,16 @@ void main() {
       final future = DateTime.now().add(const Duration(days: 2));
       final day = '${future.year}${future.month.toString().padLeft(2, '0')}'
           '${future.day.toString().padLeft(2, '0')}';
-      final f = parseIcs(_cal(_ev('clase', 'DTSTART:${day}T100000\r\nSUMMARY:Clase')));
+      final f = parseIcs(
+          _cal(_ev('clase', 'DTSTART:${day}T100000\r\nSUMMARY:Clase')));
       r.importEvents(f.events);
       final normal = r.createNote(dueAt: future.toUtc());
       r.updateContent(normal.id, 'Tarea');
       final event = r.allActive.firstWhere((n) => n.isCalendarEvent);
       expect(r.notes.map((n) => n.id), [normal.id]);
       expect(r.temporales.map((n) => n.id), [normal.id]);
-      expect(r.calendarItems.map((n) => n.id), containsAll([event.id, normal.id]));
+      expect(
+          r.calendarItems.map((n) => n.id), containsAll([event.id, normal.id]));
       expect(normal.isCalendarEvent, isFalse);
       r.dispose();
     });

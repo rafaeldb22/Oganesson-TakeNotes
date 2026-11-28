@@ -144,6 +144,18 @@ class DesktopIntegration with WindowListener, TrayListener {
     } catch (e) {
       debugPrint('Escritorio: no se pudo registrar Ctrl+Alt+N ($e)');
     }
+    try {
+      await hotKeyManager.register(
+        HotKey(
+          key: PhysicalKeyboardKey.keyO,
+          modifiers: [HotKeyModifier.control, HotKeyModifier.alt],
+          scope: HotKeyScope.system,
+        ),
+        keyDownHandler: (_) => showWindow(),
+      );
+    } catch (e) {
+      debugPrint('Escritorio: no se pudo registrar Ctrl+Alt+O ($e)');
+    }
   }
 
   /// La primera vez, la app se apunta para abrirse con Windows (en segundo

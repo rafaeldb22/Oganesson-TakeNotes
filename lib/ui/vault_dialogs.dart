@@ -409,7 +409,8 @@ class _NewPasswordDialogState extends State<_NewPasswordDialog> {
                         ? tr('Contraseña nueva')
                         : tr('Contraseña maestra'),
                 autofocus: autoKeyboard &&
-                    widget.mode != _Mode.change && widget.mode != _Mode.account,
+                    widget.mode != _Mode.change &&
+                    widget.mode != _Mode.account,
                 enabled: !_busy),
             const SizedBox(height: 10),
             _PasswordField(

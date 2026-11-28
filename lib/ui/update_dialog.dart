@@ -18,6 +18,12 @@ Future<void> openLink(BuildContext context, String url) async {
   }
 }
 
+/// "ejemplo.com" → "https://ejemplo.com"; deja igual lo que ya tiene esquema.
+String webUrl(String link) {
+  final l = link.trim();
+  return RegExp(r'^[a-zA-Z][a-zA-Z0-9+.-]*:').hasMatch(l) ? l : 'https://$l';
+}
+
 /// Comprobación silenciosa al arrancar: solo muestra algo si hay versión nueva.
 Future<void> checkForUpdatesOnStart(BuildContext context) async {
   await Future<void>.delayed(const Duration(seconds: 4));

@@ -82,7 +82,8 @@ class NoteImages extends ChangeNotifier {
   static int scaleOf(String src) {
     final q = src.indexOf('?');
     if (q == -1) return 100;
-    final z = int.tryParse(Uri.splitQueryString(src.substring(q + 1))['z'] ?? '');
+    final z =
+        int.tryParse(Uri.splitQueryString(src.substring(q + 1))['z'] ?? '');
     return (z ?? 100).clamp(20, 100);
   }
 

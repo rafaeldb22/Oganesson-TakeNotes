@@ -31,8 +31,8 @@ void main() {
   test('las de un solo día van primero y sin degradado', () {
     final day = DateTime(2030, 3, 15, 18);
     final single = _note('s', Note.dayStart(day), day, color: 0xFF3B6FE0);
-    final period =
-        _note('p', DateTime(2030, 3, 1), DateTime(2030, 3, 14), color: 0xFFE5484D);
+    final period = _note('p', DateTime(2030, 3, 1), DateTime(2030, 3, 14),
+        color: 0xFFE5484D);
     final list = [period, single]..sort(Note.calendarOrder);
     expect(list.first.id, 's');
     final colors = notePalette(single);
@@ -95,11 +95,13 @@ void main() {
       r.updateContent(n.id, '￼\n', rich: rich);
       r.setVault(n.id, true);
       var read = false;
-      final tools = AiTools(r, confirm: (_) async => false,
+      final tools = AiTools(r,
+          confirm: (_) async => false,
           loadImage: (_) async {
-        read = true;
-        return Uint8List(1);
-      }, readImage: (_, __, ___) async => 'x');
+            read = true;
+            return Uint8List(1);
+          },
+          readImage: (_, __, ___) async => 'x');
       final res = await tools.run('read_note_images', {'id': n.id});
       expect(res['error'], isNotNull);
       expect(read, isFalse);

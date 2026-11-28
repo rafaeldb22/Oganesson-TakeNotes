@@ -23,9 +23,13 @@ class _ShortcutsDialog extends StatelessWidget {
             (tr('Notas'), ['Ctrl', '1']),
             (tr('Calendario'), ['Ctrl', '2']),
             (tr('Red de notas'), ['Ctrl', '3']),
-            (tr('Buscar'), ['Ctrl', 'F']),
+            (tr('Siguiente nota'), ['Ctrl', 'Tab']),
+            (tr('Nota anterior'), ['Ctrl', 'Mayús', 'Tab']),
+            (tr('Nota de arriba / de abajo'), ['Ctrl', '↑ ↓']),
+            (tr('Buscar (en la nota si hay una abierta)'), ['Ctrl', 'F']),
             (tr('Paleta de comandos'), ['Ctrl', 'K']),
-            (tr('Cerrar la nota'), ['Esc']),
+            (tr('Cerrar la nota'), ['Ctrl', 'W']),
+            (tr('Ocultar o mostrar el panel'), ['Ctrl', 'Q']),
           ],
         ),
         (
@@ -34,6 +38,7 @@ class _ShortcutsDialog extends StatelessWidget {
           [
             (tr('Nueva nota'), ['Ctrl', 'N']),
             (tr('Nota rápida desde cualquier sitio'), ['Ctrl', 'Alt', 'N']),
+            (tr('Abrir Oganesson desde cualquier sitio'), ['Ctrl', 'Alt', 'O']),
             (tr('Asistente IA'), ['Ctrl', 'J']),
           ],
         ),

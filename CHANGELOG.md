@@ -2,6 +2,44 @@
 
 All notable changes to Oganesson TakeNotes (formerly *Notas* / *BabuNotes*).
 
+## [3.5.0] — 2026-11-28
+
+### Added
+- **Find in note** (Ctrl+F with a note open): matches highlighted one by one, with ↑/↓ and Enter.
+- **New shortcuts**: Ctrl+Tab / Ctrl+Shift+Tab between notes, Ctrl+↑/↓ for the note above or below,
+  Ctrl+W closes the note, Ctrl+Q hides or shows the left panel and Ctrl+Alt+O opens the app from
+  anywhere. All listed in ⋯ → Keyboard shortcuts.
+- **Button to hide the left panel**, at the far left of the list header, with an animation.
+- **Markdown while typing**: `# `, `## `, `- `, `1. `, `**bold**`, `*italic*`… become formatting.
+- **AI text keeps its format**: lists, checkboxes, headings and bold written by the AI (Gemini style
+  Markdown) are converted into real formatting, and it continues an existing list in the same style.
+- **Text alignment** button (left, center, right, justified).
+- **Note info** in the note's ⋯ menu: author, created, last modified, words and characters.
+- Words and characters under the note's date.
+- **Last 3 AI conversations** in a history menu. Opening the app starts a new chat.
+- **Approve AI changes with the Space bar**.
+- Right-click a note: **Send to Vault** and **Remove dates**.
+- Rename whiteboard notes from the top bar.
+
+### Changed
+- **The AI only asks before deleting**: creating, moving, pinning or changing dates happens right
+  away (each change can still be undone from its card).
+- Links open with a single click in your default browser.
+- Mouse side buttons work everywhere in the app; with a dialog open, "back" closes it.
+- Trash and Completed keep the 10 most recent: the 11th is removed.
+- No counters next to Trash, Archived and Completed.
+- The note's OK button is gone (notes save on their own).
+- "Today's summary" moved into the assistant as a suggestion.
+- An empty whiteboard is removed from the note when you leave it; its back button is a note icon.
+- The calendar's "+N" is a clear badge and only as many lines are drawn as fit in each day.
+
+### Fixed
+- Pasting from Gmail/Chrome no longer inserts "SourceURL:…" text.
+- Pasting several lines into the title keeps only the first one as the title.
+- Days outside the current month are always dimmed in the calendar.
+- Dragging a note next to tasks with dates put it in the wrong place.
+- The long-press menu on Android can be scrolled on small screens.
+
 ## [3.4.0] — 2026-11-24
 
 ### Added

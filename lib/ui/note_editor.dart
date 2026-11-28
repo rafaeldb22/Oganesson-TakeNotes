@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -30,11 +31,15 @@ import 'schedule_sheet.dart';
 import 'share_sheet.dart';
 import 'smooth_scroll.dart';
 import 'text_menu.dart';
+import 'update_dialog.dart' show openLink, webUrl;
 import 'theme.dart';
 import 'toast.dart';
 import 'urgency.dart';
 import 'whiteboard.dart';
 import 'i18n.dart';
+
+/// Ctrl+F con una nota abierta: abre el buscador de la nota.
+final noteFindRequests = StreamController<void>.broadcast();
 
 /// Editor de una nota con formato (negrita, títulos, listas, casillas,
 /// colores, alineación…) usando flutter_quill.
@@ -96,10 +101,147 @@ class _NoteEditorState extends State<NoteEditor> {
 
   NotesRepository get repo => widget.repo;
 
+  // Buscar en la nota (Ctrl+F).
+  bool _finding = false;
+  final _findCtrl = TextEditingController();
+  final _findFocus = FocusNode();
+  List<int> _matches = const [];
+  int _matchAt = 0;
+  StreamSubscription<void>? _findSub;
+
+  void _openFind() {
+    if (_board != null) return;
+    final sel = _ctrl.selection;
+    if (!sel.isCollapsed && sel.end - sel.start < 80) {
+      _findCtrl.text = _ctrl.document
+          .toPlainText()
+          .substring(sel.start, sel.end)
+          .split('\n')
+          .first;
+    }
+    setState(() => _finding = true);
+    _findFocus.requestFocus();
+    _findCtrl.selection =
+        TextSelection(baseOffset: 0, extentOffset: _findCtrl.text.length);
+    _search();
+  }
+
+  void _closeFind() {
+    setState(() {
+      _finding = false;
+      _matches = const [];
+    });
+    _focus.requestFocus();
+  }
+
+  void _search() {
+    final q = _findCtrl.text.toLowerCase();
+    final text = _ctrl.document.toPlainText().toLowerCase();
+    final found = <int>[];
+    if (q.isNotEmpty) {
+      for (var i = text.indexOf(q); i != -1; i = text.indexOf(q, i + 1)) {
+        found.add(i);
+      }
+    }
+    // La coincidencia más cercana al cursor.
+    final from = _ctrl.selection.start;
+    final at = found.indexWhere((i) => i >= from);
+    setState(() {
+      _matches = found;
+      _matchAt = at == -1 ? 0 : at;
+    });
+    _showMatch();
+  }
+
+  void _stepMatch(int d) {
+    if (_matches.isEmpty) return;
+    setState(() => _matchAt = (_matchAt + d) % _matches.length);
+    _showMatch();
+  }
+
+  void _showMatch() {
+    if (_matches.isEmpty) return;
+    final start = _matches[_matchAt];
+    _ctrl.updateSelection(
+        TextSelection(
+            baseOffset: start, extentOffset: start + _findCtrl.text.length),
+        ChangeSource.local);
+    _editorKey.currentState?.bringIntoView(TextPosition(offset: start));
+  }
+
+  Widget _findBar(BuildContext context) {
+    final p = Palette.of(context);
+    final count = _findCtrl.text.isEmpty
+        ? ''
+        : _matches.isEmpty
+            ? tr('Sin resultados')
+            : '${_matchAt + 1}/${_matches.length}';
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Material(
+        color: p.background,
+        borderRadius: BorderRadius.circular(12),
+        child: CallbackShortcuts(
+          bindings: {
+            const SingleActivator(LogicalKeyboardKey.escape): _closeFind,
+            const SingleActivator(LogicalKeyboardKey.enter, shift: true): () =>
+                _stepMatch(-1),
+            const SingleActivator(LogicalKeyboardKey.arrowUp): () =>
+                _stepMatch(-1),
+            const SingleActivator(LogicalKeyboardKey.arrowDown): () =>
+                _stepMatch(1),
+          },
+          child: Row(children: [
+            const SizedBox(width: 10),
+            Icon(Icons.search_rounded, size: 18, color: p.secondary),
+            Expanded(
+              child: TextField(
+                controller: _findCtrl,
+                focusNode: _findFocus,
+                onChanged: (_) => _search(),
+                onSubmitted: (_) {
+                  _stepMatch(1);
+                  _findFocus.requestFocus();
+                },
+                decoration: InputDecoration(
+                  isDense: true,
+                  border: InputBorder.none,
+                  hintText: tr('Buscar en la nota'),
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+                ),
+              ),
+            ),
+            Text(count, style: TextStyle(color: p.secondary, fontSize: 12.5)),
+            IconButton(
+              tooltip: tr('Anterior'),
+              visualDensity: VisualDensity.compact,
+              onPressed: _matches.isEmpty ? null : () => _stepMatch(-1),
+              icon: const Icon(Icons.keyboard_arrow_up_rounded),
+            ),
+            IconButton(
+              tooltip: tr('Siguiente'),
+              visualDensity: VisualDensity.compact,
+              onPressed: _matches.isEmpty ? null : () => _stepMatch(1),
+              icon: const Icon(Icons.keyboard_arrow_down_rounded),
+            ),
+            IconButton(
+              tooltip: tr('Cerrar'),
+              visualDensity: VisualDensity.compact,
+              onPressed: _closeFind,
+              icon: const Icon(Icons.close_rounded, size: 18),
+            ),
+          ]),
+        ),
+      ),
+    ).animate().fadeIn(duration: Anim.fast).slideY(begin: -0.3);
+  }
+
   void _enterBoard() {
     final n = repo.byId(widget.noteId);
     if (n == null || _board != null) return;
     _focus.unfocus();
+    _titleCtrl.text = n.title;
     setState(() {
       _board = BoardController(BoardData.of(n.rich) ?? BoardData(),
           onChanged: _queueBoardSave);
@@ -107,13 +249,51 @@ class _NoteEditorState extends State<NoteEditor> {
     _saveBoard();
   }
 
+  /// Título editable arriba mientras se ve la pizarra.
+  final _titleCtrl = TextEditingController();
+
+  void _renameFromBoard() {
+    final n = repo.byId(widget.noteId);
+    final title = _titleCtrl.text.replaceAll('\n', ' ').trim();
+    if (n == null || !repo.canEdit(n) || title.isEmpty || title == n.title) {
+      return;
+    }
+    final doc = _docFor(n);
+    final first = doc.toPlainText().split('\n').first;
+    if (first.isEmpty || first.contains('\uFFFC')) {
+      doc.insert(0, '$title\n');
+      doc.format(0, title.length, Attribute.h1);
+    } else {
+      doc.replace(0, first.length, title);
+    }
+    final rich = jsonEncode(doc.toDelta().toJson());
+    final plain = doc.toPlainText();
+    _lastSaved = rich;
+    repo.updateContent(widget.noteId,
+        plain.endsWith('\n') ? plain.substring(0, plain.length - 1) : plain,
+        rich: rich);
+  }
+
   void _leaveBoard() {
     _boardSave?.cancel();
+    _renameFromBoard();
+    final c = _board;
+    final saved = repo.byId(widget.noteId);
+    // Pizarra vacía: no se queda en la nota.
+    final removed = c != null &&
+        c.isEmpty &&
+        saved != null &&
+        repo.canEdit(saved) &&
+        BoardData.of(saved.rich) != null;
+    if (removed) {
+      final (content, rich) = BoardData.remove(saved.content, saved.rich!);
+      repo.updateContent(widget.noteId, content, rich: rich);
+    }
     _saveBoard(active: false);
     final n = repo.byId(widget.noteId);
     final old = _board;
     // Sin pizarra guardada el texto no ha cambiado (y conserva su formato).
-    if (n != null && BoardData.of(n.rich) != null) {
+    if (n != null && (removed || BoardData.of(n.rich) != null)) {
       _applyingRemote = true;
       _ctrl.document = _docFor(n);
       _ctrl.updateSelection(
@@ -282,7 +462,13 @@ class _NoteEditorState extends State<NoteEditor> {
         clipboardConfig: QuillClipboardConfig(
           // ignore: experimental_member_use
           onClipboardPaste: () async =>
-              mounted && await pasteImagesFromClipboard(context, _ctrl),
+              mounted &&
+              (await pasteImagesFromClipboard(context, _ctrl) ||
+                  await _pasteIntoTitle()),
+          // El HTML del portapapeles de Windows trae cabeceras
+          // ("SourceURL:…") que acababan pegadas como texto.
+          // ignore: experimental_member_use
+          enableExternalRichPaste: false,
         ),
       ),
     );
@@ -300,10 +486,30 @@ class _NoteEditorState extends State<NoteEditor> {
     _ctrl.addListener(_onCaret);
     repo.addListener(_onRepo);
     _focus.addListener(_onFocus);
+    _findSub = noteFindRequests.stream.listen((_) => _openFind());
     final saved = BoardData.of(n?.rich);
     if (saved?.active == true) {
       _board = BoardController(saved!, onChanged: _queueBoardSave);
     }
+  }
+
+  /// Pegar varias líneas en el título: solo la primera sigue siendo título.
+  Future<bool> _pasteIntoTitle() async {
+    final sel = _ctrl.selection;
+    if (_ctrl.getSelectionStyle().attributes[Attribute.header.key]?.value !=
+        1) {
+      return false;
+    }
+    final raw = (await Clipboard.getData(Clipboard.kTextPlain))?.text;
+    if (raw == null || !mounted) return false;
+    final text = raw.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
+    final cut = text.indexOf('\n');
+    if (cut == -1) return false;
+    _ctrl.replaceText(sel.start, sel.end - sel.start, text,
+        TextSelection.collapsed(offset: sel.start + text.length));
+    _ctrl.formatText(sel.start + cut + 1, text.length - cut,
+        Attribute.clone(Attribute.h1, null));
+    return true;
   }
 
   void _guardKeyboard() {
@@ -379,6 +585,10 @@ class _NoteEditorState extends State<NoteEditor> {
 
   @override
   void dispose() {
+    _titleCtrl.dispose();
+    _findSub?.cancel();
+    _findCtrl.dispose();
+    _findFocus.dispose();
     if (_boardSave?.isActive ?? false) {
       _boardSave!.cancel();
       _saveBoard();
@@ -451,6 +661,8 @@ class _NoteEditorState extends State<NoteEditor> {
     final n = repo.byId(widget.noteId);
     if (n == null) return;
     switch (v) {
+      case 'info':
+        showNoteInfo(context, repo, n);
       case 'historial':
         showHistorySheet(context, repo, n.id);
       case 'plantilla':
@@ -489,6 +701,22 @@ class _NoteEditorState extends State<NoteEditor> {
         backgroundColor: Palette.card(context),
         automaticallyImplyLeading: false,
         leadingWidth: widget.showBack ? 52 : 0,
+        titleSpacing: 4,
+        title: _board == null || !writable
+            ? null
+            : TextField(
+                controller: _titleCtrl,
+                maxLines: 1,
+                style:
+                    const TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+                decoration: InputDecoration(
+                  isDense: true,
+                  border: InputBorder.none,
+                  hintText: tr('Título de la pizarra'),
+                ),
+                onSubmitted: (_) => _renameFromBoard(),
+                onTapOutside: (_) => _renameFromBoard(),
+              ).animate().fadeIn(duration: Anim.medium),
         leading: widget.showBack
             ? Bouncy(
                 pressedScale: 0.85,
@@ -522,7 +750,9 @@ class _NoteEditorState extends State<NoteEditor> {
                 transitionBuilder: (c, a) =>
                     ScaleTransition(scale: a, child: c),
                 child: Icon(
-                  _board != null ? Icons.notes_rounded : Icons.gesture_rounded,
+                  _board != null
+                      ? Icons.sticky_note_2_outlined
+                      : Icons.gesture_rounded,
                   key: ValueKey(_board != null),
                 ),
               ),
@@ -597,6 +827,13 @@ class _NoteEditorState extends State<NoteEditor> {
               icon: const Icon(Icons.more_horiz_rounded),
               onSelected: _toolAction,
               itemBuilder: (_) => [
+                PopupMenuItem(
+                    value: 'info',
+                    child: ListTile(
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        leading: const Icon(Icons.info_outline_rounded),
+                        title: Text(tr('Información')))),
                 PopupMenuItem(
                     value: 'historial',
                     child: ListTile(
@@ -696,6 +933,13 @@ class _NoteEditorState extends State<NoteEditor> {
                               const Icon(Icons.add_photo_alternate_outlined),
                           title: Text(tr('Añadir imagen')))),
                 PopupMenuItem(
+                    value: 'info',
+                    child: ListTile(
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        leading: const Icon(Icons.info_outline_rounded),
+                        title: Text(tr('Información')))),
+                PopupMenuItem(
                     value: 'historial',
                     child: ListTile(
                         dense: true,
@@ -728,26 +972,6 @@ class _NoteEditorState extends State<NoteEditor> {
                               style: TextStyle(color: Colors.red)))),
               ],
             ),
-          // Botón OK: aparece con un pequeño "pop", siempre centrado.
-          AnimatedSize(
-            duration: Anim.medium,
-            curve: Anim.curve,
-            child: _focus.hasFocus
-                ? Center(
-                    child: TextButton(
-                      onPressed: () => _focus.unfocus(),
-                      child: Text(tr('OK'),
-                          style: TextStyle(
-                              color: accent,
-                              fontWeight: FontWeight.w700,
-                              fontSize: 16)),
-                    ).animate().fadeIn(duration: Anim.fast).scale(
-                        begin: const Offset(0.6, 0.6),
-                        curve: Curves.easeOutBack,
-                        duration: Anim.medium),
-                  )
-                : const SizedBox(height: kToolbarHeight),
-          ),
           const SizedBox(width: 6),
         ],
       ),
@@ -855,11 +1079,12 @@ class _NoteEditorState extends State<NoteEditor> {
                               owner: repo.incomingShare(n.id)?.ownerEmail,
                               canEdit: writable,
                             ),
+                          if (_finding) _findBar(context),
                           if (n != null)
                             Padding(
                               padding: const EdgeInsets.only(bottom: 8),
                               child: Text(
-                                fechaLarga(n.updatedAt),
+                                '${fechaLarga(n.updatedAt)} · ${textStats(n.content)}',
                                 style: TextStyle(
                                     color: Palette.secondary(context),
                                     fontSize: 13),
@@ -890,6 +1115,24 @@ class _NoteEditorState extends State<NoteEditor> {
                                       padding:
                                           const EdgeInsets.only(bottom: 40),
                                       customStyles: _styles(context),
+                                      // Markdown al escribir: "# ", "- ",
+                                      // "1. ", **negrita**, *cursiva*…
+                                      // ignore: experimental_member_use
+                                      characterShortcutEvents:
+                                          standardCharactersShortcutEvents,
+                                      // ignore: experimental_member_use
+                                      spaceShortcutEvents:
+                                          standardSpaceShorcutEvents,
+                                      // Un clic en un enlace lo abre en el
+                                      // navegador (Quill pedía Ctrl+clic).
+                                      customRecognizerBuilder: (a, _) =>
+                                          a.key != Attribute.link.key ||
+                                                  a.value is! String
+                                              ? null
+                                              : (TapGestureRecognizer()
+                                                ..onTap = () => openLink(
+                                                    context,
+                                                    webUrl(a.value as String))),
                                       // Imágenes: se dibujan con su propio estilo,
                                       // Ctrl+V pega capturas y el teclado de Android
                                       // puede insertar imágenes directamente.

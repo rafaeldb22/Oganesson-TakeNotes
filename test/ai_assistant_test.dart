@@ -430,7 +430,8 @@ void main() {
       repo.dispose();
     });
 
-    test('la conversación se guarda y vuelve al abrir la app', () async {
+    test('al abrir la app empieza otra; la anterior queda en el historial',
+        () async {
       final repo = _repo();
       await AiSettings.instance
           .save(provider: AiProvider.gemini, apiKey: 'k', model: 'm');
@@ -440,7 +441,14 @@ void main() {
 
       final again = AiSession(repo);
       await again.load();
+      expect(again.messages, isEmpty);
+      expect(again.past.single['title'], 'hola');
+      again.restore(0);
       expect(again.messages.map((m) => m.text), ['hola', 'Respuesta guardada']);
+      expect(again.past, isEmpty);
+      // Nueva conversación: la actual vuelve al historial (máximo 3).
+      again.clear();
+      expect(again.past, hasLength(1));
       repo.dispose();
     });
 

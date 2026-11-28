@@ -148,8 +148,10 @@ class _RecoverPasswordDialogState extends State<_RecoverPasswordDialog> {
             children: [
               Text(
                   _sent
-                      ? tr('Si hay una cuenta con ese correo, te llegará un código. Mira también en spam.')
-                      : tr('Te enviaremos un código para poner una contraseña nueva.'),
+                      ? tr(
+                          'Si hay una cuenta con ese correo, te llegará un código. Mira también en spam.')
+                      : tr(
+                          'Te enviaremos un código para poner una contraseña nueva.'),
                   textAlign: TextAlign.center),
               const SizedBox(height: 12),
               TextField(

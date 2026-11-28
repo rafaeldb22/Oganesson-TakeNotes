@@ -234,16 +234,11 @@ void main() {
         gates.add(c);
         return c.future;
       };
-      final done = s.send('fija las dos');
-      await pumpEventQueue();
-      expect(gates.length, 1);
-      gates[0].complete(true);
-      await pumpEventQueue();
-      expect(gates.length, 2);
-      gates[1].complete(false);
-      await done;
+      // Fijar no pide permiso: solo eliminar.
+      await s.send('fija las dos');
+      expect(gates, isEmpty);
       expect(a.pinned, isTrue);
-      expect(b.pinned, isFalse);
+      expect(b.pinned, isTrue);
       expect(s.messages.last.text, 'Listo');
       r.dispose();
     });

@@ -184,9 +184,8 @@ IcsFile parseIcs(String text, {DateTime? now}) {
   Map<String, _Prop>? current;
   var depth = 0;
 
-  for (final line in src
-      .replaceAll(RegExp(r'\r?\n[ \t]'), '')
-      .split(RegExp(r'\r?\n'))) {
+  for (final line
+      in src.replaceAll(RegExp(r'\r?\n[ \t]'), '').split(RegExp(r'\r?\n'))) {
     final upper = line.trim().toUpperCase();
     if (current == null) {
       if (upper == 'BEGIN:VEVENT') {
@@ -332,8 +331,7 @@ String _clip(String s, int max) {
   return t.length <= max ? t : t.substring(0, max);
 }
 
-String _unescape(String s) =>
-    s.replaceAllMapped(RegExp(r'\\([\\;,nN])'), (m) {
+String _unescape(String s) => s.replaceAllMapped(RegExp(r'\\([\\;,nN])'), (m) {
       final c = m[1]!;
       return c == 'n' || c == 'N' ? '\n' : c;
     });
@@ -347,8 +345,8 @@ _Time? _time(_Prop p) {
     final t = DateTime(y, m, d);
     return t.month == m && t.day == d ? _Time(t, true) : null;
   }
-  final full =
-      RegExp(r'^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})(Z?)$').firstMatch(v);
+  final full = RegExp(r'^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})(Z?)$')
+      .firstMatch(v);
   if (full == null) return null;
   final n = [for (var i = 1; i <= 6; i++) int.parse(full[i]!)];
   final check = DateTime.utc(n[0], n[1], n[2], n[3], n[4], n[5]);
@@ -385,7 +383,8 @@ tz.Location? _location(String? id) {
 }
 
 Duration? _duration(String v) {
-  final m = RegExp(r'^\+?P(?:(\d+)W)?(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?)?$')
+  final m = RegExp(
+          r'^\+?P(?:(\d+)W)?(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?)?$')
       .firstMatch(v.toUpperCase());
   if (m == null) return null;
   int n(int i) => int.tryParse(m[i] ?? '') ?? 0;

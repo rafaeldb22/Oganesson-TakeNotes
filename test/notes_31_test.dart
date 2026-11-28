@@ -68,7 +68,7 @@ void main() {
     expect(n.isAllDay, isFalse);
   });
 
-  test('la IA pide cada cambio por separado', () async {
+  test('la IA solo pide permiso para eliminar', () async {
     appLanguage.code = 'es';
     SharedPreferences.setMockInitialValues({});
     final r = _repo();
@@ -85,14 +85,16 @@ void main() {
       'id': a.id,
       'targets': [b.id, c.id]
     });
-    expect(asked.length, 2);
-    expect(a.links, contains(b.id));
-    expect(a.links, isNot(contains(c.id)));
+    expect(asked, isEmpty);
+    expect(a.links, containsAll([b.id, c.id]));
 
-    asked.clear();
     final out = await tools.run('set_pinned', {'id': b.id, 'pinned': true});
-    expect(asked.length, 1);
+    expect(asked, isEmpty);
     expect(out['ok'], isTrue);
+
+    await tools.run('delete_note', {'id': c.id});
+    expect(asked, hasLength(1));
+    expect(r.byId(c.id)!.deleted, isFalse);
     r.dispose();
   });
 

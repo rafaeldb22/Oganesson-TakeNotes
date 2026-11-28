@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' show Supabase;
 
 import '../data/note_export.dart';
 import '../data/note_factory.dart';
@@ -19,6 +20,64 @@ import 'format.dart';
 import 'i18n.dart';
 import 'theme.dart';
 import 'toast.dart';
+
+// ---------------------------------------------------------- información
+
+/// Metadatos de la nota (como las propiedades de Obsidian).
+Future<void> showNoteInfo(BuildContext context, NotesRepository repo, Note n) {
+  final author = repo.isForeign(n)
+      ? repo.incomingShare(n.id)?.ownerEmail
+      : Supabase.instance.client.auth.currentUser?.email;
+  final rows = <(IconData, String, String)>[
+    (Icons.person_outline_rounded, tr('Autor'), author ?? '—'),
+    (Icons.add_circle_outline_rounded, tr('Creada'), fechaLarga(n.createdAt)),
+    (Icons.edit_outlined, tr('Última modificación'), fechaLarga(n.updatedAt)),
+    if (n.dueAt != null)
+      (Icons.event_outlined, tr('Vence'), fechaLarga(n.dueAt!)),
+    (Icons.notes_rounded, tr('Texto'), textStats(n.content)),
+    (Icons.hub_outlined, tr('Enlaces'), '${n.links.length}'),
+  ];
+  return showModalBottomSheet<void>(
+    context: context,
+    useSafeArea: true,
+    isScrollControlled: true,
+    constraints: BoxConstraints(
+        maxWidth: 560, maxHeight: MediaQuery.sizeOf(context).height * 0.8),
+    builder: (ctx) {
+      final p = Palette.of(ctx);
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(tr('Información'),
+                style:
+                    const TextStyle(fontSize: 22, fontWeight: FontWeight.w800)),
+            const SizedBox(height: 14),
+            for (final (i, (icon, label, value)) in rows.indexed)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 7),
+                child: Row(children: [
+                  Icon(icon, size: 19, color: p.accent),
+                  const SizedBox(width: 12),
+                  SizedBox(
+                      width: 150,
+                      child: Text(label, style: TextStyle(color: p.secondary))),
+                  Expanded(
+                      child: SelectableText(value,
+                          style: const TextStyle(fontWeight: FontWeight.w600))),
+                ]),
+              )
+                  .animate(delay: (40 * i).ms)
+                  .fadeIn(duration: Anim.medium)
+                  .slideX(begin: 0.06, curve: Anim.curve),
+          ],
+        ),
+      );
+    },
+  );
+}
 
 // ---------------------------------------------------------------- historial
 

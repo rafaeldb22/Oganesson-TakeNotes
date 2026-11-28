@@ -20,6 +20,8 @@ class ResizableSplit extends StatefulWidget {
     this.minLeft = 280,
     this.maxLeft = 560,
     this.minRight = 320,
+    this.collapsed = false,
+    this.rail,
   });
 
   final String storageKey;
@@ -29,6 +31,11 @@ class ResizableSplit extends StatefulWidget {
   final double minLeft;
   final double maxLeft;
   final double minRight;
+
+  /// Panel izquierdo plegado: en su lugar queda [rail] (una barra estrecha).
+  final bool collapsed;
+  final Widget? rail;
+  static const railWidth = 48.0;
 
   @override
   State<ResizableSplit> createState() => _ResizableSplitState();
@@ -68,45 +75,90 @@ class _ResizableSplitState extends State<ResizableSplit> {
       final active = _hover || _dragging;
       final accent = Palette.accent(context);
 
-      return Row(
-        children: [
-          SizedBox(width: w, child: widget.left),
-          MouseRegion(
-            cursor: SystemMouseCursors.resizeColumn,
-            onEnter: (_) => setState(() => _hover = true),
-            onExit: (_) => setState(() => _hover = false),
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onHorizontalDragStart: (_) => setState(() => _dragging = true),
-              onHorizontalDragUpdate: (d) => setState(() {
-                _width = (w + d.delta.dx).clamp(widget.minLeft, maxAllowed);
-              }),
-              onHorizontalDragEnd: (_) {
-                setState(() => _dragging = false);
-                _save();
-              },
-              onDoubleTap: () {
-                setState(() => _width = c.maxWidth * widget.initialFraction);
-                _save();
-                HapticFeedback.selectionClick();
-              },
-              child: SizedBox(
-                width: 9,
-                child: Center(
-                  child: AnimatedContainer(
-                    duration: Anim.fast,
-                    width: active ? 3 : 1,
-                    decoration: BoxDecoration(
-                      color: active ? accent : Palette.separator(context),
-                      borderRadius: BorderRadius.circular(2),
+      return TweenAnimationBuilder<double>(
+        tween: Tween(end: widget.collapsed ? 0 : 1),
+        duration: Anim.medium,
+        curve: Anim.curve,
+        builder: (context, f, _) => Row(
+          children: [
+            // Con claves: al plegar no se vuelve a montar ningún panel.
+            SizedBox(
+              key: const ValueKey('rail'),
+              width:
+                  widget.rail == null ? 0 : ResizableSplit.railWidth * (1 - f),
+              child: ClipRect(
+                child: OverflowBox(
+                  alignment: Alignment.centerLeft,
+                  minWidth: ResizableSplit.railWidth,
+                  maxWidth: ResizableSplit.railWidth,
+                  child: Opacity(
+                      opacity: 1 - f, child: widget.rail ?? const SizedBox()),
+                ),
+              ),
+            ),
+            SizedBox(
+              key: const ValueKey('izquierda'),
+              width: w * f,
+              child: ClipRect(
+                child: OverflowBox(
+                  alignment: Alignment.centerRight,
+                  minWidth: w,
+                  maxWidth: w,
+                  child: widget.left,
+                ),
+              ),
+            ),
+            SizedBox(
+              key: const ValueKey('separador'),
+              width: 9 * f,
+              child: ClipRect(
+                child: OverflowBox(
+                  minWidth: 9,
+                  maxWidth: 9,
+                  child: MouseRegion(
+                    cursor: SystemMouseCursors.resizeColumn,
+                    onEnter: (_) => setState(() => _hover = true),
+                    onExit: (_) => setState(() => _hover = false),
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onHorizontalDragStart: (_) =>
+                          setState(() => _dragging = true),
+                      onHorizontalDragUpdate: (d) => setState(() {
+                        _width =
+                            (w + d.delta.dx).clamp(widget.minLeft, maxAllowed);
+                      }),
+                      onHorizontalDragEnd: (_) {
+                        setState(() => _dragging = false);
+                        _save();
+                      },
+                      onDoubleTap: () {
+                        setState(
+                            () => _width = c.maxWidth * widget.initialFraction);
+                        _save();
+                        HapticFeedback.selectionClick();
+                      },
+                      child: SizedBox(
+                        width: 9,
+                        child: Center(
+                          child: AnimatedContainer(
+                            duration: Anim.fast,
+                            width: active ? 3 : 1,
+                            decoration: BoxDecoration(
+                              color:
+                                  active ? accent : Palette.separator(context),
+                              borderRadius: BorderRadius.circular(2),
+                            ),
+                          ),
+                        ),
+                      ),
                     ),
                   ),
                 ),
               ),
             ),
-          ),
-          Expanded(child: widget.right),
-        ],
+            Expanded(key: const ValueKey('derecha'), child: widget.right),
+          ],
+        ),
       );
     });
   }
