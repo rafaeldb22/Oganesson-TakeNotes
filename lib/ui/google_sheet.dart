@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 
@@ -82,10 +80,7 @@ class _GoogleSheet extends StatelessWidget {
             if (!GoogleCalendar.supported)
               _Info(
                   icon: Icons.info_outline_rounded,
-                  text: Platform.isAndroid
-                      ? tr(
-                          'En el móvil llegará en la próxima versión. Mientras, conéctalo en el PC: los eventos se ven también aquí.')
-                      : tr('Esta versión no trae la clave de Google Calendar.'))
+                  text: tr('Esta versión no trae la clave de Google Calendar.'))
             else if (!g.connected)
               FilledButton.icon(
                 onPressed: g.busy

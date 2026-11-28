@@ -6,6 +6,7 @@ import 'dart:math';
 import 'package:cryptography/dart.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -38,9 +39,35 @@ class GoogleCalendar extends ChangeNotifier {
   static const _scope = 'https://www.googleapis.com/auth/calendar';
   static final _api = Uri.parse('https://www.googleapis.com/calendar/v3/');
 
-  /// En Android hará falta su propio cliente (paquete + SHA-1).
+  /// Windows: OAuth en el navegador (necesita el secreto del cliente de
+  /// escritorio). Android: el permiso lo da Google con el cliente de Android
+  /// (paquete com.rafa.notas + SHA-1 de la firma), sin secreto.
   static bool get supported =>
-      !kIsWeb && Platform.isWindows && clientSecret.isNotEmpty;
+      !kIsWeb &&
+      ((Platform.isWindows && clientSecret.isNotEmpty) || Platform.isAndroid);
+
+  static bool get _android => !kIsWeb && Platform.isAndroid;
+  static const _scopes = [_scope];
+  bool _signInReady = false;
+
+  Future<void> _initSignIn() async {
+    if (_signInReady) return;
+    await GoogleSignIn.instance.initialize();
+    _signInReady = true;
+  }
+
+  /// Android: token sin preguntar (o con el diálogo de Google si [prompt]).
+  Future<String?> _androidToken({bool prompt = false}) async {
+    await _initSignIn();
+    final client = GoogleSignIn.instance.authorizationClient;
+    final auth = prompt
+        ? await client.authorizeScopes(_scopes)
+        : await client.authorizationForScopes(_scopes);
+    if (auth == null) return null;
+    _access = auth.accessToken;
+    _expires = DateTime.now().add(const Duration(minutes: 50));
+    return _access;
+  }
 
   static const _storage = FlutterSecureStorage();
   GoogleTransport transport = _http;
@@ -71,7 +98,11 @@ class GoogleCalendar extends ChangeNotifier {
   Future<void> attach(NotesRepository repo) async {
     _userId = repo.userId;
     try {
-      _refresh = await _storage.read(key: _kRefresh);
+      _refresh = _android
+          ? ((await SharedPreferences.getInstance()).getBool(_kRefresh) == true
+              ? 'android'
+              : null)
+          : await _storage.read(key: _kRefresh);
       final raw = (await SharedPreferences.getInstance()).getString(_kState);
       if (raw != null) {
         final j = jsonDecode(raw) as Map;
@@ -112,6 +143,19 @@ class GoogleCalendar extends ChangeNotifier {
   Future<bool> connect(NotesRepository repo) async {
     if (!supported) return false;
     error = null;
+    if (_android) {
+      try {
+        if (await _androidToken(prompt: true) == null) return false;
+        _refresh = 'android';
+        await (await SharedPreferences.getInstance()).setBool(_kRefresh, true);
+        await attach(repo);
+        return true;
+      } catch (e) {
+        error = '$e';
+        notifyListeners();
+        return false;
+      }
+    }
     final verifier = _random(64);
     final challenge = base64Url
         .encode(const DartSha256().hashSync(utf8.encode(verifier)).bytes)
@@ -177,8 +221,14 @@ class GoogleCalendar extends ChangeNotifier {
     _refresh = null;
     _access = null;
     try {
-      await _storage.delete(key: _kRefresh);
-      if (token != null) {
+      if (_android) {
+        await (await SharedPreferences.getInstance()).remove(_kRefresh);
+        await _initSignIn();
+        await GoogleSignIn.instance.disconnect();
+      } else {
+        await _storage.delete(key: _kRefresh);
+      }
+      if (token != null && !_android) {
         await transport(
             'POST',
             Uri.parse('https://oauth2.googleapis.com/revoke?token=$token'),
@@ -198,6 +248,13 @@ class GoogleCalendar extends ChangeNotifier {
 
   Future<String> _token() async {
     if (_access != null && DateTime.now().isBefore(_expires)) return _access!;
+    if (_android) {
+      final t = await _androidToken();
+      if (t == null) {
+        throw StateError('Vuelve a conectar Google Calendar en Ajustes');
+      }
+      return t;
+    }
     final (code, res) = await transport(
         'POST', Uri.parse('https://oauth2.googleapis.com/token'), const {}, {
       'client_id': clientId,
@@ -217,8 +274,11 @@ class GoogleCalendar extends ChangeNotifier {
   Future<(int, Map<String, dynamic>)> _call(String method, String path,
       {Map<String, String>? query, Object? body}) async {
     final url = _api.resolve(path).replace(queryParameters: query);
-    return transport(
+    final res = await transport(
         method, url, {'Authorization': 'Bearer ${await _token()}'}, body);
+    // Token caducado o revocado: se pide otro la próxima vez.
+    if (res.$1 == 401) _access = null;
+    return res;
   }
 
   // ---------------------------------------------------------- sincronizar

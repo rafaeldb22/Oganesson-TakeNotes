@@ -2,6 +2,12 @@
 
 All notable changes to Oganesson TakeNotes (formerly *Notas* / *BabuNotes*).
 
+## [3.16.0] — 2026-11-28
+
+### Added
+- **Google Calendar on Android**: Settings → Google Calendar → *Connect with Google* picks your Google
+  account and syncs both ways, like on PC.
+
 ## [3.15.1] — 2026-11-28
 
 ### Changed
