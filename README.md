@@ -221,3 +221,7 @@ installer/oganesson.iss       Windows installer (Inno Setup)
 ## Changelog
 
 See [CHANGELOG.md](CHANGELOG.md).
+
+## Privacy
+
+See the [privacy policy](docs/PRIVACY.md) (Spanish and English).
