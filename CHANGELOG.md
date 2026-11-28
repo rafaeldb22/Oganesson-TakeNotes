@@ -2,6 +2,24 @@
 
 All notable changes to Oganesson TakeNotes (formerly *Notas* / *BabuNotes*).
 
+## [3.9.0] — 2026-11-28
+
+### Added
+- **The whiteboard is a square sheet** with a soft shadow that **grows on its own**, smoothly, when
+  your drawing gets close to the edge.
+- **Sheet size** (right-click on the whiteboard): normal, large or huge.
+
+### Changed
+- **Smoother pen**: the stabilizer adapts to your speed (steady when slow, no lag when fast), and
+  pressure strokes are drawn as one continuous filled shape, like real ink.
+- **Smoother, more precise eraser**: it cuts exactly where it passes and skips strokes that are far
+  away, so it keeps up with your hand.
+- The whiteboard shows in the note as a **rounded square card** with a preview, not a full-width
+  rectangle.
+
+### Fixed
+- The eraser and the scribble-to-erase no longer leave loose dots behind.
+
 ## [3.8.0] — 2026-11-28
 
 ### Added

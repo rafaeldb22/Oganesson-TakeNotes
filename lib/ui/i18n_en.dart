@@ -1186,4 +1186,7 @@ const enStrings = <String, String>{
   'amigos': 'friends',
   'Resultados': 'Results',
   'Tus amigos': 'Your friends',
+  'Hoja normal': 'Normal sheet',
+  'Hoja grande': 'Large sheet',
+  'Hoja enorme': 'Huge sheet',
 };

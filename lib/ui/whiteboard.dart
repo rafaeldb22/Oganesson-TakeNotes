@@ -33,7 +33,20 @@ class BoardController extends ChangeNotifier {
   BoardController(BoardData data, {required this.onChanged})
       : strokes = List.of(data.strokes),
         images = List.of(data.images),
-        readText = data.readText;
+        readText = data.readText,
+        side = data.side;
+
+  /// Tamaño mínimo elegido para la hoja.
+  double side;
+
+  Rect get paper => BoardData.paperFor(strokes, images, side);
+
+  void setSide(double v) {
+    if (v == side) return;
+    side = v;
+    paintVersion++;
+    _changed();
+  }
 
   final VoidCallback onChanged;
   List<BoardStroke> strokes;
@@ -119,7 +132,8 @@ class BoardController extends ChangeNotifier {
       active: active,
       strokes: List.of(strokes),
       images: List.of(images),
-      readText: readText);
+      readText: readText,
+      side: side);
 
   /// Lo que la IA aún no ha leído, de la selección o de toda la pizarra.
   BoardData unreadData() => BoardData(
@@ -390,8 +404,24 @@ class Whiteboard extends StatefulWidget {
   State<Whiteboard> createState() => _WhiteboardState();
 }
 
-class _WhiteboardState extends State<Whiteboard> {
+class _WhiteboardState extends State<Whiteboard>
+    with SingleTickerProviderStateMixin {
   BoardController get _c => widget.controller;
+
+  // La hoja crece con una animación suave cuando el contenido no cabe.
+  late final _paperAnim = AnimationController(
+      vsync: this, duration: const Duration(milliseconds: 520));
+  late Rect _paperFrom = _c.paper, _paperTo = _paperFrom;
+  Rect get _shownPaper => Rect.lerp(
+      _paperFrom, _paperTo, Curves.easeOutCubic.transform(_paperAnim.value))!;
+
+  void _onBoard() {
+    final next = _c.paper;
+    if (next == _paperTo) return;
+    _paperFrom = _shownPaper;
+    _paperTo = next;
+    _paperAnim.forward(from: 0);
+  }
 
   final _focus = FocusNode(debugLabel: 'pizarra');
   final _live = ValueNotifier<int>(0);
@@ -443,12 +473,18 @@ class _WhiteboardState extends State<Whiteboard> {
   void initState() {
     super.initState();
     _bindActions();
+    _c.addListener(_onBoard);
   }
 
   @override
   void didUpdateWidget(Whiteboard old) {
     super.didUpdateWidget(old);
-    if (old.controller != widget.controller) _bindActions();
+    if (old.controller != widget.controller) {
+      old.controller.removeListener(_onBoard);
+      _c.addListener(_onBoard);
+      _paperFrom = _paperTo = _c.paper;
+      _bindActions();
+    }
   }
 
   void _bindActions() {
@@ -507,6 +543,8 @@ class _WhiteboardState extends State<Whiteboard> {
 
   @override
   void dispose() {
+    _c.removeListener(_onBoard);
+    _paperAnim.dispose();
     _hold?.cancel();
     _focus.dispose();
     _live.dispose();
@@ -753,8 +791,12 @@ class _WhiteboardState extends State<Whiteboard> {
     final at = _world(e.localPosition);
     if (_points != null) {
       _rawPen = at;
-      // Estabilizador: filtra el temblor sin que la línea se quede atrás.
-      final follow = e.kind == PointerDeviceKind.stylus ? 0.68 : 0.46;
+      // Estabilizador adaptativo: despacio filtra más el temblor, deprisa
+      // casi no filtra, para que la línea no se quede atrás.
+      final speed = (at - _points!.last).distance * _scale;
+      final stylus = e.kind == PointerDeviceKind.stylus;
+      final follow = ((stylus ? 0.55 : 0.4) + speed / (stylus ? 30 : 45))
+          .clamp(0.0, stylus ? 0.95 : 0.9);
       final next = _points!.last + (at - _points!.last) * follow;
       if ((next - _points!.last).distance >= 0.6 / _scale) {
         final f = _strokeIsMarker ? 1.0 : _pressure(e, next, _c.penForce);
@@ -980,6 +1022,17 @@ class _WhiteboardState extends State<Whiteboard> {
       ],
       MenuEntry(
           'vista', Icons.center_focus_strong_rounded, tr('Restablecer vista')),
+      if (!widget.readOnly) ...[
+        null,
+        for (final (i, v) in BoardData.sides.indexed)
+          MenuEntry(
+              'tam-$i',
+              _c.side == v
+                  ? Icons.radio_button_checked_rounded
+                  : Icons.radio_button_off_rounded,
+              [tr('Hoja normal'), tr('Hoja grande'), tr('Hoja enorme')][i]),
+        null,
+      ],
       if (!widget.readOnly && !_c.isEmpty)
         MenuEntry('limpiar', Icons.delete_sweep_outlined, tr('Borrar pizarra'),
             danger: true),
@@ -1007,6 +1060,9 @@ class _WhiteboardState extends State<Whiteboard> {
         _c.selectAll();
       case 'vista':
         _resetView();
+      case final String t when t.startsWith('tam-'):
+        _c.setSide(BoardData.sides[int.parse(t.substring(4))]);
+        _fitView();
       case 'limpiar':
         await _confirmClear();
       case 'eliminar':
@@ -1101,7 +1157,7 @@ abstract final class BoardRotateGap {
 
 class _BoardPainter extends CustomPainter {
   _BoardPainter(this.s, this.ink, this.colors)
-      : super(repaint: Listenable.merge([s._live, s._c]));
+      : super(repaint: Listenable.merge([s._live, s._c, s._paperAnim]));
   final _WhiteboardState s;
   final Color ink;
   final NotasColors colors;
@@ -1140,7 +1196,25 @@ class _BoardPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    // La hoja: un cuadrado con sombra suave; los puntos solo dentro.
+    final w = s._shownPaper;
+    final sheet = RRect.fromRectAndRadius(
+        Rect.fromLTWH(
+            s._offset.dx + w.left * s._scale,
+            s._offset.dy + w.top * s._scale,
+            w.width * s._scale,
+            w.height * s._scale),
+        Radius.circular(18 * s._scale.clamp(0.5, 1.5)));
+    canvas.drawRRect(
+        sheet.shift(const Offset(0, 3)),
+        Paint()
+          ..color = Colors.black.withValues(alpha: 0.10)
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10));
+    canvas.drawRRect(sheet, Paint()..color = colors.card);
+    canvas.save();
+    canvas.clipRRect(sheet);
     _paintDots(canvas, size);
+    canvas.restore();
     final c = s._c;
     final frame = colors.separator;
     final fixed = s._fixedPicture(ink, frame);
@@ -1279,52 +1353,59 @@ class NoteBoardEmbedBuilder extends EmbedBuilder {
     final data = BoardData.decode(e.node.value.data);
     if (data == null) return const SizedBox.shrink();
     final p = Palette.of(context);
+    // Una tarjeta cuadrada (como la hoja), no un rectángulo de lado a lado.
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Material(
-        color: p.background,
-        borderRadius: BorderRadius.circular(14),
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: onOpen,
-          child: SizedBox(
-            height: 170,
-            child: Stack(
-              children: [
-                Positioned.fill(
-                  child: CustomPaint(
-                    painter: _PreviewPainter(
-                        data, Theme.of(context).colorScheme.onSurface),
-                  ),
-                ),
-                Positioned(
-                  left: 10,
-                  bottom: 8,
-                  child: Row(
-                    children: [
-                      Icon(Icons.gesture_rounded, size: 16, color: p.accent),
-                      const SizedBox(width: 6),
-                      Text(tr('Nota de pizarra'),
-                          style: TextStyle(
-                              fontSize: 12.5,
-                              fontWeight: FontWeight.w600,
-                              color: p.secondary)),
-                    ],
-                  ),
-                ),
-                if (!e.readOnly)
-                  Positioned(
-                    top: 4,
-                    right: 4,
-                    child: IconButton(
-                      tooltip: tr('Eliminar pizarra'),
-                      visualDensity: VisualDensity.compact,
-                      icon: Icon(Icons.delete_outline_rounded,
-                          size: 19, color: p.secondary),
-                      onPressed: onRemove,
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: Material(
+          color: p.background,
+          elevation: 1.5,
+          shadowColor: Colors.black26,
+          borderRadius: BorderRadius.circular(22),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: onOpen,
+            child: SizedBox(
+              width: 180,
+              height: 180,
+              child: Stack(
+                children: [
+                  Positioned.fill(
+                    child: CustomPaint(
+                      painter: _PreviewPainter(
+                          data, Theme.of(context).colorScheme.onSurface),
                     ),
                   ),
-              ],
+                  Positioned(
+                    left: 10,
+                    bottom: 8,
+                    child: Row(
+                      children: [
+                        Icon(Icons.gesture_rounded, size: 16, color: p.accent),
+                        const SizedBox(width: 6),
+                        Text(tr('Nota de pizarra'),
+                            style: TextStyle(
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w600,
+                                color: p.secondary)),
+                      ],
+                    ),
+                  ),
+                  if (!e.readOnly)
+                    Positioned(
+                      top: 4,
+                      right: 4,
+                      child: IconButton(
+                        tooltip: tr('Eliminar pizarra'),
+                        visualDensity: VisualDensity.compact,
+                        icon: Icon(Icons.delete_outline_rounded,
+                            size: 19, color: p.secondary),
+                        onPressed: onRemove,
+                      ),
+                    ),
+                ],
+              ),
             ),
           ),
         ),

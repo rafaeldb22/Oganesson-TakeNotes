@@ -299,23 +299,42 @@ void paintBoardStroke(Canvas canvas, BoardStroke s, Color ink) {
     canvas.drawPath(path, paint..strokeWidth = s.width * first);
     return;
   }
-  // Tramos cortos agrupados por grosor: se ve continuo y se pinta rápido.
-  final byWidth = <double, Path>{};
+  // Con presión: el contorno del trazo (un borde a cada lado, con el grosor
+  // de cada punto) relleno de una pieza, como la tinta de verdad. Sin juntas
+  // ni escalones entre tramos.
+  final c = <Offset>[at(0)], r = <double>[s.width * s.factors.first / 2];
   for (var i = 0; i < p.length - 1; i++) {
     final steps = ((at(i + 1) - at(i)).distance / 1.5).ceil().clamp(1, 14);
-    var from = at(i);
     for (var k = 1; k <= steps; k++) {
       final t = k / steps;
-      final to = _catmull(at(i - 1), at(i), at(i + 1), at(i + 2), t);
+      c.add(_catmull(at(i - 1), at(i), at(i + 1), at(i + 2), t));
       final f = s.factors[i] + (s.factors[i + 1] - s.factors[i]) * t;
-      final w = (s.width * f * 4).round() / 4;
-      (byWidth[w < 0.25 ? 0.25 : w] ??= Path())
-        ..moveTo(from.dx, from.dy)
-        ..lineTo(to.dx, to.dy);
-      from = to;
+      r.add(math.max(0.25, s.width * f / 2));
     }
   }
-  byWidth.forEach((w, path) => canvas.drawPath(path, paint..strokeWidth = w));
+  final left = <Offset>[], right = <Offset>[];
+  for (var i = 0; i < c.length; i++) {
+    final d = c[math.min(i + 1, c.length - 1)] - c[math.max(i - 1, 0)];
+    final len = d.distance;
+    final n = len == 0 ? Offset.zero : Offset(-d.dy / len, d.dx / len) * r[i];
+    left.add(c[i] + n);
+    right.add(c[i] - n);
+  }
+  final path = Path()..moveTo(left.first.dx, left.first.dy);
+  void smooth(List<Offset> pts) {
+    for (var i = 1; i < pts.length - 1; i++) {
+      final m = (pts[i] + pts[i + 1]) / 2;
+      path.quadraticBezierTo(pts[i].dx, pts[i].dy, m.dx, m.dy);
+    }
+    path.lineTo(pts.last.dx, pts.last.dy);
+  }
+
+  smooth(left);
+  path.arcToPoint(right.last, radius: Radius.circular(r.last));
+  smooth(right.reversed.toList());
+  path.arcToPoint(left.first, radius: Radius.circular(r.first));
+  path.close();
+  canvas.drawPath(path, paint..style = PaintingStyle.fill);
 }
 
 /// La pizarra como PNG sobre blanco, para que la lea la IA. null si está vacía.
@@ -382,11 +401,41 @@ class BoardData {
       {this.active = true,
       List<BoardStroke>? strokes,
       List<BoardImage>? images,
-      this.readText = ''})
+      this.readText = '',
+      this.side = defaultSide})
       : strokes = strokes ?? [],
         images = images ?? [];
 
   static const embedType = 'oga-board';
+
+  /// Lado mínimo de la hoja cuadrada (Normal / Grande / Enorme). Si el
+  /// contenido no cabe, la hoja crece sola.
+  static const defaultSide = 1200.0;
+  static const sides = [1200.0, 2000.0, 3200.0];
+  double side;
+
+  /// La hoja: un cuadrado que empieza en (0, 0), de al menos [minSide], que
+  /// crece de 200 en 200 para que todo quepa con margen.
+  static Rect paperFor(
+      List<BoardStroke> strokes, List<BoardImage> images, double minSide) {
+    Rect? box;
+    for (final s in strokes) {
+      box = box?.expandToInclude(s.bounds) ?? s.bounds;
+    }
+    for (final i in images) {
+      box = box?.expandToInclude(i.bounds) ?? i.bounds;
+    }
+    const margin = 120.0;
+    // Hacia arriba o a la izquierda también crece, de 200 en 200.
+    double edge(double v) => math.min(0.0, ((v - margin) / 200).floor() * 200);
+    final left = edge(box?.left ?? 0);
+    final top = edge(box?.top ?? 0);
+    final need = box == null
+        ? minSide
+        : math.max(box.right + margin - left, box.bottom + margin - top);
+    final side = math.max(minSide, (need / 200).ceil() * 200.0);
+    return Rect.fromLTWH(left, top, side, side);
+  }
 
   bool active;
   List<BoardStroke> strokes;
@@ -400,6 +449,7 @@ class BoardData {
         's': [for (final s in strokes) s.toJson()],
         'i': [for (final i in images) i.toJson()],
         if (readText.isNotEmpty) 'rt': readText,
+        if (side != defaultSide) 'sz': side,
       });
 
   static BoardData? decode(Object? data) {
@@ -417,6 +467,7 @@ class BoardData {
             if (BoardImage.fromJson(i) case final x?) x,
         ],
         readText: j['rt'] is String ? j['rt'] as String : '',
+        side: (j['sz'] as num?)?.toDouble() ?? defaultSide,
       );
     } catch (_) {
       return null;
@@ -611,30 +662,64 @@ double scribbleReach(List<Offset> points, double minimum) {
   return (spacing * 0.65).clamp(minimum, minimum * 3);
 }
 
+/// Puntos de un trazo cada [step] como mucho (para cortar justo donde pasa
+/// la goma y no en el punto más cercano).
+(List<Offset>, List<double>) _dense(BoardStroke s, double step) {
+  final p = <Offset>[s.points.first], f = <double>[s.factors.first];
+  for (var i = 1; i < s.points.length; i++) {
+    final a = s.points[i - 1], b = s.points[i];
+    final n = ((b - a).distance / step).ceil();
+    for (var k = 1; k <= n; k++) {
+      final t = k / n;
+      p.add(Offset.lerp(a, b, t)!);
+      f.add(s.factors[i - 1] + (s.factors[i] - s.factors[i - 1]) * t);
+    }
+  }
+  return (p, f);
+}
+
+double _length(List<Offset> p) {
+  var l = 0.0;
+  for (var i = 1; i < p.length; i++) {
+    l += (p[i] - p[i - 1]).distance;
+  }
+  return l;
+}
+
 List<BoardStroke>? eraseStrokes(
     List<BoardStroke> strokes, Offset from, Offset to, double radius) {
   var touched = false;
   final out = <BoardStroke>[];
+  final zone = Rect.fromPoints(from, to).inflate(radius);
   for (final s in strokes) {
     final reach = radius + s.width / 2;
+    // Lejos de la goma: ni se mira punto a punto.
+    if (!s.bounds.overlaps(zone.inflate(s.width / 2))) {
+      out.add(s);
+      continue;
+    }
+    final (dp, df) = _dense(s, math.max(0.8, radius / 3));
     var pts = <Offset>[];
     var f = <double>[];
     var cut = false;
+    // Los restos diminutos de un corte no se guardan: eran los puntos
+    // sueltos que dejaba la goma (y el garabato).
+    final minLength = math.max(2.0, s.width * 1.2);
     void flush() {
-      if (pts.isNotEmpty) {
+      if (pts.length >= 2 && _length(pts) >= minLength) {
         out.add(BoardStroke(s.color, s.width, pts, f)..read = s.read);
       }
       pts = [];
       f = [];
     }
 
-    for (var i = 0; i < s.points.length; i++) {
-      if (_segDistance(s.points[i], from, to) <= reach) {
+    for (var i = 0; i < dp.length; i++) {
+      if (_segDistance(dp[i], from, to) <= reach) {
         cut = true;
         flush();
       } else {
-        pts.add(s.points[i]);
-        f.add(s.factors[i]);
+        pts.add(dp[i]);
+        f.add(df[i]);
       }
     }
     if (!cut) {
