@@ -1419,6 +1419,12 @@ class _NotesHomeState extends State<NotesHome> {
               onPressed: () => _openSettings(btnContext),
             ),
           ),
+          IconButton(
+            key: const ValueKey('boton-amigos'),
+            icon: const Icon(Icons.group_outlined),
+            tooltip: tr('Tu @nombre y amigos'),
+            onPressed: () => showFriendsSheet(context, repo),
+          ),
           Builder(
             builder: (btnContext) => IconButton(
               icon: const Icon(Icons.more_horiz),

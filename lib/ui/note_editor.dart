@@ -717,7 +717,9 @@ class _NoteEditorState extends State<NoteEditor> {
     final dark = Theme.of(context).brightness == Brightness.dark;
     final fg = dark ? Colors.white : const Color(0xFF151515);
     // La fuente del tema, como el resto de la app.
-    final font = Theme.of(context).textTheme.bodyMedium?.fontFamily;
+    final body = Theme.of(context).textTheme.bodyMedium;
+    final font = body?.fontFamily;
+    final fallback = body?.fontFamilyFallback;
     const h0 = HorizontalSpacing(0, 0);
     const v0 = VerticalSpacing(0, 0);
     DefaultTextBlockStyle block(
@@ -726,6 +728,7 @@ class _NoteEditorState extends State<NoteEditor> {
         DefaultTextBlockStyle(
           TextStyle(
               fontFamily: font,
+              fontFamilyFallback: fallback,
               fontSize: size,
               fontWeight: w,
               height: height,
@@ -743,6 +746,7 @@ class _NoteEditorState extends State<NoteEditor> {
       quote: DefaultTextBlockStyle(
         TextStyle(
             fontFamily: font,
+            fontFamilyFallback: fallback,
             fontSize: 16.5,
             height: 1.55,
             fontStyle: FontStyle.italic,
@@ -1099,68 +1103,75 @@ class _NoteEditorState extends State<NoteEditor> {
         top: false,
         child: Column(
           children: [
-            // Barra de formato (se puede ocultar).
-            AnimatedSize(
-              duration: Anim.medium,
-              curve: Anim.curve,
-              alignment: Alignment.topCenter,
-              child: AnimatedSwitcher(
+            // Barra de formato (se puede ocultar). Ancho fijo al de la
+            // ventana: AnimatedSize solo anima la altura, si no la barra
+            // tardaba en estirarse al ensanchar la ventana.
+            SizedBox(
+              width: double.infinity,
+              child: AnimatedSize(
                 duration: Anim.medium,
-                switchInCurve: Anim.curve,
-                switchOutCurve: Curves.easeIn,
-                transitionBuilder: (c, a) => FadeTransition(
-                  opacity: a,
-                  child: SlideTransition(
-                    position:
-                        Tween(begin: const Offset(0, -0.25), end: Offset.zero)
-                            .animate(a),
-                    child: c,
+                curve: Anim.curve,
+                alignment: Alignment.topCenter,
+                child: AnimatedSwitcher(
+                  duration: Anim.medium,
+                  switchInCurve: Anim.curve,
+                  switchOutCurve: Curves.easeIn,
+                  transitionBuilder: (c, a) => FadeTransition(
+                    opacity: a,
+                    child: SlideTransition(
+                      position:
+                          Tween(begin: const Offset(0, -0.25), end: Offset.zero)
+                              .animate(a),
+                      child: c,
+                    ),
                   ),
+                  child: _board != null
+                      ? BoardToolbar(
+                          key: const ValueKey('barra-pizarra'),
+                          controller: _board!,
+                          readOnly: !writable,
+                          onShare: n == null || n.vault
+                              ? null
+                              : () => showShareSheet(context, repo, n.id),
+                          onAi: n == null || n.vault || foreign
+                              ? null
+                              : () => showNoteAiActions(context, repo, n.id),
+                          onReadText: n == null || n.vault || foreign
+                              ? null
+                              : _boardToText,
+                        )
+                      : _toolbarOpen
+                          ? EditorToolbar(
+                              key: const ValueKey('barra-formato'),
+                              controller: _ctrl,
+                              readOnly: !writable,
+                              onImage: !writable
+                                  ? null
+                                  : () => pickAndInsertImages(context, _ctrl),
+                              onLink: foreign
+                                  ? null
+                                  : () => showLinkNotesPicker(
+                                      context, repo, widget.noteId),
+                              onVoice: !writable
+                                  ? null
+                                  : () => showVoiceRecorder(context, _ctrl),
+                              onAttach: !writable
+                                  ? null
+                                  : () => pickAndAttachFiles(context, _ctrl),
+                              onDraw: !writable ? null : _draw,
+                              onShare: n == null || n.vault
+                                  ? null
+                                  : () => showShareSheet(context, repo, n.id),
+                              // Ni las del Vault ni las de otra persona van a la IA.
+                              onAi: n == null || n.vault || foreign
+                                  ? null
+                                  : () =>
+                                      showNoteAiActions(context, repo, n.id),
+                            )
+                          : const SizedBox(
+                              key: ValueKey('sin-barra'),
+                              width: double.infinity),
                 ),
-                child: _board != null
-                    ? BoardToolbar(
-                        key: const ValueKey('barra-pizarra'),
-                        controller: _board!,
-                        readOnly: !writable,
-                        onShare: n == null || n.vault
-                            ? null
-                            : () => showShareSheet(context, repo, n.id),
-                        onAi: n == null || n.vault || foreign
-                            ? null
-                            : () => showNoteAiActions(context, repo, n.id),
-                        onReadText: n == null || n.vault || foreign
-                            ? null
-                            : _boardToText,
-                      )
-                    : _toolbarOpen
-                        ? EditorToolbar(
-                            key: const ValueKey('barra-formato'),
-                            controller: _ctrl,
-                            readOnly: !writable,
-                            onImage: !writable
-                                ? null
-                                : () => pickAndInsertImages(context, _ctrl),
-                            onLink: foreign
-                                ? null
-                                : () => showLinkNotesPicker(
-                                    context, repo, widget.noteId),
-                            onVoice: !writable
-                                ? null
-                                : () => showVoiceRecorder(context, _ctrl),
-                            onAttach: !writable
-                                ? null
-                                : () => pickAndAttachFiles(context, _ctrl),
-                            onDraw: !writable ? null : _draw,
-                            onShare: n == null || n.vault
-                                ? null
-                                : () => showShareSheet(context, repo, n.id),
-                            // Ni las del Vault ni las de otra persona van a la IA.
-                            onAi: n == null || n.vault || foreign
-                                ? null
-                                : () => showNoteAiActions(context, repo, n.id),
-                          )
-                        : const SizedBox(
-                            key: ValueKey('sin-barra'), width: double.infinity),
               ),
             ),
             if (_board != null)

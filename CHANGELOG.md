@@ -2,6 +2,21 @@
 
 All notable changes to Oganesson TakeNotes (formerly *Notas* / *BabuNotes*).
 
+## [3.8.0] — 2026-11-28
+
+### Added
+- **Fonts**: Theme and colours (Ctrl+,) now has a Font section — System, Serif, Classic, Monospace,
+  Condensed and Handwritten — previewed in each font.
+- **18 themes**: Ruby, Honey, Glacier and Slate join the list.
+- **Friends button** in the top bar, between Settings and ⋯, with a redesigned sheet: a profile card
+  with your @name and friend count, coloured avatars and animated lists.
+- **Quick, smooth fade when you come back** to the app from the background or the tray (instead of
+  the full start-up animation).
+
+### Changed
+- The editor's format bar keeps up with the window while you resize it, instead of catching up late.
+- The Start menu shortcut is now "Oganesson Notas", so typing "notas" in Windows search finds it.
+
 ## [3.7.0] — 2026-11-28
 
 ### Added

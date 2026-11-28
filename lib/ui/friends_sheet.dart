@@ -159,25 +159,44 @@ class _FriendsSheetState extends State<_FriendsSheet> {
         });
       });
 
+  Widget _label(String text) => Padding(
+        padding: const EdgeInsets.fromLTRB(4, 10, 4, 6),
+        child: Text(text.toUpperCase(),
+            style: TextStyle(
+                fontSize: 11.5,
+                letterSpacing: 0.8,
+                fontWeight: FontWeight.w800,
+                color: Palette.of(context).secondary)),
+      );
+
   Widget _person(Person x, {required bool inResults}) {
     final p = Palette.of(context);
-    return ListTile(
+    return Padding(
       key: ValueKey('${inResults ? 'r' : 'f'}-${x.id}'),
-      dense: true,
-      contentPadding: EdgeInsets.zero,
-      leading: PersonAvatar(name: x.username),
-      title: Text(x.handle, maxLines: 1, overflow: TextOverflow.ellipsis),
-      trailing: inResults && x.isFriend
-          ? Icon(Icons.check_rounded, color: p.accent, size: 20)
-          : IconButton(
-              tooltip: inResults ? tr('Añadir') : tr('Quitar'),
-              icon: Icon(
-                  inResults
-                      ? Icons.person_add_alt_rounded
-                      : Icons.close_rounded,
-                  size: 19),
-              onPressed: _busy ? null : () => inResults ? _add(x) : _remove(x),
-            ),
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Material(
+        color: p.background,
+        borderRadius: BorderRadius.circular(14),
+        child: ListTile(
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          contentPadding: const EdgeInsets.only(left: 10, right: 4),
+          leading: PersonAvatar(name: x.username),
+          title: Text(x.handle, maxLines: 1, overflow: TextOverflow.ellipsis),
+          trailing: inResults && x.isFriend
+              ? Icon(Icons.check_rounded, color: p.accent, size: 20)
+              : IconButton(
+                  tooltip: inResults ? tr('Añadir') : tr('Quitar'),
+                  icon: Icon(
+                      inResults
+                          ? Icons.person_add_alt_rounded
+                          : Icons.close_rounded,
+                      size: 19),
+                  onPressed:
+                      _busy ? null : () => inResults ? _add(x) : _remove(x),
+                ),
+        ),
+      ),
     );
   }
 
@@ -202,12 +221,53 @@ class _FriendsSheetState extends State<_FriendsSheet> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(tr('Tu @nombre y amigos'),
-              style:
-                  const TextStyle(fontSize: 22, fontWeight: FontWeight.w800)),
-          const SizedBox(height: 4),
-          Text(tr('Entra con tu @nombre y comparte sin enseñar tu correo.'),
-              style: TextStyle(color: p.secondary, fontSize: 13)),
+          // Tarjeta de perfil.
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(colors: [
+                p.accent.withValues(alpha: 0.22),
+                p.accent.withValues(alpha: 0.06),
+              ], begin: Alignment.topLeft, end: Alignment.bottomRight),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Row(children: [
+              PersonAvatar(name: _username ?? '?', radius: 26),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                        _username == null
+                            ? tr('Tu @nombre y amigos')
+                            : '@$_username',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                            fontSize: 20, fontWeight: FontWeight.w800)),
+                    const SizedBox(height: 2),
+                    Text(
+                        tr('Entra con tu @nombre y comparte sin enseñar tu correo.'),
+                        style: TextStyle(color: p.secondary, fontSize: 12.5)),
+                  ],
+                ),
+              ),
+              if (!_loading && !AppConfig.demo)
+                Column(children: [
+                  Text('${_friends.length}',
+                      style: TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.w800,
+                          color: p.accent)),
+                  Text(tr('amigos'),
+                      style: TextStyle(fontSize: 11.5, color: p.secondary)),
+                ]),
+            ]),
+          )
+              .animate()
+              .fadeIn(duration: Anim.medium)
+              .slideY(begin: 0.15, curve: Anim.curve),
           const SizedBox(height: 14),
           if (_loading)
             const Padding(
@@ -273,12 +333,13 @@ class _FriendsSheetState extends State<_FriendsSheet> {
               child: ListView(
                 shrinkWrap: true,
                 children: [
+                  if (_results.isNotEmpty) _label(tr('Resultados')),
                   for (final (i, x) in _results.indexed)
                     _person(x, inResults: true)
                         .animate(delay: (24 * i).ms)
                         .fadeIn(duration: Anim.medium)
                         .slideY(begin: 0.12, curve: Anim.curve),
-                  if (_results.isNotEmpty) const Divider(height: 16),
+                  if (_friends.isNotEmpty) _label(tr('Tus amigos')),
                   if (_friends.isEmpty && _results.isEmpty && !AppConfig.demo)
                     Padding(
                       padding: const EdgeInsets.symmetric(vertical: 18),
@@ -286,7 +347,11 @@ class _FriendsSheetState extends State<_FriendsSheet> {
                           textAlign: TextAlign.center,
                           style: TextStyle(color: p.secondary)),
                     ),
-                  for (final x in _friends) _person(x, inResults: false),
+                  for (final (i, x) in _friends.indexed)
+                    _person(x, inResults: false)
+                        .animate(delay: (30 * i + 80).ms)
+                        .fadeIn(duration: Anim.medium)
+                        .slideX(begin: 0.08, curve: Anim.curve),
                 ],
               ),
             ),
@@ -298,18 +363,41 @@ class _FriendsSheetState extends State<_FriendsSheet> {
 
 /// Inicial del @nombre en un círculo.
 class PersonAvatar extends StatelessWidget {
-  const PersonAvatar({super.key, required this.name});
+  const PersonAvatar({super.key, required this.name, this.radius = 16});
   final String name;
+  final double radius;
+
+  static const _tones = [
+    Color(0xFF3E7BFA),
+    Color(0xFF30A46C),
+    Color(0xFFF76B15),
+    Color(0xFF8E4EC6),
+    Color(0xFFE5484D),
+    Color(0xFF12A594),
+    Color(0xFFD99A00),
+  ];
 
   @override
   Widget build(BuildContext context) {
-    final p = Palette.of(context);
     final clean = name.startsWith('@') ? name.substring(1) : name;
-    return CircleAvatar(
-      radius: 16,
-      backgroundColor: p.accent.withValues(alpha: 0.15),
+    // Cada persona con su color (siempre el mismo para el mismo nombre).
+    final c = _tones[clean.codeUnits.fold(0, (a, b) => a + b) % _tones.length];
+    return Container(
+      width: radius * 2,
+      height: radius * 2,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        gradient: LinearGradient(
+            colors: [c, Color.lerp(c, Colors.white, 0.35)!],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight),
+      ),
       child: Text(clean.isEmpty ? '?' : clean[0].toUpperCase(),
-          style: TextStyle(color: p.accent, fontWeight: FontWeight.w800)),
+          style: TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w800,
+              fontSize: radius * 0.9)),
     );
   }
 }

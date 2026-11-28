@@ -9,6 +9,7 @@ import 'package:tray_manager/tray_manager.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:windows_single_instance/windows_single_instance.dart';
 
+import '../ui/anim.dart' show resumeTicks;
 import '../ui/i18n.dart';
 
 /// Windows: la app vive en segundo plano.
@@ -208,6 +209,7 @@ class DesktopIntegration with WindowListener, TrayListener {
 
   Future<void> showWindow() async {
     if (!supported) return;
+    if (!await windowManager.isVisible()) resumeTicks.value++;
     if (await windowManager.isMinimized()) await windowManager.restore();
     await windowManager.setOpacity(1);
     await windowManager.show();

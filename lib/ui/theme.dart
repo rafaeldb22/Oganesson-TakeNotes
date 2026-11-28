@@ -348,7 +348,7 @@ const appThemes = <AppTheme>[
       accent: Color(0xFFD6336C),
       onAccent: Colors.white,
       background: Color(0xFFFCF1F4),
-      card: Color(0xFFFFFBFC),
+      card: Color(0xFFFCF9FA),
       secondary: Color(0xFF7C6870),
       separator: Color(0xFFF0D5DE),
       selected: Color(0xFFFAD9E4),
@@ -585,21 +585,166 @@ const appThemes = <AppTheme>[
       hover: Color(0xFF262F1F),
     ),
   ),
+  AppTheme(
+    id: 'rubi',
+    name: 'Rubí',
+    description: 'Granate profundo y gris perla',
+    light: NotasColors(
+      accent: Color(0xFFA3263F),
+      onAccent: Colors.white,
+      background: Color(0xFFF6EFF1),
+      card: Color(0xFFFCF9FA),
+      secondary: Color(0xFF725F65),
+      separator: Color(0xFFE5D3D8),
+      selected: Color(0xFFF6D3DC),
+      searchFill: Color(0xFFEEE2E6),
+      hover: Color(0xFFFAF3F5),
+    ),
+    dark: NotasColors(
+      accent: Color(0xFFF06A86),
+      onAccent: Color(0xFF2A0710),
+      background: Color(0xFF150C0F),
+      card: Color(0xFF23161A),
+      secondary: Color(0xFFB39CA3),
+      separator: Color(0xFF3E2A30),
+      selected: Color(0xFF5A2232),
+      searchFill: Color(0xFF23161A),
+      hover: Color(0xFF2E1D22),
+    ),
+  ),
+  AppTheme(
+    id: 'miel',
+    name: 'Miel',
+    description: 'Ámbar dorado y crema',
+    light: NotasColors(
+      accent: Color(0xFFB7791F),
+      onAccent: Colors.white,
+      background: Color(0xFFFAF5EA),
+      card: Color(0xFFFFFDF7),
+      secondary: Color(0xFF76694F),
+      separator: Color(0xFFEADFC6),
+      selected: Color(0xFFF8E6BC),
+      searchFill: Color(0xFFF1E9D6),
+      hover: Color(0xFFFBF6EC),
+    ),
+    dark: NotasColors(
+      accent: Color(0xFFF5B942),
+      onAccent: Color(0xFF2A1C02),
+      background: Color(0xFF15110A),
+      card: Color(0xFF241D12),
+      secondary: Color(0xFFB3A68C),
+      separator: Color(0xFF3C3222),
+      selected: Color(0xFF584318),
+      searchFill: Color(0xFF241D12),
+      hover: Color(0xFF2F271A),
+    ),
+  ),
+  AppTheme(
+    id: 'glaciar',
+    name: 'Glaciar',
+    description: 'Azul hielo y blanco nieve',
+    light: NotasColors(
+      accent: Color(0xFF2B6CB0),
+      onAccent: Colors.white,
+      background: Color(0xFFEEF4FA),
+      card: Color(0xFFFAFCFE),
+      secondary: Color(0xFF5E6E80),
+      separator: Color(0xFFD3DFEC),
+      selected: Color(0xFFD6E6F8),
+      searchFill: Color(0xFFE2EBF5),
+      hover: Color(0xFFF3F7FC),
+    ),
+    dark: NotasColors(
+      accent: Color(0xFF7CB8F2),
+      onAccent: Color(0xFF06192C),
+      background: Color(0xFF0C1219),
+      card: Color(0xFF161F2A),
+      secondary: Color(0xFF93A5B8),
+      separator: Color(0xFF2A3846),
+      selected: Color(0xFF1F3D5C),
+      searchFill: Color(0xFF161F2A),
+      hover: Color(0xFF1E2935),
+    ),
+  ),
+  AppTheme(
+    id: 'pizarra',
+    name: 'Pizarra',
+    description: 'Gris carbón con chispa naranja',
+    light: NotasColors(
+      accent: Color(0xFFD9622B),
+      onAccent: Colors.white,
+      background: Color(0xFFEFEFF0),
+      card: Color(0xFFFBFBFB),
+      secondary: Color(0xFF62666D),
+      separator: Color(0xFFD6D7DA),
+      selected: Color(0xFFF6DCCD),
+      searchFill: Color(0xFFE4E5E7),
+      hover: Color(0xFFF5F5F6),
+    ),
+    dark: NotasColors(
+      accent: Color(0xFFFF8A4C),
+      onAccent: Color(0xFF2A1104),
+      background: Color(0xFF111214),
+      card: Color(0xFF1D1F23),
+      secondary: Color(0xFF9C9FA6),
+      separator: Color(0xFF33363C),
+      selected: Color(0xFF4A2F22),
+      searchFill: Color(0xFF1D1F23),
+      hover: Color(0xFF272A2F),
+    ),
+  ),
 ];
 
 AppTheme themeById(String id) =>
     appThemes.firstWhere((t) => t.id == id, orElse: () => appThemes.first);
+
+/// Fuente de la app. Se usan las del sistema (Windows y Android las traen),
+/// con alternativas para que en cada plataforma salga la más parecida.
+class AppFont {
+  const AppFont(this.id, this.name, this.family, [this.fallback = const []]);
+  final String id, name;
+  final String? family;
+  final List<String> fallback;
+}
+
+const appFonts = <AppFont>[
+  AppFont('sistema', 'Sistema', null),
+  AppFont('serif', 'Serif', 'Georgia', ['Cambria', 'Noto Serif', 'serif']),
+  AppFont('clasica', 'Clásica', 'Palatino Linotype',
+      ['Book Antiqua', 'Times New Roman', 'serif']),
+  AppFont('mono', 'Monoespaciada', 'Cascadia Code',
+      ['Consolas', 'Cascadia Mono', 'monospace']),
+  AppFont('condensada', 'Condensada', 'Bahnschrift',
+      ['Arial Narrow', 'sans-serif-condensed']),
+  AppFont('manuscrita', 'Manuscrita', 'Segoe Print',
+      ['Comic Sans MS', 'casual', 'cursive']),
+];
+
+AppFont fontById(String id) =>
+    appFonts.firstWhere((f) => f.id == id, orElse: () => appFonts.first);
 
 /// Tema elegido + modo (automático / claro / oscuro). Se guarda en el
 /// dispositivo para que la próxima vez se abra igual.
 class ThemeSettings extends ChangeNotifier {
   String themeId = appThemes.first.id;
   ThemeMode mode = ThemeMode.system;
+  String fontId = appFonts.first.id;
 
   static const _kTheme = 'ajustes_tema';
   static const _kMode = 'ajustes_modo';
+  static const _kFont = 'ajustes_fuente';
 
   AppTheme get theme => themeById(themeId);
+  AppFont get font => fontById(fontId);
+
+  Future<void> setFont(String id) async {
+    if (id == fontId) return;
+    fontId = id;
+    notifyListeners();
+    try {
+      (await SharedPreferences.getInstance()).setString(_kFont, id);
+    } catch (_) {}
+  }
 
   /// Aviso para repintar el widget de Android con el color nuevo.
   VoidCallback? onThemeChanged;
@@ -608,6 +753,7 @@ class ThemeSettings extends ChangeNotifier {
     try {
       final p = await SharedPreferences.getInstance();
       themeId = themeById(p.getString(_kTheme) ?? themeId).id;
+      fontId = fontById(p.getString(_kFont) ?? fontId).id;
       mode = ThemeMode.values.firstWhere(
         (m) => m.name == p.getString(_kMode),
         orElse: () => ThemeMode.system,
@@ -668,7 +814,7 @@ class Palette {
   }
 }
 
-ThemeData buildTheme(AppTheme t, Brightness b) {
+ThemeData buildTheme(AppTheme t, Brightness b, [AppFont? font]) {
   final dark = b == Brightness.dark;
   final c = dark ? t.dark : t.lightSoft;
   final fg = dark ? Colors.white : const Color(0xFF111111);
@@ -683,6 +829,9 @@ ThemeData buildTheme(AppTheme t, Brightness b) {
 
   return ThemeData(
     useMaterial3: true,
+    fontFamily: font?.family,
+    fontFamilyFallback:
+        font == null || font.fallback.isEmpty ? null : font.fallback,
     colorScheme: scheme,
     scaffoldBackgroundColor: c.background,
     extensions: [c],

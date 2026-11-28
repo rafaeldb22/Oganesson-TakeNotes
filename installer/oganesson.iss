@@ -37,8 +37,12 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 [Files]
 Source: "..\build\windows\x64\runner\Release\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
+; "Notas" in the shortcut name so Windows search finds the app when typing it.
+[InstallDelete]
+Type: files; Name: "{autoprograms}\Oganesson.lnk"
+
 [Icons]
-Name: "{autoprograms}\Oganesson"; Filename: "{app}\Oganesson.exe"
+Name: "{autoprograms}\Oganesson Notas"; Filename: "{app}\Oganesson.exe"; Comment: "Notas, tareas y calendario"
 Name: "{autodesktop}\Oganesson"; Filename: "{app}\Oganesson.exe"; Tasks: desktopicon
 
 [Run]

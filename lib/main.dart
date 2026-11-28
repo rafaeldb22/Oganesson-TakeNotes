@@ -15,6 +15,7 @@ import 'config.dart';
 import 'data/desktop_integration.dart';
 import 'data/reminders.dart';
 import 'data/widget_bridge.dart';
+import 'ui/anim.dart' show ResumeFade;
 import 'ui/auth_gate.dart';
 import 'ui/i18n.dart';
 import 'ui/logo.dart';
@@ -146,8 +147,10 @@ class NotasApp extends StatelessWidget {
       builder: (context, _) => MaterialApp(
         title: 'Oganesson',
         debugShowCheckedModeBanner: false,
-        theme: buildTheme(themeSettings.theme, Brightness.light),
-        darkTheme: buildTheme(themeSettings.theme, Brightness.dark),
+        theme: buildTheme(
+            themeSettings.theme, Brightness.light, themeSettings.font),
+        darkTheme: buildTheme(
+            themeSettings.theme, Brightness.dark, themeSettings.font),
         themeMode: themeSettings.mode,
         // Cambio de tema animado: los colores se funden en vez de saltar.
         themeAnimationDuration: const Duration(milliseconds: 450),
@@ -163,14 +166,15 @@ class NotasApp extends StatelessWidget {
         // En Windows, barra de título propia encima de todas las pantallas.
         // Animación de inicio (el logo se dibuja) por encima de toda la app.
         builder: (context, child) => StartupSplash(
-          child: isDesktopWindows
-              ? Column(
-                  children: [
-                    const AppTitleBar(),
-                    Expanded(child: child ?? const SizedBox()),
-                  ],
-                )
-              : (child ?? const SizedBox()),
+          child: ResumeFade(
+              child: isDesktopWindows
+                  ? Column(
+                      children: [
+                        const AppTitleBar(),
+                        Expanded(child: child ?? const SizedBox()),
+                      ],
+                    )
+                  : (child ?? const SizedBox())),
         ),
         // Al cambiar de idioma se vuelve a montar la app con los textos nuevos.
         home: KeyedSubtree(

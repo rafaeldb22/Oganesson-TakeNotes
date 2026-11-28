@@ -7,6 +7,63 @@ import 'package:flutter/material.dart';
 final bool autoKeyboard = !Platform.isAndroid;
 
 /// Curvas y duraciones comunes para que todo se mueva igual.
+/// Al volver a la app (desde segundo plano o la bandeja) todo entra con un
+/// fundido y un pequeño zoom rápidos, no con la animación de inicio.
+final resumeTicks = ValueNotifier<int>(0);
+
+class ResumeFade extends StatefulWidget {
+  const ResumeFade({super.key, required this.child});
+  final Widget child;
+
+  @override
+  State<ResumeFade> createState() => _ResumeFadeState();
+}
+
+class _ResumeFadeState extends State<ResumeFade>
+    with SingleTickerProviderStateMixin {
+  late final _c = AnimationController(
+      vsync: this, duration: const Duration(milliseconds: 320), value: 1);
+  late final AppLifecycleListener _life;
+  DateTime? _hiddenAt;
+
+  @override
+  void initState() {
+    super.initState();
+    resumeTicks.addListener(_play);
+    _life = AppLifecycleListener(
+      onHide: () => _hiddenAt = DateTime.now(),
+      onShow: () {
+        // Solo si de verdad estuvo fuera (no al cambiar de ventana un momento).
+        final at = _hiddenAt;
+        if (at != null && DateTime.now().difference(at).inMilliseconds > 400) {
+          _play();
+        }
+        _hiddenAt = null;
+      },
+    );
+  }
+
+  void _play() => _c.forward(from: 0);
+
+  @override
+  void dispose() {
+    resumeTicks.removeListener(_play);
+    _life.dispose();
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = CurvedAnimation(parent: _c, curve: Curves.easeOutCubic);
+    return FadeTransition(
+      opacity: Tween(begin: 0.4, end: 1.0).animate(t),
+      child: ScaleTransition(
+          scale: Tween(begin: 0.985, end: 1.0).animate(t), child: widget.child),
+    );
+  }
+}
+
 class Anim {
   static const fast = Duration(milliseconds: 160);
   static const medium = Duration(milliseconds: 280);

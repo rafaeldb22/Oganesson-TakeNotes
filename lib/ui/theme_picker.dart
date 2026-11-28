@@ -93,11 +93,78 @@ class _ThemePicker extends StatelessWidget {
                     onSelectionChanged: (s) => themeSettings.setMode(s.first),
                   ),
                 ).animate().fadeIn(delay: 250.ms, duration: Anim.medium),
+                const SizedBox(height: 22),
+                Text(tr('Fuente'),
+                    style:
+                        TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 10,
+                  runSpacing: 10,
+                  children: [
+                    for (final (i, f) in appFonts.indexed)
+                      _FontChip(
+                        font: f,
+                        selected: f.id == themeSettings.fontId,
+                        onTap: () => themeSettings.setFont(f.id),
+                      )
+                          .animate(delay: (300 + 40 * i).ms)
+                          .fadeIn(duration: Anim.medium)
+                          .slideY(begin: 0.2, curve: Anim.curve),
+                  ],
+                ),
               ],
             ),
           ),
         );
       },
+    );
+  }
+}
+
+/// Muestra "Aa" y el nombre en la propia fuente.
+class _FontChip extends StatelessWidget {
+  const _FontChip(
+      {required this.font, required this.selected, required this.onTap});
+  final AppFont font;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = Palette.of(context);
+    final style = TextStyle(
+        fontFamily: font.family,
+        fontFamilyFallback: font.fallback.isEmpty ? null : font.fallback);
+    return Bouncy(
+      pressedScale: 0.95,
+      child: GestureDetector(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: Anim.medium,
+          curve: Anim.curve,
+          width: 104,
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          decoration: BoxDecoration(
+            color: selected ? p.accent.withValues(alpha: 0.12) : p.background,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+                color: selected ? p.accent : Colors.transparent, width: 1.6),
+          ),
+          child: Column(children: [
+            Text('Aa',
+                style: style.copyWith(
+                    fontSize: 26,
+                    fontWeight: FontWeight.w700,
+                    color: selected ? p.accent : null)),
+            const SizedBox(height: 4),
+            Text(tr(font.name),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: style.copyWith(fontSize: 12.5, color: p.secondary)),
+          ]),
+        ),
+      ),
     );
   }
 }
