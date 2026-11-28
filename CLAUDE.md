@@ -220,6 +220,18 @@ that it still arrives. On Windows, check toasts are enabled first:
 - `.github/workflows/window-test.yml` — opens the app on Windows (demo mode), resizes
   it and stores screenshots in the `screenshots` branch.
 
+- 3.5–3.10 additions: `lib/data/markdown.dart` (Markdown → Quill ops; `withText` converts AI text,
+  `withTextAfter` inserts after a given line), `lib/data/similar_notes.dart` (duplicate warning, no AI),
+  `lib/data/smart_groups.dart` ("By type (AI)" sort, cached per note title), `lib/ui/focus_tools.dart`
+  (Pomodoro + productivity stats). Tasks: `Note.checkable` is the `opt:check` token in `Note.links`
+  (no migration); without it a dated note is calendar-only and never overdue. One-day notes end at the
+  next midnight (`Note.barEnd`). The AI only confirms deletions; `web_search` uses each provider's
+  native search; `AiSettings.memory` is appended to the (otherwise static) system prompt. Whiteboard
+  sheet: `BoardData.side` + `paperFor` (square, grows in 200 px steps). Mouse drag-selection in the
+  editor converts to `DragTextSelection` (Quill otherwise scrolls back to the selection start).
+  Global shortcuts that must work inside the editor go through `HardwareKeyboard` in `notes_home.dart`
+  (`_onKey`); mouse side buttons use a global pointer route (`_sideButtons`).
+
 ## Conventions
 
 - Bump `version:` in `pubspec.yaml` and add a section to `CHANGELOG.md` for each release.
