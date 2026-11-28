@@ -814,10 +814,11 @@ class TempCard extends StatelessWidget {
                       const SizedBox(height: 4),
                       Text(
                         note.title,
-                        maxLines: 1,
+                        maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                           fontSize: 15.5,
+                          height: 1.25,
                           fontWeight: FontWeight.w600,
                           decoration:
                               note.done ? TextDecoration.lineThrough : null,

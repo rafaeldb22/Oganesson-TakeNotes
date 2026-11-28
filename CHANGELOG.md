@@ -2,6 +2,12 @@
 
 All notable changes to Oganesson TakeNotes (formerly *Notas* / *BabuNotes*).
 
+## [3.16.2] — 2026-11-28
+
+### Fixed
+- Calendar day panel: task titles use two lines instead of being cut, and the time left no longer
+  gets cut ("20 …") or glued to the date — in narrow cards the date goes on its own line.
+
 ## [3.16.1] — 2026-11-28
 
 ### Changed

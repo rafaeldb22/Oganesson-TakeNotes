@@ -196,18 +196,34 @@ class TimeBar extends StatelessWidget {
                 color: color,
               ),
               const SizedBox(width: 4),
+              // En sitios estrechos la fecha baja a su propia línea: antes el
+              // tiempo se cortaba ("20 …") o se pegaba a la fecha.
               Expanded(
-                child: Text(
-                  tiempoNota(note),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                      fontSize: 12, color: color, fontWeight: FontWeight.w600),
-                ),
+                child: LayoutBuilder(builder: (context, c) {
+                  final left = Text(tiempoNota(note),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                          fontSize: 12,
+                          color: color,
+                          fontWeight: FontWeight.w600));
+                  final date = Text(fechaNota(note),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                          fontSize: 12, color: Palette.secondary(context)));
+                  if (c.maxWidth < 230) {
+                    return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [left, const SizedBox(height: 2), date]);
+                  }
+                  return Row(children: [
+                    Expanded(child: left),
+                    const SizedBox(width: 10),
+                    date,
+                  ]);
+                }),
               ),
-              Text(fechaNota(note),
-                  style: TextStyle(
-                      fontSize: 12, color: Palette.secondary(context))),
             ],
           ),
         ],
