@@ -18,6 +18,7 @@ import 'data/reminders.dart';
 import 'data/widget_bridge.dart';
 import 'ui/anim.dart' show ResumeFade;
 import 'ui/auth_gate.dart';
+import 'ui/focus_tools.dart' show PomodoroTomato, showPomodoro;
 import 'ui/i18n.dart';
 import 'ui/logo.dart';
 import 'ui/theme.dart';
@@ -168,16 +169,17 @@ class NotasApp extends StatelessWidget {
         ],
         // En Windows, barra de título propia encima de todas las pantallas.
         // Animación de inicio (el logo se dibuja) por encima de toda la app.
+        navigatorKey: appNavigator,
         builder: (context, child) => StartupSplash(
           child: ResumeFade(
               child: isDesktopWindows
                   ? Column(
                       children: [
                         const AppTitleBar(),
-                        Expanded(child: child ?? const SizedBox()),
+                        Expanded(child: _withTomato(child)),
                       ],
                     )
-                  : (child ?? const SizedBox())),
+                  : _withTomato(child)),
         ),
         // Al cambiar de idioma se vuelve a montar la app con los textos nuevos.
         home: KeyedSubtree(
@@ -190,6 +192,24 @@ class NotasApp extends StatelessWidget {
     );
   }
 }
+
+/// Navegador de la app (para abrir el pomodoro desde el tomate, que está
+/// por encima de las pantallas).
+final appNavigator = GlobalKey<NavigatorState>();
+
+Widget _withTomato(Widget? child) => Stack(children: [
+      child ?? const SizedBox(),
+      Positioned(
+        left: 14,
+        bottom: 14,
+        child: SafeArea(
+          child: PomodoroTomato(onTap: () {
+            final ctx = appNavigator.currentContext;
+            if (ctx != null) showPomodoro(ctx);
+          }),
+        ),
+      ),
+    ]);
 
 class _MissingConfig extends StatelessWidget {
   const _MissingConfig();

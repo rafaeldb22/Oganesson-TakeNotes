@@ -85,7 +85,11 @@ Future<void> showCompleted(BuildContext context, NotesRepository repo) {
                             key: ValueKey(notes[i].id),
                             note: notes[i],
                             until: repo.completedUntil(notes[i]),
-                            onRestore: () => repo.toggleDone(notes[i].id),
+                            // Una de solo calendario ya acabó: no se
+                            // "descompleta".
+                            onRestore: notes[i].done
+                                ? () => repo.toggleDone(notes[i].id)
+                                : null,
                             onDelete: () => repo.delete(notes[i].id),
                           )
                               .animate(delay: (30 * i.clamp(0, 12)).ms)
@@ -113,7 +117,7 @@ class _CompletedTile extends StatelessWidget {
 
   final Note note;
   final DateTime until;
-  final VoidCallback onRestore;
+  final VoidCallback? onRestore;
   final VoidCallback onDelete;
 
   @override

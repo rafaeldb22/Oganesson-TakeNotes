@@ -1270,4 +1270,14 @@ const enStrings = <String, String>{
   'La IA sugiere {0} notas': 'The AI suggests {0} notes',
   'Sugerir con IA': 'Suggest with AI',
   'Enlazar con IA': 'Link with AI',
+  'Hecha. Vuelve {0}': 'Done. Back {0}',
+  'Tareas completadas': 'Completed tasks',
+  'Aún no has completado tareas en este periodo.':
+      'No tasks completed in this period yet.',
+  'Ajustes del pomodoro': 'Pomodoro settings',
+  'Concentración (min)': 'Focus (min)',
+  'Descanso corto (min)': 'Short break (min)',
+  'Descanso largo (min)': 'Long break (min)',
+  'Pomodoros hasta el descanso largo': 'Pomodoros until the long break',
+  'Empezar la siguiente fase sola': 'Start the next phase automatically',
 };

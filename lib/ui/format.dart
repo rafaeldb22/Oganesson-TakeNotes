@@ -69,6 +69,26 @@ String fechaCorta(DateTime utc) {
 }
 
 /// "120 palabras · 640 caracteres" (sin contar imágenes ni saltos de línea).
+/// Un día, pasado o futuro: "hoy", "mañana", "ayer" o "vie 5 dic".
+/// (`fechaCorta` es para "cuándo se editó": hoy da la hora.)
+String fechaDia(DateTime when) {
+  final d = when.toLocal();
+  final now = DateTime.now();
+  final diff = DateTime(d.year, d.month, d.day)
+      .difference(DateTime(now.year, now.month, now.day))
+      .inDays;
+  if (diff == 0) return _en ? 'today' : 'hoy';
+  if (diff == 1) return _en ? 'tomorrow' : 'mañana';
+  if (diff == -1) return _en ? 'yesterday' : 'ayer';
+  final wd =
+      (_en ? _daysEn : _dias)[d.weekday - 1].substring(0, 3).toLowerCase();
+  final month = _en
+      ? _monthsEn[d.month - 1].substring(0, 3)
+      : _meses[d.month - 1].substring(0, 3);
+  final year = d.year == now.year ? '' : ' ${d.year}';
+  return _en ? '$wd, $month ${d.day}$year' : '$wd ${d.day} $month$year';
+}
+
 String textStats(String text) {
   final t = text.replaceAll('￼', '');
   final words = RegExp(r'\S+').allMatches(t).length;

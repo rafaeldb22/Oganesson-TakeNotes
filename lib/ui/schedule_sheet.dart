@@ -146,7 +146,7 @@ class _ScheduleSheetState extends State<_ScheduleSheet> {
 
   /// "Hoy, todo el día" · "3–8 dic · 6 días" (cambia con animación).
   String get _summary {
-    String day(DateTime x) => fechaCorta(x.toUtc());
+    String day(DateTime x) => fechaDia(x);
     String hm(DateTime x) => '${x.hour}:${x.minute.toString().padLeft(2, '0')}';
     if (_oneDay) {
       return _allDay

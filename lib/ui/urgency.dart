@@ -24,7 +24,7 @@ void completeTask(BuildContext context, NotesRepository repo, String id) {
   final repeats = !n.done && RepeatRule.parse(n.repeat) != null;
   repo.toggleDone(id);
   if (repeats) {
-    showToast(context, trf('Hecha. Vuelve el {0}', [fechaCorta(n.dueAt!)]),
+    showToast(context, trf('Hecha. Vuelve {0}', [fechaDia(n.dueAt!)]),
         icon: Icons.event_repeat_rounded);
   }
 }

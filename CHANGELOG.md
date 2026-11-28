@@ -2,6 +2,23 @@
 
 All notable changes to Oganesson TakeNotes (formerly *Notas* / *BabuNotes*).
 
+## [3.13.0] — 2026-11-28
+
+### Added
+- **Pomodoro tomato**: while a pomodoro is on, a tomato in the theme's colours sits at the bottom
+  left with the time inside; tap it to open the pomodoro.
+- **Configurable pomodoro**: focus, short and long break minutes, rounds until the long break, and
+  whether the next phase starts on its own.
+- **Productivity** lists the tasks you completed in the period.
+- **Tab** inserts a big 4-space jump (Shift+Tab removes it); in lists it indents.
+
+### Changed
+- Calendar-only notes move to Completed 5 minutes after they end.
+- After adding a photo, the cursor waits on an empty line below it to keep writing.
+
+### Fixed
+- The date picker summary showed "0:00 → 0:00" instead of the days.
+
 ## [3.12.0] — 2026-11-28
 
 ### Added

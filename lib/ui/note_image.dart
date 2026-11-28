@@ -57,8 +57,14 @@ Future<int> insertImages(BuildContext context, QuillController controller,
     final length = sel.isValid ? (sel.extentOffset - sel.baseOffset).abs() : 0;
     if (length > 0) controller.replaceText(index, length, '', null);
     final at = insertImageBlock(controller, index, src);
-    // El cursor queda en la línea de debajo, listo para seguir escribiendo.
-    controller.moveCursorToPosition(at + 2);
+    // El cursor queda en una línea vacía debajo, listo para seguir
+    // escribiendo (si la imagen era lo último, se crea esa línea).
+    final text = controller.document.toPlainText();
+    if (at + 2 >= text.length || text[at + 2] != '\n') {
+      controller.replaceText(at + 2, 0, '\n', null);
+    }
+    controller.updateSelection(
+        TextSelection.collapsed(offset: at + 2), ChangeSource.local);
     added++;
   }
   if (added < images.length && context.mounted) {

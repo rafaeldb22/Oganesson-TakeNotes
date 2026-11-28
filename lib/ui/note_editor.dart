@@ -897,6 +897,33 @@ class _NoteEditorState extends State<NoteEditor> {
     );
   }
 
+  /// Tab: en una lista, sangra (o quita sangría con Mayús); en texto, un
+  /// salto grande de 4 espacios, como en VS Code.
+  static const _tabSpaces = '    ';
+
+  void _tab(bool back) {
+    final list = _ctrl.getSelectionStyle().attributes[Attribute.list.key];
+    if (list != null || !_ctrl.selection.isCollapsed) {
+      _ctrl.indentSelection(!back);
+      return;
+    }
+    final at = _ctrl.selection.baseOffset;
+    if (back) {
+      final text = _ctrl.document.toPlainText();
+      var n = 0;
+      while (n < 4 && at - n - 1 >= 0 && text[at - n - 1] == ' ') {
+        n++;
+      }
+      if (n > 0) {
+        _ctrl.replaceText(
+            at - n, n, '', TextSelection.collapsed(offset: at - n));
+      }
+      return;
+    }
+    _ctrl.replaceText(at, 0, _tabSpaces,
+        TextSelection.collapsed(offset: at + _tabSpaces.length));
+  }
+
   Future<void> _draw() async {
     final png = await showDrawingPad(context);
     if (png != null && mounted) await insertImages(context, _ctrl, [png]);
@@ -1134,6 +1161,7 @@ class _NoteEditorState extends State<NoteEditor> {
                     setState(() => _toolbarOpen = !_toolbarOpen);
                   case 'imagen':
                     await pickAndInsertImages(context, _ctrl);
+                    if (mounted) _focus.requestFocus();
                   case 'borrar':
                     _closing = true;
                     widget.onDelete(widget.noteId);
@@ -1273,7 +1301,11 @@ class _NoteEditorState extends State<NoteEditor> {
                               readOnly: !writable,
                               onImage: !writable
                                   ? null
-                                  : () => pickAndInsertImages(context, _ctrl),
+                                  : () async {
+                                      await pickAndInsertImages(context, _ctrl);
+                                      // Seguir escribiendo debajo de la foto.
+                                      if (mounted) _focus.requestFocus();
+                                    },
                               onLink: foreign
                                   ? null
                                   : () => showLinkNotesPicker(
@@ -1415,28 +1447,37 @@ class _NoteEditorState extends State<NoteEditor> {
                                           const NoteFileEmbedBuilder(),
                                           const NoteBoardEmbedBuilder(),
                                         ],
-                                        customShortcuts:
-                                            widget.onCommandPalette == null
-                                                ? null
-                                                : const {
-                                                    SingleActivator(
-                                                      LogicalKeyboardKey.keyK,
-                                                      control: true,
-                                                    ): _PaletteIntent(),
-                                                  },
-                                        customActions: widget
-                                                    .onCommandPalette ==
-                                                null
-                                            ? null
-                                            : {
-                                                _PaletteIntent: CallbackAction<
-                                                    _PaletteIntent>(
-                                                  onInvoke: (_) {
-                                                    widget.onCommandPalette!();
-                                                    return null;
-                                                  },
-                                                ),
+                                        customShortcuts: {
+                                          const SingleActivator(
+                                                  LogicalKeyboardKey.tab):
+                                              const _TabIntent(false),
+                                          const SingleActivator(
+                                                  LogicalKeyboardKey.tab,
+                                                  shift: true):
+                                              const _TabIntent(true),
+                                          if (widget.onCommandPalette != null)
+                                            const SingleActivator(
+                                              LogicalKeyboardKey.keyK,
+                                              control: true,
+                                            ): const _PaletteIntent(),
+                                        },
+                                        customActions: {
+                                          _TabIntent:
+                                              CallbackAction<_TabIntent>(
+                                            onInvoke: (i) {
+                                              _tab(i.back);
+                                              return null;
+                                            },
+                                          ),
+                                          if (widget.onCommandPalette != null)
+                                            _PaletteIntent:
+                                                CallbackAction<_PaletteIntent>(
+                                              onInvoke: (_) {
+                                                widget.onCommandPalette!();
+                                                return null;
                                               },
+                                            ),
+                                        },
                                         contentInsertionConfiguration:
                                             ContentInsertionConfiguration(
                                           allowedMimeTypes: const [
@@ -1537,6 +1578,11 @@ class _SharedBanner extends StatelessWidget {
 
 class _PaletteIntent extends Intent {
   const _PaletteIntent();
+}
+
+class _TabIntent extends Intent {
+  const _TabIntent(this.back);
+  final bool back;
 }
 
 class _TemporalBanner extends StatelessWidget {

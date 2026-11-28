@@ -8,7 +8,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../data/notes_repository.dart';
 import '../data/reminders.dart';
+import '../models/note.dart';
 import 'anim.dart';
+import 'format.dart' show fechaMedia;
 import 'i18n.dart';
 import 'theme.dart';
 
@@ -20,15 +22,62 @@ enum PomodoroPhase { focus, rest }
 /// contando aunque se cierre la hoja, y suma los minutos de cada día para
 /// las estadísticas.
 class Pomodoro extends ChangeNotifier {
-  Pomodoro._();
+  Pomodoro._() {
+    loadSettings();
+  }
   static final instance = Pomodoro._();
 
-  static const focusMinutes = 25, restMinutes = 5, longRestMinutes = 15;
+  /// Ajustes (se guardan en el dispositivo): minutos de cada fase, cada
+  /// cuántos pomodoros toca el descanso largo y si la siguiente fase empieza
+  /// sola.
+  int focusMinutes = 25,
+      restMinutes = 5,
+      longRestMinutes = 15,
+      roundsToLong = 4;
+  bool autoStart = true;
   static const _kMinutes = 'pomodoro_minutos';
+  static const _kSettings = 'pomodoro_ajustes';
+
+  /// "Modo pomodoro" activo: desde Empezar hasta Reiniciar (el tomate de
+  /// abajo a la izquierda se ve mientras tanto).
+  bool active = false;
+
+  Future<void> loadSettings() async {
+    try {
+      final raw = (await SharedPreferences.getInstance()).getString(_kSettings);
+      if (raw == null) return;
+      final j = jsonDecode(raw) as Map;
+      int v(String k, int d, int min, int max) =>
+          ((j[k] as num?)?.toInt() ?? d).clamp(min, max);
+      focusMinutes = v('f', 25, 1, 120);
+      restMinutes = v('r', 5, 1, 60);
+      longRestMinutes = v('l', 15, 1, 90);
+      roundsToLong = v('n', 4, 2, 10);
+      autoStart = j['a'] != false;
+      if (!running) left = total;
+      notifyListeners();
+    } catch (_) {}
+  }
+
+  Future<void> saveSettings() async {
+    if (!running) left = total;
+    notifyListeners();
+    try {
+      await (await SharedPreferences.getInstance()).setString(
+          _kSettings,
+          jsonEncode({
+            'f': focusMinutes,
+            'r': restMinutes,
+            'l': longRestMinutes,
+            'n': roundsToLong,
+            'a': autoStart,
+          }));
+    } catch (_) {}
+  }
 
   PomodoroPhase phase = PomodoroPhase.focus;
   int rounds = 0; // pomodoros acabados en esta sesión
-  Duration left = const Duration(minutes: focusMinutes);
+  Duration left = const Duration(minutes: 25);
   DateTime? _endsAt;
   Timer? _timer;
 
@@ -36,12 +85,15 @@ class Pomodoro extends ChangeNotifier {
   Duration get total => Duration(
       minutes: phase == PomodoroPhase.focus
           ? focusMinutes
-          : (rounds % 4 == 0 && rounds > 0 ? longRestMinutes : restMinutes));
+          : (rounds % roundsToLong == 0 && rounds > 0
+              ? longRestMinutes
+              : restMinutes));
   double get progress =>
       1 - left.inMilliseconds / total.inMilliseconds.clamp(1, 1 << 31);
 
   void start() {
     if (running) return;
+    active = true;
     _endsAt = DateTime.now().add(left);
     _timer = Timer.periodic(const Duration(milliseconds: 250), (_) => _tick());
     notifyListeners();
@@ -57,6 +109,8 @@ class Pomodoro extends ChangeNotifier {
   void reset() {
     _timer?.cancel();
     _endsAt = null;
+    active = false;
+    rounds = 0;
     phase = PomodoroPhase.focus;
     left = total;
     notifyListeners();
@@ -97,7 +151,7 @@ class Pomodoro extends ChangeNotifier {
               : tr('A por el siguiente pomodoro.')));
     }
     notifyListeners();
-    if (keepRunning) start();
+    if (keepRunning && autoStart) start();
   }
 
   static String _day(DateTime d) =>
@@ -126,6 +180,213 @@ class Pomodoro extends ChangeNotifier {
     await (await SharedPreferences.getInstance())
         .setString(_kMinutes, jsonEncode(all));
   }
+}
+
+/// Ajustes del pomodoro, plegados bajo un botón.
+class _PomodoroSettings extends StatefulWidget {
+  const _PomodoroSettings();
+
+  @override
+  State<_PomodoroSettings> createState() => _PomodoroSettingsState();
+}
+
+class _PomodoroSettingsState extends State<_PomodoroSettings> {
+  bool _open = false;
+
+  Widget _stepper(String label, int value, int min, int max, int step,
+      void Function(int) set) {
+    final p = Palette.of(context);
+    return Row(children: [
+      Expanded(child: Text(label)),
+      IconButton(
+        visualDensity: VisualDensity.compact,
+        onPressed: value <= min ? null : () => set(value - step),
+        icon: const Icon(Icons.remove_rounded, size: 18),
+      ),
+      SizedBox(
+        width: 44,
+        child: Text('$value',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontWeight: FontWeight.w800, color: p.accent)),
+      ),
+      IconButton(
+        visualDensity: VisualDensity.compact,
+        onPressed: value >= max ? null : () => set(value + step),
+        icon: const Icon(Icons.add_rounded, size: 18),
+      ),
+    ]);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final pomo = Pomodoro.instance;
+    void edit(void Function() f) {
+      setState(f);
+      pomo.saveSettings();
+    }
+
+    return Column(children: [
+      TextButton.icon(
+        onPressed: () => setState(() => _open = !_open),
+        icon: AnimatedRotation(
+          turns: _open ? 0.5 : 0,
+          duration: Anim.medium,
+          child: const Icon(Icons.tune_rounded, size: 18),
+        ),
+        label: Text(tr('Ajustes del pomodoro')),
+      ),
+      AnimatedSize(
+        duration: Anim.medium,
+        curve: Anim.curve,
+        child: !_open
+            ? const SizedBox(width: double.infinity)
+            : Column(children: [
+                _stepper(tr('Concentración (min)'), pomo.focusMinutes, 5, 120,
+                    5, (v) => edit(() => pomo.focusMinutes = v)),
+                _stepper(tr('Descanso corto (min)'), pomo.restMinutes, 1, 30, 1,
+                    (v) => edit(() => pomo.restMinutes = v)),
+                _stepper(tr('Descanso largo (min)'), pomo.longRestMinutes, 5,
+                    60, 5, (v) => edit(() => pomo.longRestMinutes = v)),
+                _stepper(
+                    tr('Pomodoros hasta el descanso largo'),
+                    pomo.roundsToLong,
+                    2,
+                    10,
+                    1,
+                    (v) => edit(() => pomo.roundsToLong = v)),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(tr('Empezar la siguiente fase sola')),
+                  value: pomo.autoStart,
+                  onChanged: (v) => edit(() => pomo.autoStart = v),
+                ),
+              ]),
+      ),
+    ]);
+  }
+}
+
+/// El tomate de abajo a la izquierda mientras el pomodoro está activo: del
+/// color del tema, con el tiempo dentro. Tocarlo abre el pomodoro.
+class PomodoroTomato extends StatelessWidget {
+  const PomodoroTomato({super.key, required this.onTap});
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final pomo = Pomodoro.instance;
+    return ListenableBuilder(
+      listenable: pomo,
+      builder: (context, _) {
+        final p = Palette.of(context);
+        final focus = pomo.phase == PomodoroPhase.focus;
+        // Rojo tomate teñido con el acento del tema; verde en el descanso.
+        final body = focus
+            ? Color.lerp(const Color(0xFFE5484D), p.accent, 0.35)!
+            : Color.lerp(const Color(0xFF2DD4A7), p.accent, 0.25)!;
+        return AnimatedSwitcher(
+          duration: Anim.medium,
+          transitionBuilder: (c, a) => ScaleTransition(
+              scale: CurvedAnimation(parent: a, curve: Curves.easeOutBack),
+              child: FadeTransition(opacity: a, child: c)),
+          child: !pomo.active
+              ? const SizedBox.shrink(key: ValueKey('sin-tomate'))
+              : Tooltip(
+                  key: const ValueKey('tomate'),
+                  message: tr('Pomodoro'),
+                  child: GestureDetector(
+                    onTap: onTap,
+                    child: MouseRegion(
+                      cursor: SystemMouseCursors.click,
+                      child: SizedBox(
+                        width: 74,
+                        height: 74,
+                        child: CustomPaint(
+                          painter: _Tomato(body, pomo.progress,
+                              Theme.of(context).brightness == Brightness.dark),
+                          child: Padding(
+                            padding: const EdgeInsets.only(top: 12),
+                            child: Center(
+                              child: Text(_mmss(pomo.left),
+                                  style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 14.5,
+                                      fontWeight: FontWeight.w800,
+                                      fontFeatures: [
+                                        FontFeature.tabularFigures()
+                                      ])),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+        );
+      },
+    );
+  }
+}
+
+class _Tomato extends CustomPainter {
+  const _Tomato(this.color, this.progress, this.dark);
+  final Color color;
+  final double progress;
+  final bool dark;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final c = Offset(size.width / 2, size.height / 2 + 5);
+    final r = size.width * 0.38;
+    final body = Rect.fromCenter(center: c, width: r * 2.15, height: r * 1.9);
+    canvas.drawOval(
+        body.shift(const Offset(0, 3)),
+        Paint()
+          ..color = Colors.black.withValues(alpha: 0.18)
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 5));
+    canvas.drawOval(
+        body,
+        Paint()
+          ..shader = RadialGradient(
+            center: const Alignment(-0.35, -0.45),
+            colors: [Color.lerp(color, Colors.white, 0.25)!, color],
+          ).createShader(body));
+    // Lo que queda de la fase: un arco claro por dentro del borde.
+    canvas.drawArc(
+        body.deflate(4),
+        -math.pi / 2,
+        math.pi * 2 * (1 - progress.clamp(0.0, 1.0)),
+        false,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2.6
+          ..strokeCap = StrokeCap.round
+          ..color = Colors.white.withValues(alpha: 0.75));
+    // Hojas y rabito.
+    final leaf = Paint()..color = const Color(0xFF3FA34D);
+    final top = Offset(c.dx, body.top + 2);
+    for (final a in [-0.9, -0.3, 0.3, 0.9]) {
+      final tip = top + Offset(math.sin(a) * r * 0.55, -math.cos(a) * r * 0.22);
+      canvas.drawPath(
+          Path()
+            ..moveTo(top.dx - 4, top.dy)
+            ..quadraticBezierTo(tip.dx, tip.dy - 4, tip.dx, tip.dy)
+            ..quadraticBezierTo(tip.dx, tip.dy + 4, top.dx + 4, top.dy)
+            ..close(),
+          leaf);
+    }
+    canvas.drawLine(
+        top,
+        top + const Offset(2, -9),
+        Paint()
+          ..color = const Color(0xFF2E7D32)
+          ..strokeWidth = 3
+          ..strokeCap = StrokeCap.round);
+  }
+
+  @override
+  bool shouldRepaint(_Tomato o) =>
+      o.color != color || o.progress != progress || o.dark != dark;
 }
 
 String _mmss(Duration d) {
@@ -197,7 +458,7 @@ class _PomodoroSheet extends StatelessWidget {
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  for (var i = 0; i < 4; i++)
+                  for (var i = 0; i < pomo.roundsToLong; i++)
                     AnimatedContainer(
                       duration: Anim.medium,
                       margin: const EdgeInsets.symmetric(horizontal: 4),
@@ -205,8 +466,9 @@ class _PomodoroSheet extends StatelessWidget {
                       height: 10,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: i < pomo.rounds % 4 ||
-                                (pomo.rounds > 0 && pomo.rounds % 4 == 0)
+                        color: i < pomo.rounds % pomo.roundsToLong ||
+                                (pomo.rounds > 0 &&
+                                    pomo.rounds % pomo.roundsToLong == 0)
                             ? color
                             : p.separator,
                       ),
@@ -251,8 +513,10 @@ class _PomodoroSheet extends StatelessWidget {
               const SizedBox(height: 10),
               Text(
                   trf('{0} min de concentración · {1} de descanso',
-                      [Pomodoro.focusMinutes, Pomodoro.restMinutes]),
+                      [pomo.focusMinutes, pomo.restMinutes]),
                   style: TextStyle(color: p.secondary, fontSize: 12.5)),
+              const SizedBox(height: 6),
+              const _PomodoroSettings(),
             ],
           ),
         );
@@ -286,9 +550,13 @@ class _Ring extends CustomPainter {
 
 /// Datos de productividad de los últimos [days] días (hoy el último).
 class ProductivityStats {
-  ProductivityStats(this.days, this.done, this.created, this.focus);
+  ProductivityStats(this.days, this.done, this.created, this.focus,
+      [this.doneTasks = const []]);
   final List<DateTime> days;
   final List<int> done, created, focus;
+
+  /// Las tareas completadas en el periodo, la última primero.
+  final List<Note> doneTasks;
 
   static Future<ProductivityStats> of(NotesRepository repo,
       {int days = 7, DateTime? now}) async {
@@ -303,16 +571,22 @@ class ProductivityStats {
     }
 
     final done = List.filled(days, 0), created = List.filled(days, 0);
+    final tasks = <Note>[];
+    final seen = <String>{};
     for (final n in [...repo.notes, ...repo.completed]) {
-      if (n.vault) continue;
+      if (n.vault || !seen.add(n.id)) continue;
       final c = at(n.createdAt);
       if (c >= 0) created[c]++;
       final d = n.doneAt;
-      if (n.done && d != null && at(d) >= 0) done[at(d)]++;
+      if (n.done && d != null && at(d) >= 0) {
+        done[at(d)]++;
+        tasks.add(n);
+      }
     }
+    tasks.sort((a, b) => b.doneAt!.compareTo(a.doneAt!));
     final minutes = await Pomodoro.minutesByDay();
     final focus = [for (final d in list) minutes[Pomodoro._day(d)] ?? 0];
-    return ProductivityStats(list, done, created, focus);
+    return ProductivityStats(list, done, created, focus, tasks);
   }
 }
 
@@ -401,6 +675,32 @@ class _StatsSheetState extends State<_StatsSheet> {
                 const Color(0xFFFF8A3D)),
             _Bars(tr('Minutos de concentración'), s.days, s.focus,
                 const Color(0xFF2DD4A7)),
+            Text(tr('Tareas completadas'),
+                style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 13,
+                    color: p.secondary)),
+            const SizedBox(height: 6),
+            if (s.doneTasks.isEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                child: Text(tr('Aún no has completado tareas en este periodo.'),
+                    style: TextStyle(color: p.secondary)),
+              )
+            else
+              for (final (i, n) in s.doneTasks.take(40).indexed)
+                ListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(Icons.check_circle_rounded, color: p.accent),
+                  title: Text(n.title,
+                      maxLines: 1, overflow: TextOverflow.ellipsis),
+                  trailing: Text(fechaMedia(n.doneAt!),
+                      style: TextStyle(color: p.secondary, fontSize: 12)),
+                )
+                    .animate(delay: (25 * i.clamp(0, 15)).ms)
+                    .fadeIn(duration: Anim.medium)
+                    .slideX(begin: 0.05),
           ],
         ],
       ),

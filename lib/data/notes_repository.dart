@@ -237,13 +237,28 @@ class NotesRepository extends ChangeNotifier {
   /// Máximo de notas en Completadas y en la papelera: la más antigua sobra.
   static const keepMax = 10;
 
-  DateTime _doneSince(Note n) => n.doneAt ?? n.updatedAt;
+  /// Las de solo calendario (sin "Para completar") pasan a Completadas
+  /// 5 minutos después de acabar.
+  static const endedAfterMinutes = 5;
 
-  /// Completada hace 10 minutos o más: ya no sale en las listas.
-  bool isArchived(Note n) =>
-      n.done &&
-      DateTime.now().toUtc().difference(_doneSince(n)).inMinutes >=
-          completedAfterMinutes;
+  /// Terminó una nota de solo calendario (no se repite).
+  bool _ended(Note n) =>
+      !n.done &&
+      !n.checkable &&
+      n.isTemporal &&
+      RepeatRule.parse(n.repeat) == null &&
+      n.isPast();
+
+  DateTime _doneSince(Note n) =>
+      n.doneAt ?? (_ended(n) ? n.barEnd! : n.updatedAt);
+
+  /// Completada hace 10 minutos o más (o terminada hace 5, si era solo de
+  /// calendario): ya no sale en las listas.
+  bool isArchived(Note n) {
+    final since = DateTime.now().toUtc().difference(_doneSince(n)).inMinutes;
+    if (n.done) return since >= completedAfterMinutes;
+    return _ended(n) && since >= endedAfterMinutes;
+  }
 
   int _completedCount = 0;
 
@@ -284,7 +299,7 @@ class NotesRepository extends ChangeNotifier {
         .map((n) => n.id)
         .toSet();
     for (final n in _notes.values) {
-      if (n.done &&
+      if ((n.done || _ended(n)) &&
           !n.deleted &&
           !isForeign(n) &&
           (_doneSince(n).isBefore(limit) || extra.contains(n.id))) {
