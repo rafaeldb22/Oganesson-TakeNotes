@@ -455,7 +455,6 @@ class _WhiteboardState extends State<Whiteboard>
   Offset? _rawPen;
   bool _strokeIsMarker = false;
   double _lastFactor = 1;
-  Duration _lastTime = Duration.zero;
   Offset _lastWorld = Offset.zero;
 
   List<Offset>? _lasso;
@@ -637,22 +636,16 @@ class _WhiteboardState extends State<Whiteboard>
     return _picture = rec.endRecording();
   }
 
+  /// Como GoodNotes: con ratón o dedo el grosor es constante (bolígrafo);
+  /// con lápiz, presión real con una curva suave y sin saltos.
   double _pressure(PointerEvent e, Offset world, double force) {
-    if (force <= 0) return 1;
     final stylus = e.kind == PointerDeviceKind.stylus ||
         e.kind == PointerDeviceKind.invertedStylus;
-    double p;
-    if (stylus && e.pressureMax > e.pressureMin) {
-      p = ((e.pressure - e.pressureMin) / (e.pressureMax - e.pressureMin))
-          .clamp(0.0, 1.0);
-    } else {
-      // Ratón y dedo no tienen presión: cuanto más rápido, más fino.
-      final ms = (e.timeStamp - _lastTime).inMicroseconds / 1000;
-      final speed = ms <= 0 ? 0.0 : (world - _lastWorld).distance / ms;
-      p = (1 - speed / 3).clamp(0.15, 1.0);
-    }
-    final target = (1 - force) + force * (0.35 + 1.3 * p);
-    return _lastFactor = _lastFactor + (target - _lastFactor) * 0.45;
+    if (force <= 0 || !stylus || e.pressureMax <= e.pressureMin) return 1;
+    final p = ((e.pressure - e.pressureMin) / (e.pressureMax - e.pressureMin))
+        .clamp(0.0, 1.0);
+    final target = (1 - force) + force * (0.55 + 0.9 * math.sqrt(p));
+    return _lastFactor = _lastFactor + (target - _lastFactor) * 0.3;
   }
 
   // ------------------------------------------------------------- gestos
@@ -736,7 +729,6 @@ class _WhiteboardState extends State<Whiteboard>
   void _startTool(PointerDownEvent e) {
     final at = _world(e.localPosition);
     _lastWorld = at;
-    _lastTime = e.timeStamp;
     _lastFactor = 1;
     final tool = _invertedStylus ? BoardTool.eraser : _c.tool;
     _c.busy = true;
@@ -830,7 +822,6 @@ class _WhiteboardState extends State<Whiteboard>
       _xformBox = b;
     }
     _lastWorld = at;
-    _lastTime = e.timeStamp;
     _repaint();
   }
 
@@ -855,11 +846,11 @@ class _WhiteboardState extends State<Whiteboard>
           _c.eraseScribble(_points!,
               scribbleReach(_points!, math.max(18 / _scale, _c.penWidth * 3)));
       if (!scribbled) {
-        _c.addStroke(BoardStroke(
-            _strokeIsMarker ? _c.markerColor : _c.color,
-            _strokeIsMarker ? _c.markerWidth : _c.penWidth,
-            _points!,
-            _factors!));
+        // Al soltar, el trazo se alisa (como en GoodNotes).
+        final (pts, fs) = smoothStroke(_points!, _factors!,
+            step: math.max(1.2, 2.5 / _scale));
+        _c.addStroke(BoardStroke(_strokeIsMarker ? _c.markerColor : _c.color,
+            _strokeIsMarker ? _c.markerWidth : _c.penWidth, pts, fs));
       }
       _points = null;
       _factors = null;

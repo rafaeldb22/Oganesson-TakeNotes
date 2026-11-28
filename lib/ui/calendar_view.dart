@@ -4,7 +4,6 @@ import 'package:flutter_animate/flutter_animate.dart';
 import '../data/notes_repository.dart';
 import '../models/note.dart';
 import 'anim.dart';
-import 'calendar_views.dart';
 import 'context_menu.dart';
 import 'format.dart';
 import 'split.dart';
@@ -56,67 +55,12 @@ class _CalendarViewState extends State<CalendarView> {
   static const _minCell = 86.0;
 
   static const _before = calendarMonthsBefore;
+
+  /// Hasta 3 años vista.
   static const _pagesCount = calendarMonthsBefore + calendarMonthsAfter + 1;
-  late PageController _pages = PageController(initialPage: _before);
+  late final PageController _pages = PageController(initialPage: _before);
   int _page = _before;
   DateTime _selected = _day(DateTime.now());
-
-  /// 0 = meses, 1 = semanas (la cuadrícula de siempre), 2 = días.
-  int _view = 1;
-
-  void _setView(int v) {
-    if (v == _view) return;
-    setState(() {
-      _view = v;
-      if (v == 1) {
-        // Al volver a semanas, en el mes del día elegido.
-        final now = DateTime.now();
-        _page = ((_selected.year - now.year) * 12 +
-                _selected.month -
-                now.month +
-                _before)
-            .clamp(0, _pagesCount - 1);
-        _pages.dispose();
-        _pages = PageController(initialPage: _page);
-      }
-    });
-  }
-
-  List<DateTime> get _months => [
-        for (var i = 0; i < _pagesCount; i++) _monthAt(i),
-      ];
-
-  /// Barra de arriba: el selector de vista y "Hoy".
-  Widget _top(BuildContext context) {
-    final today = _day(DateTime.now());
-    final away = _view == 1 ? _page != _before : _selected != today;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 12, 0),
-      child: Row(children: [
-        Expanded(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 420),
-            child: CalendarViewSwitch(value: _view, onChanged: _setView),
-          ),
-        ),
-        const SizedBox(width: 8),
-        AnimatedOpacity(
-          duration: Anim.fast,
-          opacity: away ? 1 : 0.35,
-          child: TextButton.icon(
-            onPressed: !away
-                ? null
-                : () {
-                    setState(() => _selected = today);
-                    if (_view == 1) _goTo(_before);
-                  },
-            icon: const Icon(Icons.today_rounded, size: 18),
-            label: Text(tr('Hoy')),
-          ),
-        ),
-      ]),
-    );
-  }
 
   DateTime _monthAt(int page) {
     final now = DateTime.now();
@@ -186,6 +130,20 @@ class _CalendarViewState extends State<CalendarView> {
               ),
             ),
           ),
+          AnimatedOpacity(
+            duration: Anim.fast,
+            opacity: _page == _before ? 0 : 1,
+            child: TextButton(
+              onPressed: _page == _before
+                  ? null
+                  : () {
+                      setState(() => _selected = _day(DateTime.now()));
+                      _goTo(_before);
+                    },
+              child: Text(tr('Hoy')),
+            ),
+          ),
+          const SizedBox(width: 4),
           Container(
             decoration: BoxDecoration(
               color: Palette.searchFill(context),
@@ -275,53 +233,6 @@ class _CalendarViewState extends State<CalendarView> {
           onToggleDone: (id) => completeTask(context, widget.repo, id),
         );
 
-        // Meses y días ocupan todo el ancho.
-        if (_view != 1) {
-          return ColoredBox(
-            color: Palette.card(context),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _top(context),
-                const SizedBox(height: 10),
-                Expanded(
-                  child: AnimatedSwitcher(
-                    duration: Anim.medium,
-                    switchInCurve: Anim.curve,
-                    transitionBuilder: (c, a) => FadeTransition(
-                        opacity: a,
-                        child: ScaleTransition(
-                            scale: Tween(begin: 0.97, end: 1.0).animate(a),
-                            child: c)),
-                    child: _view == 0
-                        ? MonthsOverview(
-                            key: const ValueKey('meses'),
-                            months: _months,
-                            notes: notes,
-                            onPick: (m) {
-                              final now = DateTime.now();
-                              _selected =
-                                  m.year == now.year && m.month == now.month
-                                      ? _day(now)
-                                      : DateTime(m.year, m.month, 1);
-                              _setView(1);
-                            },
-                          )
-                        : DayTimeline(
-                            key: const ValueKey('dias'),
-                            day: _selected,
-                            notes: notes,
-                            onDay: (d) => setState(() => _selected = d),
-                            onOpen: widget.onOpenNote,
-                            onNew: () => widget.onNewOnDay(_selected),
-                          ),
-                  ),
-                ),
-              ],
-            ),
-          );
-        }
-
         return LayoutBuilder(builder: (context, c) {
           final side = c.maxWidth >= 640;
 
@@ -334,7 +245,6 @@ class _CalendarViewState extends State<CalendarView> {
                 controller: _calScroll,
                 child: Column(
                   children: [
-                    _top(context),
                     _header(context),
                     _weekdays(context),
                     const SizedBox(height: 6),
@@ -368,7 +278,6 @@ class _CalendarViewState extends State<CalendarView> {
               controller: _listScroll,
               padding: const EdgeInsets.only(bottom: 32),
               children: [
-                _top(context),
                 _header(context),
                 _weekdays(context),
                 const SizedBox(height: 6),

@@ -6,11 +6,18 @@ import '../data/desktop_integration.dart';
 import '../data/notes_repository.dart';
 import '../models/note.dart';
 import 'anim.dart';
-import 'calendar_views.dart' show calendarColor;
 import 'focus_tools.dart';
 import 'format.dart';
 import 'i18n.dart';
 import 'theme.dart';
+import 'urgency.dart' show fuseForTheme, notePalette;
+
+/// Color de una nota en el calendario (el suyo o el de su mecha).
+Color calendarColor(BuildContext context, Note n) => n.done
+    ? Palette.secondary(context)
+    : (n.color != null
+        ? Color(n.color!)
+        : fuseForTheme(context, notePalette(n)).first);
 
 /// Las notas de la sesión abierta (las pone la pantalla principal), para
 /// los widgets de escritorio.

@@ -2,6 +2,23 @@
 
 All notable changes to Oganesson TakeNotes (formerly *Notas* / *BabuNotes*).
 
+## [3.16.1] — 2026-11-28
+
+### Changed
+- **The calendar is back to its single view** (the months/weeks/days switch is gone); it still reaches
+  three years ahead.
+- **Pen like GoodNotes**: constant width with the mouse (like its ballpoint), real and gentle pressure
+  with a stylus, and every stroke is smoothed when you lift — tremble gone, sharp corners kept.
+- **Whiteboards on the left of the note**, in a column from first to last, top to bottom.
+- **Smoother drag selection**: scrolling is frame-synced and only one thing moves the view, so it no
+  longer stutters when you move up or down fast.
+- Gentler drift in the note network.
+- Small images don't show the hover menu if it doesn't fit; use it inside the opened image.
+- Fonts are no longer in Theme and colours: they are only for notes (toolbar font button).
+
+### Fixed
+- *One day / Several days* labels are centred in their buttons.
+
 ## [3.16.0] — 2026-11-28
 
 ### Added

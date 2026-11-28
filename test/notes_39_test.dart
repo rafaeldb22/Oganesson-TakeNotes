@@ -38,4 +38,18 @@ void main() {
     final d = BoardData.decode(BoardData(side: 2000).encode())!;
     expect(d.side, 2000);
   });
+
+  test('smoothing keeps the ends and sharp corners like GoodNotes', () {
+    // Una "v": la punta no se redondea; los extremos no se mueven.
+    final pts = [
+      for (var x = 0.0; x <= 50; x += 2) Offset(x, x),
+      for (var x = 52.0; x <= 100; x += 2) Offset(x, 100 - x),
+    ];
+    final (sp, sf) = smoothStroke(pts, [for (final _ in pts) 1.0]);
+    expect(sp.first, pts.first);
+    expect(sp.last, pts.last);
+    expect(sp.length, sf.length);
+    final tip = sp.reduce((a, b) => a.dy > b.dy ? a : b);
+    expect(tip.dy, greaterThan(44));
+  });
 }

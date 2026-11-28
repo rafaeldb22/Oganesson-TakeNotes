@@ -399,7 +399,8 @@ class _GraphViewState extends State<GraphView> with TickerProviderStateMixin {
       if (n.pinned) continue;
       final h = n.id.hashCode;
       // Masa e inclinación fijas por nota (siempre las mismas para cada una).
-      final lag = 0.06 + (h & 0xff) / 255 * 0.32;
+      // Suave: cada nota se queda solo un poco atrás.
+      final lag = 0.015 + (h & 0xff) / 255 * 0.07;
       final turn = (((h >> 8) & 0xff) / 255 - 0.5) * 0.9;
       final c = math.cos(turn), s = math.sin(turn);
       final v =
@@ -475,7 +476,7 @@ class _GraphViewState extends State<GraphView> with TickerProviderStateMixin {
         if (dist == 0) continue;
         f += d / dist * ((dist - springLength) * spring);
       }
-      a.vel = (a.vel + f * _alpha) * (_damping + 0.09 * _drift);
+      a.vel = (a.vel + f * _alpha) * (_damping + 0.05 * _drift);
     }
     var energy = 0.0;
     for (final n in list) {

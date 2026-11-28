@@ -23,6 +23,11 @@ class SmoothScrollController extends ScrollController {
   /// Multiplica la distancia de cada paso (menos de 1 = más lento).
   final double wheelFactor;
 
+  /// Mientras es true se ignoran las animaciones que pidan otros (p. ej. el
+  /// editor siguiendo el cursor al seleccionar con el ratón): manda quien
+  /// desplaza con jumpTo, y no hay tirones de dos animaciones peleándose.
+  bool holdAnimations = false;
+
   @override
   ScrollPosition createScrollPosition(ScrollPhysics physics,
       ScrollContext context, ScrollPosition? oldPosition) {
@@ -36,6 +41,7 @@ class SmoothScrollController extends ScrollController {
       duration: duration,
       curve: curve,
       wheelFactor: wheelFactor,
+      held: () => holdAnimations,
     );
   }
 }
@@ -51,11 +57,20 @@ class _SmoothScrollPosition extends ScrollPositionWithSingleContext {
     required this.duration,
     required this.curve,
     required this.wheelFactor,
+    required this.held,
   });
 
   final Duration duration;
   final Curve curve;
   final double wheelFactor;
+  final bool Function() held;
+
+  @override
+  Future<void> animateTo(double to,
+      {required Duration duration, required Curve curve}) {
+    if (held()) return Future.value();
+    return super.animateTo(to, duration: duration, curve: curve);
+  }
 
   /// Destino acumulado mientras dura la animación.
   double? _target;
@@ -68,7 +83,7 @@ class _SmoothScrollPosition extends ScrollPositionWithSingleContext {
         (from + delta * wheelFactor).clamp(minScrollExtent, maxScrollExtent);
     if (target == pixels && _target == null) return;
     _target = target;
-    animateTo(target, duration: duration, curve: curve).whenComplete(() {
+    super.animateTo(target, duration: duration, curve: curve).whenComplete(() {
       if (_target == target) _target = null;
     });
   }

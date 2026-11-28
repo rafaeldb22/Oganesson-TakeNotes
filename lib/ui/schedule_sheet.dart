@@ -470,38 +470,45 @@ class _Segmented extends StatelessWidget {
               ),
             ),
           ),
-          Row(children: [
-            for (var i = 0; i < options.length; i++)
-              Expanded(
-                child: GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: () => onChanged(i),
-                  child: AnimatedDefaultTextStyle(
-                    duration: Anim.fast,
-                    style: TextStyle(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 14,
-                      color: i == value ? p.accent : p.secondary,
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        AnimatedScale(
-                          duration: Anim.medium,
-                          curve: Curves.easeOutBack,
-                          scale: i == value ? 1.12 : 1,
-                          child: Icon(icons[i],
-                              size: 18,
-                              color: i == value ? p.accent : p.secondary),
+          // Ocupa todo el alto: el texto queda centrado en la pastilla (antes
+          // se quedaba pegado arriba).
+          Positioned.fill(
+            child:
+                Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              for (var i = 0; i < options.length; i++)
+                Expanded(
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () => onChanged(i),
+                    child: Center(
+                      child: AnimatedDefaultTextStyle(
+                        duration: Anim.fast,
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 14,
+                          color: i == value ? p.accent : p.secondary,
                         ),
-                        const SizedBox(width: 6),
-                        Text(options[i]),
-                      ],
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            AnimatedScale(
+                              duration: Anim.medium,
+                              curve: Curves.easeOutBack,
+                              scale: i == value ? 1.12 : 1,
+                              child: Icon(icons[i],
+                                  size: 18,
+                                  color: i == value ? p.accent : p.secondary),
+                            ),
+                            const SizedBox(width: 6),
+                            Text(options[i]),
+                          ],
+                        ),
+                      ),
                     ),
                   ),
                 ),
-              ),
-          ]),
+            ]),
+          ),
         ]);
       }),
     );

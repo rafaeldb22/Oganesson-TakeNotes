@@ -4,6 +4,7 @@ import 'dart:math';
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_quill/flutter_quill.dart';
@@ -671,17 +672,37 @@ class _NoteEditorState extends State<NoteEditor> {
   /// desplaza solo, suave y más rápido cuanto más lejos, aunque el ratón se
   /// quede quieto, y la selección sigue al puntero.
   final _selectArea = GlobalKey();
-  Timer? _edgeTimer;
+  bool _edgeRunning = false;
+  Duration? _edgeLast;
   Offset _edgePointer = Offset.zero;
 
   void _edgeScroll(PointerMoveEvent e) {
     if (!_mouseDown || e.buttons & kPrimaryMouseButton == 0) return;
     _edgePointer = e.position;
-    _edgeTimer ??=
-        Timer.periodic(const Duration(milliseconds: 16), (_) => _edgeTick());
+    // Seleccionando: el scroll solo lo mueve este bucle.
+    _scroll.holdAnimations = true;
+    if (_edgeRunning) return;
+    _edgeRunning = true;
+    _edgeLast = null;
+    SchedulerBinding.instance.scheduleFrameCallback(_edgeFrame);
   }
 
-  void _edgeTick() {
+  /// Un paso por fotograma (sincronizado con la pantalla) según el tiempo
+  /// real transcurrido: el desplazamiento es continuo, sin tirones.
+  void _edgeFrame(Duration now) {
+    if (!_edgeRunning || !mounted) return;
+    final dt = _edgeLast == null
+        ? 1 / 60
+        : ((now - _edgeLast!).inMicroseconds / 1e6).clamp(0.0, 0.05);
+    _edgeLast = now;
+    _edgeTick(dt);
+    if (_edgeRunning) {
+      SchedulerBinding.instance.scheduleFrameCallback(_edgeFrame);
+      SchedulerBinding.instance.scheduleFrame();
+    }
+  }
+
+  void _edgeTick(double dt) {
     final box = _selectArea.currentContext?.findRenderObject() as RenderBox?;
     final editor = _editorKey.currentState;
     if (!mounted || box == null || editor == null || !_scroll.hasClients) {
@@ -695,10 +716,16 @@ class _NoteEditorState extends State<NoteEditor> {
     } else if (local.dy > box.size.height - zone) {
       speed = local.dy - (box.size.height - zone);
     }
-    if (speed == 0) return;
+    // Fuera del borde: el bucle se para (vuelve con el siguiente movimiento).
+    if (speed == 0) {
+      _edgeRunning = false;
+      return;
+    }
     final pos = _scroll.position;
-    // Curva suave: despacio cerca del borde, rápido lejos.
-    final step = (speed.sign * pow(speed.abs() / 6, 1.35)).clamp(-48.0, 48.0);
+    // Curva suave (px/s): despacio cerca del borde, rápido lejos.
+    final perSecond =
+        (speed.sign * 60 * pow(speed.abs() / 6, 1.35)).clamp(-2400.0, 2400.0);
+    final step = perSecond * dt;
     final to =
         (pos.pixels + step).clamp(pos.minScrollExtent, pos.maxScrollExtent);
     if (to == pos.pixels) return;
@@ -720,8 +747,8 @@ class _NoteEditorState extends State<NoteEditor> {
 
   void _stopEdgeScroll() {
     _mouseDown = false;
-    _edgeTimer?.cancel();
-    _edgeTimer = null;
+    _scroll.holdAnimations = false;
+    _edgeRunning = false;
   }
 
   void _dragReveal() {
@@ -795,7 +822,7 @@ class _NoteEditorState extends State<NoteEditor> {
 
   @override
   void dispose() {
-    _edgeTimer?.cancel();
+    _edgeRunning = false;
     themeSettings.removeListener(_onTheme);
     if (_titleSave?.isActive ?? false) {
       _titleSave!.cancel();
@@ -829,11 +856,9 @@ class _NoteEditorState extends State<NoteEditor> {
     final dark = Theme.of(context).brightness == Brightness.dark;
     final fg = dark ? Colors.white : const Color(0xFF151515);
     // La fuente del tema, como el resto de la app.
-    // Fuente de las notas (Tema y colores), no la de la app.
-    final note = themeSettings.font;
-    final font =
-        note.family ?? Theme.of(context).textTheme.bodyMedium?.fontFamily;
-    final fallback = note.family == null ? null : note.fallback;
+    // La fuente normal; cada trozo puede llevar la suya (botón de fuente).
+    final font = Theme.of(context).textTheme.bodyMedium?.fontFamily;
+    const List<String>? fallback = null;
     const h0 = HorizontalSpacing(0, 0);
     const v0 = VerticalSpacing(0, 0);
     DefaultTextBlockStyle block(
@@ -906,28 +931,38 @@ class _NoteEditorState extends State<NoteEditor> {
       if (_board != null && !boards.any((b) => b.id == current))
         _board!.toData(),
     ];
-    return SizedBox(
-      height: _board == null ? 136 : 96,
+    // Columna a la izquierda: de la primera a la última, de arriba abajo.
+    final size = _board == null ? 92.0 : 76.0;
+    return AnimatedContainer(
+      duration: Anim.medium,
+      curve: Anim.curve,
+      width: size + 24,
+      decoration: BoxDecoration(
+        border: Border(
+            right: BorderSide(
+                color: Palette.separator(context).withValues(alpha: 0.6))),
+      ),
       child: ListView(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(vertical: 8),
+        padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
         children: [
           for (final (i, b) in shown.indexed)
             Padding(
-              padding: const EdgeInsets.only(right: 10),
+              padding: const EdgeInsets.only(bottom: 10),
               child: BoardThumb(
                 key: ValueKey('pizarra-${b.id}'),
                 data: b.id == current ? _board!.toData() : b,
                 label: b.name.isNotEmpty ? b.name : trf('Pizarra {0}', [i + 1]),
                 selected: b.id == current,
-                size: _board == null ? 120 : 80,
+                size: size,
                 onTap: () =>
                     b.id == current ? _leaveBoard() : _enterBoard(id: b.id),
                 onRemove: !writable || _board != null
                     ? null
                     : () => _removeBoard(b.id),
-              ).animate(delay: (40 * i).ms).fadeIn(duration: Anim.medium).scale(
-                  begin: const Offset(0.9, 0.9), curve: Curves.easeOutBack),
+              )
+                  .animate(delay: (40 * i).ms)
+                  .fadeIn(duration: Anim.medium)
+                  .slideX(begin: -0.25, curve: Anim.curve),
             ),
           if (writable)
             Tooltip(
@@ -938,7 +973,8 @@ class _NoteEditorState extends State<NoteEditor> {
                   borderRadius: BorderRadius.circular(20),
                   onTap: () => _enterBoard(fresh: true),
                   child: Container(
-                    width: _board == null ? 120 : 80,
+                    width: size,
+                    height: size * 0.6,
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(20),
                       border: Border.all(
@@ -1392,17 +1428,21 @@ class _NoteEditorState extends State<NoteEditor> {
             ),
             if (_board != null)
               Expanded(
-                child: Whiteboard(
-                  key: const ValueKey('pizarra-nota'),
-                  controller: _board!,
-                  readOnly: !writable,
-                  onRemove: _removeBoard,
-                ).animate().fadeIn(duration: Anim.medium, curve: Anim.curve),
-              ),
-            if (_board != null && n != null)
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: _boardsStrip(context, n, writable),
+                child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (n != null) _boardsStrip(context, n, writable),
+                      Expanded(
+                        child: Whiteboard(
+                          key: const ValueKey('pizarra-nota'),
+                          controller: _board!,
+                          readOnly: !writable,
+                          onRemove: _removeBoard,
+                        )
+                            .animate()
+                            .fadeIn(duration: Anim.medium, curve: Anim.curve),
+                      ),
+                    ]),
               ),
             if (_board != null && n != null)
               Padding(
@@ -1417,181 +1457,205 @@ class _NoteEditorState extends State<NoteEditor> {
               ),
             if (_board == null)
               Expanded(
-                child: Center(
-                  child: ConstrainedBox(
-                    // En ventanas muy anchas el texto no se estira de lado a lado.
-                    constraints: const BoxConstraints(maxWidth: 860),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 20),
-                      child: Column(
-                        children: [
-                          const SizedBox(height: 8),
-                          if (foreign)
-                            _SharedBanner(
-                              owner: repo.incomingShare(n.id)?.ownerEmail,
-                              canEdit: writable,
-                            ),
-                          if (_finding) _findBar(context),
-                          if (_similar case final s?
-                              when repo.byId(s.id)?.deleted == false)
-                            _similarBanner(context, s),
-                          if (n != null)
-                            Padding(
-                              padding: const EdgeInsets.only(bottom: 8),
-                              child: Text(
-                                '${fechaLarga(n.updatedAt)} · ${textStats(n.content)}',
-                                style: TextStyle(
-                                    color: Palette.secondary(context),
-                                    fontSize: 13),
-                              ),
-                            ),
-                          Expanded(
-                            child: ImageDropZone(
-                              onImages: (images) =>
-                                  insertImages(context, _ctrl, images),
-                              child: ImageMoveTarget(
-                                controller: _ctrl,
-                                editorKey: _editorKey,
-                                child: NoteMediaScope(
-                                  allowAi: n != null && !n.vault && !foreign,
-                                  child: Listener(
-                                    key: _selectArea,
-                                    onPointerDown: (e) => _mouseDown =
-                                        e.kind == PointerDeviceKind.mouse,
-                                    onPointerMove: _edgeScroll,
-                                    onPointerUp: (_) => _stopEdgeScroll(),
-                                    onPointerCancel: (_) => _stopEdgeScroll(),
-                                    child: QuillEditor(
-                                      controller: _ctrl,
-                                      focusNode: _focus,
-                                      scrollController: _scroll,
-                                      config: QuillEditorConfig(
+                child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (n != null) _boardsStrip(context, n, writable),
+                      Expanded(
+                        child: Center(
+                          child: ConstrainedBox(
+                            // En ventanas muy anchas el texto no se estira de lado a lado.
+                            constraints: const BoxConstraints(maxWidth: 860),
+                            child: Padding(
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 20),
+                              child: Column(
+                                children: [
+                                  const SizedBox(height: 8),
+                                  if (foreign)
+                                    _SharedBanner(
+                                      owner:
+                                          repo.incomingShare(n.id)?.ownerEmail,
+                                      canEdit: writable,
+                                    ),
+                                  if (_finding) _findBar(context),
+                                  if (_similar case final s?
+                                      when repo.byId(s.id)?.deleted == false)
+                                    _similarBanner(context, s),
+                                  if (n != null)
+                                    Padding(
+                                      padding: const EdgeInsets.only(bottom: 8),
+                                      child: Text(
+                                        '${fechaLarga(n.updatedAt)} · ${textStats(n.content)}',
+                                        style: TextStyle(
+                                            color: Palette.secondary(context),
+                                            fontSize: 13),
+                                      ),
+                                    ),
+                                  Expanded(
+                                    child: ImageDropZone(
+                                      onImages: (images) =>
+                                          insertImages(context, _ctrl, images),
+                                      child: ImageMoveTarget(
+                                        controller: _ctrl,
                                         editorKey: _editorKey,
-                                        showCursor: !_caretByImage,
-                                        placeholder: tr('Escribe algo…'),
-                                        // En el móvil el teclado solo sale al
-                                        // tocar el texto.
-                                        autoFocus:
-                                            widget.autofocus && autoKeyboard,
-                                        expands: true,
-                                        padding:
-                                            const EdgeInsets.only(bottom: 40),
-                                        customStyles: _styles(context),
-                                        // Resaltado como un rotulador: suave
-                                        // y legible también en modo oscuro.
-                                        customStyleBuilder: (a) =>
-                                            _highlight(context, a),
-                                        // Markdown al escribir: "# ", "- ",
-                                        // "1. ", **negrita**, *cursiva*…
-                                        // ignore: experimental_member_use
-                                        characterShortcutEvents:
-                                            standardCharactersShortcutEvents,
-                                        // ignore: experimental_member_use
-                                        spaceShortcutEvents:
-                                            standardSpaceShorcutEvents,
-                                        // Un clic en un enlace lo abre en el
-                                        // navegador (Quill pedía Ctrl+clic).
-                                        customRecognizerBuilder: (a, _) => a
-                                                        .key !=
-                                                    Attribute.link.key ||
-                                                a.value is! String
-                                            ? null
-                                            : (TapGestureRecognizer()
-                                              ..onTap = () => openLink(context,
-                                                  webUrl(a.value as String))),
-                                        // Imágenes: se dibujan con su propio estilo,
-                                        // Ctrl+V pega capturas y el teclado de Android
-                                        // puede insertar imágenes directamente.
-                                        embedBuilders: [
-                                          const NoteImageEmbedBuilder(),
-                                          const NoteFileEmbedBuilder(),
-                                          const NoteBoardEmbedBuilder(),
-                                        ],
-                                        customShortcuts: {
-                                          const SingleActivator(
-                                                  LogicalKeyboardKey.tab):
-                                              const _TabIntent(false),
-                                          const SingleActivator(
-                                                  LogicalKeyboardKey.tab,
-                                                  shift: true):
-                                              const _TabIntent(true),
-                                          if (widget.onCommandPalette != null)
-                                            const SingleActivator(
-                                              LogicalKeyboardKey.keyK,
-                                              control: true,
-                                            ): const _PaletteIntent(),
-                                        },
-                                        customActions: {
-                                          _TabIntent:
-                                              CallbackAction<_TabIntent>(
-                                            onInvoke: (i) {
-                                              _tab(i.back);
-                                              return null;
-                                            },
-                                          ),
-                                          if (widget.onCommandPalette != null)
-                                            _PaletteIntent:
-                                                CallbackAction<_PaletteIntent>(
-                                              onInvoke: (_) {
-                                                widget.onCommandPalette!();
-                                                return null;
-                                              },
+                                        child: NoteMediaScope(
+                                          allowAi:
+                                              n != null && !n.vault && !foreign,
+                                          child: Listener(
+                                            key: _selectArea,
+                                            onPointerDown: (e) => _mouseDown =
+                                                e.kind ==
+                                                    PointerDeviceKind.mouse,
+                                            onPointerMove: _edgeScroll,
+                                            onPointerUp: (_) =>
+                                                _stopEdgeScroll(),
+                                            onPointerCancel: (_) =>
+                                                _stopEdgeScroll(),
+                                            child: QuillEditor(
+                                              controller: _ctrl,
+                                              focusNode: _focus,
+                                              scrollController: _scroll,
+                                              config: QuillEditorConfig(
+                                                editorKey: _editorKey,
+                                                showCursor: !_caretByImage,
+                                                placeholder:
+                                                    tr('Escribe algo…'),
+                                                // En el móvil el teclado solo sale al
+                                                // tocar el texto.
+                                                autoFocus: widget.autofocus &&
+                                                    autoKeyboard,
+                                                expands: true,
+                                                padding: const EdgeInsets.only(
+                                                    bottom: 40),
+                                                customStyles: _styles(context),
+                                                // Resaltado como un rotulador: suave
+                                                // y legible también en modo oscuro.
+                                                customStyleBuilder: (a) =>
+                                                    _highlight(context, a),
+                                                // Markdown al escribir: "# ", "- ",
+                                                // "1. ", **negrita**, *cursiva*…
+                                                // ignore: experimental_member_use
+                                                characterShortcutEvents:
+                                                    standardCharactersShortcutEvents,
+                                                // ignore: experimental_member_use
+                                                spaceShortcutEvents:
+                                                    standardSpaceShorcutEvents,
+                                                // Un clic en un enlace lo abre en el
+                                                // navegador (Quill pedía Ctrl+clic).
+                                                customRecognizerBuilder:
+                                                    (a, _) => a.key !=
+                                                                Attribute
+                                                                    .link.key ||
+                                                            a.value is! String
+                                                        ? null
+                                                        : (TapGestureRecognizer()
+                                                          ..onTap = () => openLink(
+                                                              context,
+                                                              webUrl(a.value
+                                                                  as String))),
+                                                // Imágenes: se dibujan con su propio estilo,
+                                                // Ctrl+V pega capturas y el teclado de Android
+                                                // puede insertar imágenes directamente.
+                                                embedBuilders: [
+                                                  const NoteImageEmbedBuilder(),
+                                                  const NoteFileEmbedBuilder(),
+                                                  const NoteBoardEmbedBuilder(),
+                                                ],
+                                                customShortcuts: {
+                                                  const SingleActivator(
+                                                          LogicalKeyboardKey
+                                                              .tab):
+                                                      const _TabIntent(false),
+                                                  const SingleActivator(
+                                                          LogicalKeyboardKey.tab,
+                                                          shift: true):
+                                                      const _TabIntent(true),
+                                                  if (widget.onCommandPalette !=
+                                                      null)
+                                                    const SingleActivator(
+                                                      LogicalKeyboardKey.keyK,
+                                                      control: true,
+                                                    ): const _PaletteIntent(),
+                                                },
+                                                customActions: {
+                                                  _TabIntent: CallbackAction<
+                                                      _TabIntent>(
+                                                    onInvoke: (i) {
+                                                      _tab(i.back);
+                                                      return null;
+                                                    },
+                                                  ),
+                                                  if (widget.onCommandPalette !=
+                                                      null)
+                                                    _PaletteIntent:
+                                                        CallbackAction<
+                                                            _PaletteIntent>(
+                                                      onInvoke: (_) {
+                                                        widget
+                                                            .onCommandPalette!();
+                                                        return null;
+                                                      },
+                                                    ),
+                                                },
+                                                contentInsertionConfiguration:
+                                                    ContentInsertionConfiguration(
+                                                  allowedMimeTypes: const [
+                                                    'image/png',
+                                                    'image/jpeg',
+                                                    'image/gif',
+                                                    'image/webp',
+                                                  ],
+                                                  onContentInserted: (c) {
+                                                    final data = c.data;
+                                                    if (data != null &&
+                                                        data.isNotEmpty) {
+                                                      insertImages(context,
+                                                          _ctrl, [data]);
+                                                    }
+                                                  },
+                                                ),
+                                                // Menú de cortar/copiar/pegar con el estilo de la app.
+                                                contextMenuBuilder: (context,
+                                                        state) =>
+                                                    buildTextMenu(
+                                                        context,
+                                                        state
+                                                            .contextMenuButtonItems,
+                                                        state
+                                                            .contextMenuAnchors),
+                                              ),
                                             ),
-                                        },
-                                        contentInsertionConfiguration:
-                                            ContentInsertionConfiguration(
-                                          allowedMimeTypes: const [
-                                            'image/png',
-                                            'image/jpeg',
-                                            'image/gif',
-                                            'image/webp',
-                                          ],
-                                          onContentInserted: (c) {
-                                            final data = c.data;
-                                            if (data != null &&
-                                                data.isNotEmpty) {
-                                              insertImages(
-                                                  context, _ctrl, [data]);
-                                            }
-                                          },
+                                          ),
                                         ),
-                                        // Menú de cortar/copiar/pegar con el estilo de la app.
-                                        contextMenuBuilder: (context, state) =>
-                                            buildTextMenu(
-                                                context,
-                                                state.contextMenuButtonItems,
-                                                state.contextMenuAnchors),
                                       ),
                                     ),
                                   ),
-                                ),
+                                  if (n != null)
+                                    _LinksBar(
+                                      graph: NoteGraph.of(repo),
+                                      noteId: n.id,
+                                      repo: repo,
+                                      onOpen: widget.onOpenNote,
+                                      onCreate: _createLinked,
+                                    ),
+                                  if (n != null && n.isTemporal)
+                                    _TemporalBanner(
+                                      note: n,
+                                      onToggleDone: () =>
+                                          completeTask(context, repo, n.id),
+                                      onEdit: foreign
+                                          ? () {}
+                                          : () => showScheduleSheet(
+                                              context, repo, n.id),
+                                    ),
+                                ],
                               ),
                             ),
                           ),
-                          if (n != null) _boardsStrip(context, n, writable),
-                          if (n != null)
-                            _LinksBar(
-                              graph: NoteGraph.of(repo),
-                              noteId: n.id,
-                              repo: repo,
-                              onOpen: widget.onOpenNote,
-                              onCreate: _createLinked,
-                            ),
-                          if (n != null && n.isTemporal)
-                            _TemporalBanner(
-                              note: n,
-                              onToggleDone: () =>
-                                  completeTask(context, repo, n.id),
-                              onEdit: foreign
-                                  ? () {}
-                                  : () =>
-                                      showScheduleSheet(context, repo, n.id),
-                            ),
-                        ],
+                        ),
                       ),
-                    ),
-                  ),
-                ),
+                    ]),
               ),
           ],
         ),

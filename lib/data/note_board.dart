@@ -271,6 +271,82 @@ Offset _catmull(Offset p0, Offset p1, Offset p2, Offset p3, double t) {
       0.5;
 }
 
+/// Alisa un trazo como GoodNotes: puntos repartidos a distancia fija (el
+/// temblor y los saltos de la mano desaparecen) y dos pasadas de Chaikin,
+/// que redondean sin mover el principio ni el final.
+(List<Offset>, List<double>) smoothStroke(
+    List<Offset> points, List<double> factors,
+    {double step = 2.5}) {
+  if (points.length < 3) return (points, factors);
+  // 1) Remuestreo uniforme.
+  final p = <Offset>[points.first], f = <double>[factors.first];
+  var carry = 0.0;
+  for (var i = 1; i < points.length; i++) {
+    final a = points[i - 1], b = points[i];
+    final seg = (b - a).distance;
+    if (seg == 0) continue;
+    var t = step - carry;
+    while (t <= seg) {
+      final k = t / seg;
+      p.add(Offset.lerp(a, b, k)!);
+      f.add(factors[i - 1] + (factors[i] - factors[i - 1]) * k);
+      t += step;
+    }
+    carry = seg - (t - step);
+  }
+  if ((p.last - points.last).distance > 0.5) {
+    p.add(points.last);
+    f.add(factors.last);
+  }
+  if (p.length < 3) return (p, f);
+  // 2) Media ponderada de los vecinos (quita el temblor fino de la mano).
+  //    Cerca de los extremos la ventana se encoge: el principio y el final
+  //    no se mueven.
+  //    Las esquinas marcadas (una "v", la punta de una letra) se respetan.
+  const weights = [1.0, 2.0, 3.0, 2.0, 1.0];
+  double turn(int i) {
+    if (i < 2 || i > p.length - 3) return 0;
+    final a = p[i] - p[i - 2], b = p[i + 2] - p[i];
+    if (a.distance == 0 || b.distance == 0) return 0;
+    final cos = (a.dx * b.dx + a.dy * b.dy) / (a.distance * b.distance);
+    return math.acos(cos.clamp(-1.0, 1.0));
+  }
+
+  final sp = <Offset>[];
+  for (var i = 0; i < p.length; i++) {
+    if (turn(i) > 1.1) {
+      sp.add(p[i]);
+      continue;
+    }
+    final reach = math.min(2, math.min(i, p.length - 1 - i));
+    var sum = Offset.zero, w = 0.0;
+    for (var k = -reach; k <= reach; k++) {
+      final wk = weights[k + 2];
+      sum += p[i + k] * wk;
+      w += wk;
+    }
+    sp.add(sum / w);
+  }
+  // 3) Chaikin x2.
+  var cp = sp, cf = f;
+  for (var pass = 0; pass < 2; pass++) {
+    final np = <Offset>[cp.first], nf = <double>[cf.first];
+    for (var i = 0; i < cp.length - 1; i++) {
+      np
+        ..add(cp[i] * 0.75 + cp[i + 1] * 0.25)
+        ..add(cp[i] * 0.25 + cp[i + 1] * 0.75);
+      nf
+        ..add(cf[i] * 0.75 + cf[i + 1] * 0.25)
+        ..add(cf[i] * 0.25 + cf[i + 1] * 0.75);
+    }
+    np.add(cp.last);
+    nf.add(cf.last);
+    cp = np;
+    cf = nf;
+  }
+  return (cp, cf);
+}
+
 /// Pinta un trazo con una curva que pasa por todos sus puntos. Con presión,
 /// el grosor cambia poco a poco a lo largo de la curva.
 void paintBoardStroke(Canvas canvas, BoardStroke s, Color ink) {

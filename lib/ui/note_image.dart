@@ -685,6 +685,13 @@ class _NoteImageViewState extends State<NoteImageView> {
       }
       final provider = _provider;
       final radius = BorderRadius.circular(14);
+      // El menú al pasar el ratón solo si cabe entero en la imagen (cada
+      // botón compacto ~40 px); si no, se usa dentro del visor.
+      final buttons = 3 +
+          (widget.onCropped != null ? 1 : 0) +
+          (widget.onResize != null ? 1 : 0) +
+          (widget.onDelete != null ? 1 : 0);
+      final menuFits = w >= buttons * 40 + 32;
 
       final image = Stack(
         fit: StackFit.expand,
@@ -752,7 +759,7 @@ class _NoteImageViewState extends State<NoteImageView> {
             ),
           ),
           // Acciones al pasar el ratón (escritorio).
-          if (isDesktopWindows && provider != null)
+          if (isDesktopWindows && provider != null && menuFits)
             Positioned(
               top: 8,
               right: 8,
