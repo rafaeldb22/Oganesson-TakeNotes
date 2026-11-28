@@ -475,7 +475,12 @@ class NoteFileEmbedBuilder extends EmbedBuilder {
           embed: fileBlockEmbed(file)),
       delay: const Duration(milliseconds: 300),
       dragAnchorStrategy: pointerDragAnchorStrategy,
-      onDragStarted: HapticFeedback.mediumImpact,
+      onDragStarted: () {
+        mediaDragActive.value = true;
+        HapticFeedback.mediumImpact();
+      },
+      onDragEnd: (_) => mediaDragActive.value = false,
+      onDraggableCanceled: (_, __) => mediaDragActive.value = false,
       feedback: Material(
         color: Colors.transparent,
         child: Opacity(

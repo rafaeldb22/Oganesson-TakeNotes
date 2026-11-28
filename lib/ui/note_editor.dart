@@ -8,6 +8,7 @@ import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_quill/flutter_quill.dart';
+import 'package:flutter_quill/quill_delta.dart' show Delta;
 // ignore: implementation_imports
 import 'package:flutter_quill/src/editor/widgets/text/text_selection.dart'
     show DragTextSelection;
@@ -517,6 +518,7 @@ class _NoteEditorState extends State<NoteEditor> {
     _findSub = noteFindRequests.stream.listen((_) => _openFind());
     // La fuente de las notas puede cambiar con la nota abierta.
     themeSettings.addListener(_onTheme);
+    mediaDragActive.addListener(_onMediaDrag);
     final saved = BoardData.all(n?.rich).where((b) => b.active).firstOrNull;
     if (saved != null) {
       _board = BoardController(saved, onChanged: _queueBoardSave);
@@ -551,9 +553,17 @@ class _NoteEditorState extends State<NoteEditor> {
     if (mounted) setState(() {});
   }
 
+  /// El último contenido visto: si el Delta es el mismo (solo se movió el
+  /// cursor o la selección) no se convierte a JSON. Antes se codificaba la
+  /// nota entera en cada movimiento de la selección y daba microcortes.
+  Delta? _seenDelta;
+
   void _onEdit() {
     if (_applyingRemote || _closing || _board != null) return;
-    final rich = _richJson();
+    final delta = _ctrl.document.toDelta();
+    if (delta == _seenDelta) return;
+    _seenDelta = delta;
+    final rich = jsonEncode(delta.toJson());
     if (rich == _lastSaved) return; // solo cambió el cursor
     _lastSaved = rich;
     _lastTyped = DateTime.now();
@@ -678,6 +688,7 @@ class _NoteEditorState extends State<NoteEditor> {
 
   void _edgeScroll(PointerMoveEvent e) {
     if (!_mouseDown || e.buttons & kPrimaryMouseButton == 0) return;
+    if (mediaDragActive.value) return;
     _edgePointer = e.position;
     // Seleccionando: el scroll solo lo mueve este bucle.
     _scroll.holdAnimations = true;
@@ -753,6 +764,14 @@ class _NoteEditorState extends State<NoteEditor> {
 
   void _dragReveal() {
     final s = _ctrl.selection;
+    // Moviendo una foto o un archivo: nada de seleccionar texto a la vez.
+    if (mediaDragActive.value) {
+      if (!s.isCollapsed) {
+        _ctrl.updateSelection(
+            TextSelection.collapsed(offset: s.baseOffset), ChangeSource.local);
+      }
+      return;
+    }
     if (!_mouseDown || s.isCollapsed || s is DragTextSelection) return;
     _ctrl.updateSelection(
         DragTextSelection(
@@ -816,6 +835,17 @@ class _NoteEditorState extends State<NoteEditor> {
     setState(() {});
   }
 
+  /// Al empezar a mover una foto o un archivo, fuera la selección de texto.
+  void _onMediaDrag() {
+    if (!mediaDragActive.value || !mounted) return;
+    _stopEdgeScroll();
+    final s = _ctrl.selection;
+    if (s.isValid && !s.isCollapsed) {
+      _ctrl.updateSelection(
+          TextSelection.collapsed(offset: s.baseOffset), ChangeSource.local);
+    }
+  }
+
   void _onTheme() {
     if (mounted) setState(() {});
   }
@@ -824,6 +854,7 @@ class _NoteEditorState extends State<NoteEditor> {
   void dispose() {
     _edgeRunning = false;
     themeSettings.removeListener(_onTheme);
+    mediaDragActive.removeListener(_onMediaDrag);
     if (_titleSave?.isActive ?? false) {
       _titleSave!.cancel();
       _renameFromBoard();

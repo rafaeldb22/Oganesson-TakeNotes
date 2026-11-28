@@ -16,6 +16,10 @@ import 'theme.dart';
 // ------------------------------------------------- mover una imagen
 
 /// Lo que se arrastra al mover una imagen dentro de la nota.
+/// true mientras se arrastra una foto o un archivo para moverlo: el editor
+/// no debe seleccionar texto a la vez.
+final mediaDragActive = ValueNotifier<bool>(false);
+
 class ImageMovePayload {
   const ImageMovePayload(this.src, this.offsetOf, {this.embed});
   final String src;
@@ -40,10 +44,14 @@ int _lineStart(String t, int offset) =>
 bool caretNextToImage(QuillController c) {
   final sel = c.selection;
   if (!sel.isValid || !sel.isCollapsed) return false;
-  final t = _plain(c);
+  // Solo los dos caracteres de alrededor (no todo el texto en cada
+  // movimiento del cursor).
+  final len = c.document.length;
   final o = sel.baseOffset;
-  return (o < t.length && t.codeUnitAt(o) == 0xFFFC) ||
-      (o > 0 && o <= t.length && t.codeUnitAt(o - 1) == 0xFFFC);
+  final from = max(0, o - 1);
+  final n = min(2, len - from);
+  if (n <= 0) return false;
+  return c.document.getPlainText(from, n).contains('\uFFFC');
 }
 
 /// Quita el embed de [offset] y su línea, sin dejar un hueco en la nota.

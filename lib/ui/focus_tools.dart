@@ -291,9 +291,8 @@ class _PomodoroTomatoState extends State<PomodoroTomato> {
       listenable: pomo,
       builder: (context, _) {
         final p = Palette.of(context);
-        final focus = pomo.phase == PomodoroPhase.focus;
-        // Del tema: el acento; en el descanso, el acento más suave.
-        final body = focus ? p.accent : Color.lerp(p.accent, p.card, 0.45)!;
+        final colors =
+            TomatoColors.of(p.accent, rest: pomo.phase != PomodoroPhase.focus);
         final visible = pomo.active || widget.alwaysVisible;
         // Sin Tooltip: el tomate está por encima del Navigator (sin Overlay)
         // y un Tooltip ahí rompía la pantalla entera al pasar el ratón.
@@ -315,29 +314,22 @@ class _PomodoroTomatoState extends State<PomodoroTomato> {
                       duration: Anim.fast,
                       scale: _hover ? 1.06 : 1,
                       child: SizedBox(
-                        width: 116,
-                        height: 116,
+                        width: 120,
+                        height: 120,
                         child: CustomPaint(
-                          painter: _Tomato(
-                            body: body,
-                            leaf: Color.lerp(p.accent, Colors.black, 0.35)!,
-                            screen: p.card,
-                            ink: p.accent,
-                            progress: pomo.progress,
-                          ),
-                          child: Padding(
-                            padding: const EdgeInsets.only(top: 22),
-                            child: Center(
-                              child: Text(_mmss(pomo.left),
-                                  style: TextStyle(
-                                      color: Color.lerp(
-                                          p.accent, Colors.black, 0.25),
-                                      fontSize: 19,
-                                      fontWeight: FontWeight.w800,
-                                      fontFeatures: const [
-                                        FontFeature.tabularFigures()
-                                      ])),
-                            ),
+                          painter: _Tomato(colors),
+                          child: Align(
+                            alignment: const Alignment(0, 0.16),
+                            child: Text(_mmss(pomo.left),
+                                style: TextStyle(
+                                    color: colors.digits,
+                                    fontSize: 19,
+                                    height: 1,
+                                    fontWeight: FontWeight.w800,
+                                    letterSpacing: 0.5,
+                                    fontFeatures: const [
+                                      FontFeature.tabularFigures()
+                                    ])),
                           ),
                         ),
                       ),
@@ -350,93 +342,82 @@ class _PomodoroTomatoState extends State<PomodoroTomato> {
   }
 }
 
+/// Colores del tomate a partir del tema: no los mismos que la app, pero de
+/// su familia (el tono del acento hecho "tomate", hojas en un tono vecino,
+/// pantalla crema y números oscuros de ese mismo tono).
+class TomatoColors {
+  const TomatoColors(this.body, this.leaf, this.screen, this.digits);
+  final Color body, leaf, screen, digits;
+
+  factory TomatoColors.of(Color accent, {bool rest = false}) {
+    final h = HSLColor.fromColor(accent).hue;
+    // Tonos grisáceos (Grafito): un rojo tomate suave.
+    final grey = HSLColor.fromColor(accent).saturation < 0.15;
+    final hue = grey ? 8.0 : h;
+    final body =
+        HSLColor.fromAHSL(1, hue, grey ? 0.55 : 0.62, rest ? 0.68 : 0.58)
+            .toColor();
+    final leaf =
+        HSLColor.fromAHSL(1, (hue + (grey ? 100 : 95)) % 360, 0.34, 0.49)
+            .toColor();
+    final screen = HSLColor.fromAHSL(1, hue, 0.70, 0.94).toColor();
+    final digits = HSLColor.fromAHSL(1, hue, 0.42, 0.22).toColor();
+    return TomatoColors(body, leaf, screen, digits);
+  }
+}
+
+/// El tomate de la referencia: plano, más ancho que alto, con dos hojas
+/// redondeadas hacia arriba y una pantalla con el tiempo.
 class _Tomato extends CustomPainter {
-  const _Tomato({
-    required this.body,
-    required this.leaf,
-    required this.screen,
-    required this.ink,
-    required this.progress,
-  });
-  final Color body, leaf, screen, ink;
-  final double progress;
+  const _Tomato(this.c);
+  final TomatoColors c;
 
   @override
   void paint(Canvas canvas, Size size) {
     final w = size.width, h = size.height;
-    final c = Offset(w / 2, h * 0.58);
-    final round = Rect.fromCenter(center: c, width: w * 0.88, height: h * 0.78);
-    // Sombra suave.
-    canvas.drawOval(
-        round.shift(const Offset(0, 4)),
-        Paint()
-          ..color = Colors.black.withValues(alpha: 0.20)
-          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 7));
-    // Cuerpo: el color del tema con un brillo arriba a la izquierda.
-    canvas.drawOval(
-        round,
-        Paint()
-          ..shader = RadialGradient(
-            center: const Alignment(-0.4, -0.5),
-            radius: 0.95,
-            colors: [Color.lerp(body, Colors.white, 0.35)!, body],
-          ).createShader(round));
-    // Lo que queda de la fase, por dentro del borde.
-    canvas.drawArc(
-        round.deflate(5),
-        -math.pi / 2,
-        math.pi * 2 * (1 - progress.clamp(0.0, 1.0)),
-        false,
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 3
-          ..strokeCap = StrokeCap.round
-          ..color = Colors.white.withValues(alpha: 0.7));
-    // Dos hojas y el rabito (como en el boceto).
-    final top = Offset(w / 2, round.top + 3);
-    final leafPaint = Paint()..color = leaf;
-    void leafAt(double dir) {
-      final tip = top + Offset(dir * w * 0.26, -h * 0.13);
-      canvas.drawPath(
-          Path()
-            ..moveTo(top.dx, top.dy)
-            ..quadraticBezierTo(
-                top.dx + dir * w * 0.06, tip.dy - h * 0.07, tip.dx, tip.dy)
-            ..quadraticBezierTo(
-                top.dx + dir * w * 0.16, top.dy + h * 0.02, top.dx, top.dy)
-            ..close(),
-          leafPaint);
-    }
-
-    leafAt(-1);
-    leafAt(1);
-    canvas.drawLine(
-        top,
-        top + Offset(w * 0.03, -h * 0.09),
-        Paint()
-          ..color = leaf
-          ..strokeWidth = 3.5
-          ..strokeCap = StrokeCap.round);
-    // Pantallita del tiempo.
-    final display = RRect.fromRectAndRadius(
-        Rect.fromCenter(
-            center: Offset(w / 2, c.dy + 2), width: w * 0.62, height: h * 0.26),
-        const Radius.circular(9));
-    canvas.drawRRect(display, Paint()..color = screen.withValues(alpha: 0.95));
+    // Cuerpo: un hundido arriba en el centro y los lados anchos.
+    final body = Path()
+      ..moveTo(w * 0.50, h * 0.27)
+      ..cubicTo(w * 0.70, h * 0.23, w * 0.94, h * 0.32, w * 0.95, h * 0.56)
+      ..cubicTo(w * 0.96, h * 0.80, w * 0.76, h * 0.93, w * 0.50, h * 0.93)
+      ..cubicTo(w * 0.24, h * 0.93, w * 0.04, h * 0.80, w * 0.05, h * 0.56)
+      ..cubicTo(w * 0.06, h * 0.32, w * 0.30, h * 0.23, w * 0.50, h * 0.27)
+      ..close();
+    canvas.drawPath(body, Paint()..color = c.body);
+    // Hojas: dos gotas que salen del rabito hacia arriba.
+    final leaf = Paint()..color = c.leaf;
+    final base = Offset(w * 0.50, h * 0.28);
+    canvas.drawPath(
+        Path()
+          ..moveTo(base.dx, base.dy)
+          ..cubicTo(w * 0.42, h * 0.28, w * 0.29, h * 0.26, w * 0.25, h * 0.17)
+          ..cubicTo(w * 0.23, h * 0.11, w * 0.28, h * 0.09, w * 0.35, h * 0.09)
+          ..cubicTo(w * 0.46, h * 0.10, w * 0.50, h * 0.18, base.dx, base.dy)
+          ..close(),
+        leaf);
+    canvas.drawPath(
+        Path()
+          ..moveTo(base.dx, base.dy)
+          ..cubicTo(w * 0.51, h * 0.16, w * 0.57, h * 0.07, w * 0.68, h * 0.07)
+          ..cubicTo(w * 0.75, h * 0.07, w * 0.76, h * 0.10, w * 0.74, h * 0.14)
+          ..cubicTo(w * 0.68, h * 0.25, w * 0.57, h * 0.25, base.dx, base.dy)
+          ..close(),
+        leaf);
+    canvas.drawCircle(base + Offset(0, h * 0.01), w * 0.022, leaf);
+    // Pantalla.
     canvas.drawRRect(
-        display,
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 1.6
-          ..color = Color.lerp(ink, Colors.black, 0.3)!);
+        RRect.fromRectAndRadius(
+            Rect.fromCenter(
+                center: Offset(w * 0.50, h * 0.58),
+                width: w * 0.58,
+                height: h * 0.24),
+            Radius.circular(w * 0.08)),
+        Paint()..color = c.screen);
   }
 
   @override
   bool shouldRepaint(_Tomato o) =>
-      o.body != body ||
-      o.progress != progress ||
-      o.leaf != leaf ||
-      o.screen != screen;
+      o.c.body != c.body || o.c.leaf != c.leaf || o.c.screen != c.screen;
 }
 
 String _mmss(Duration d) {

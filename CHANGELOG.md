@@ -2,6 +2,23 @@
 
 All notable changes to Oganesson TakeNotes (formerly *Notas* / *BabuNotes*).
 
+## [3.17.0] — 2026-11-28
+
+### Changed
+- **New pomodoro tomato**, drawn like the reference: flat, round, two leaves and a cream screen with
+  the time. Its colours come from the theme (each theme gets its own tomato).
+- **Desktop widgets stay on the desktop**: closing Oganesson brings the widget back, and it returns
+  when the PC starts. They fade in and out, can be pinned on top of other windows, and the ✕ removes
+  them. The pomodoro is no longer in the widgets list.
+- **Ctrl+Alt+N** quick note fades in and out, without flashing the big window first.
+- **Six calendar colours per theme**: the colour picker offers 6 colours that match the theme, and
+  notes are shown with the closest of them, so they change with the theme.
+- **Smoother text selection**: the editor no longer re-encodes the whole note on every selection move,
+  which caused micro-stutters.
+
+### Fixed
+- Moving a photo or a file by holding it no longer selects text at the same time.
+
 ## [3.16.2] — 2026-11-28
 
 ### Fixed

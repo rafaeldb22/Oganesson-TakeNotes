@@ -37,7 +37,8 @@ void main() {
     expect(list.first.id, 's');
     final colors = notePalette(single);
     expect(colors.toSet(), hasLength(1));
-    expect(colors.first.toARGB32(), 0xFF3B6FE0);
+    // Se ve con el color más parecido de los 6 del tema puesto.
+    expect(colors.first, themedNoteColor(0xFF3B6FE0));
     expect(notePalette(period).toSet().length, greaterThan(1));
   });
 

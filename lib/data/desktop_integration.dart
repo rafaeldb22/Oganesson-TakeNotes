@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/animation.dart' show Curves;
 import 'package:flutter/services.dart';
 import 'package:hotkey_manager/hotkey_manager.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -253,67 +254,156 @@ class DesktopIntegration with WindowListener, TrayListener {
     _wasMaximized = await windowManager.isMaximized();
     if (await windowManager.isMinimized()) await windowManager.restore();
     if (_wasMaximized) await windowManager.unmaximize();
+    // Invisible mientras cambia de tamaño: sin el destello de la ventana
+    // grande; luego aparece con un fundido.
+    if (_wasVisible) await _fade(1, 0);
+    await windowManager.setOpacity(0);
     _bounds = await windowManager.getBounds();
     await windowManager.setMinimumSize(const Size(420, 240));
     await windowManager.setSize(const Size(560, 320));
     await windowManager.center();
     await windowManager.setAlwaysOnTop(true);
-    await windowManager.setOpacity(1);
+    _capture.add(null);
     await windowManager.show();
     await windowManager.focus();
-    _capture.add(null);
+    await Future<void>.delayed(const Duration(milliseconds: 60));
+    await _fade(0, 1);
   }
 
   /// Widget de escritorio activo ('tareas', 'calendario'…) o null.
   final widgetMode = ValueNotifier<String?>(null);
+
+  /// El widget que se queda en el escritorio: al cerrar la app (o al
+  /// encender el PC) vuelve a salir. null = ninguno.
+  String? keptWidget;
+  final widgetOnTop = ValueNotifier<bool>(false);
   Rect? _widgetBounds;
   bool _widgetWasMaximized = false;
+  static const _kWidget = 'widget_escritorio';
+  static const _kWidgetRect = 'widget_escritorio_sitio';
 
   static const _widgetSizes = {
     'tareas': Size(320, 400),
     'calendario': Size(330, 340),
-    'pomodoro': Size(240, 300),
     'fijada': Size(320, 360),
   };
 
-  /// La app pasa a ser una ventanita siempre visible con el widget [kind].
+  /// Fundido de la ventana (sin que se vea la ventana grande un instante).
+  Future<void> _fade(double from, double to) async {
+    const steps = 9;
+    for (var i = 1; i <= steps; i++) {
+      final t = Curves.easeOutCubic.transform(i / steps);
+      await windowManager.setOpacity(from + (to - from) * t);
+      await Future<void>.delayed(const Duration(milliseconds: 14));
+    }
+  }
+
+  /// La app pasa a ser una ventanita en el escritorio con el widget [kind],
+  /// con un fundido de entrada. Se recuerda para que siga ahí.
   Future<void> enterWidget(String kind) async {
     if (!supported) return;
+    final visible = await windowManager.isVisible();
+    if (visible) await _fade(1, 0);
+    await windowManager.setOpacity(0);
     if (widgetMode.value == null) {
       _widgetWasMaximized = await windowManager.isMaximized();
       if (_widgetWasMaximized) await windowManager.unmaximize();
       _widgetBounds = await windowManager.getBounds();
     }
     final size = _widgetSizes[kind] ?? const Size(320, 360);
+    Rect? saved;
+    try {
+      final r = (await SharedPreferences.getInstance())
+          .getStringList(_kWidgetRect)
+          ?.map(double.parse)
+          .toList();
+      if (r != null && r.length == 2) {
+        saved = Rect.fromLTWH(r[0], r[1], size.width, size.height);
+      }
+    } catch (_) {}
     final b = _widgetBounds!;
     widgetMode.value = kind;
+    keptWidget = kind;
     await windowManager.setMinimumSize(const Size(220, 200));
-    await windowManager.setBounds(Rect.fromLTWH(
-        b.right - size.width - 24, b.top + 40, size.width, size.height));
-    await windowManager.setAlwaysOnTop(true);
+    await windowManager.setBounds(saved ??
+        Rect.fromLTWH(
+            b.right - size.width - 24, b.top + 40, size.width, size.height));
+    await windowManager.setSkipTaskbar(true);
+    await windowManager.setAlwaysOnTop(widgetOnTop.value);
     await windowManager.show();
+    // Un par de fotogramas para que pinte el widget antes de aparecer.
+    await Future<void>.delayed(const Duration(milliseconds: 60));
+    await _fade(0, 1);
+    try {
+      await (await SharedPreferences.getInstance()).setString(_kWidget, kind);
+    } catch (_) {}
   }
 
-  /// Vuelve a la ventana normal (o la oculta en la bandeja con [hide]).
-  Future<void> exitWidget({bool hide = false}) async {
+  /// Vuelve a la ventana normal con un fundido. Con [close] el widget deja
+  /// de estar en el escritorio (y la app se oculta en la bandeja).
+  Future<void> exitWidget({bool close = false}) async {
     if (widgetMode.value == null) return;
+    try {
+      final r = await windowManager.getBounds();
+      await (await SharedPreferences.getInstance())
+          .setStringList(_kWidgetRect, ['${r.left}', '${r.top}']);
+      if (close) {
+        keptWidget = null;
+        await (await SharedPreferences.getInstance()).remove(_kWidget);
+      }
+    } catch (_) {}
+    await _fade(1, 0);
     widgetMode.value = null;
     await windowManager.setAlwaysOnTop(false);
+    await windowManager.setSkipTaskbar(false);
     await windowManager.setMinimumSize(const Size(760, 540));
     if (_widgetBounds != null) await windowManager.setBounds(_widgetBounds!);
     if (_widgetWasMaximized) await windowManager.maximize();
-    if (hide) await windowManager.hide();
+    if (close) {
+      await windowManager.hide();
+      await windowManager.setOpacity(1);
+      return;
+    }
+    await Future<void>.delayed(const Duration(milliseconds: 60));
+    await windowManager.focus();
+    await _fade(0, 1);
+  }
+
+  Future<void> setWidgetOnTop(bool v) async {
+    widgetOnTop.value = v;
+    if (widgetMode.value != null) await windowManager.setAlwaysOnTop(v);
+  }
+
+  /// Al arrancar: si había un widget en el escritorio, vuelve.
+  Future<void> restoreWidget() async {
+    if (!supported) return;
+    try {
+      final kind = (await SharedPreferences.getInstance()).getString(_kWidget);
+      if (kind != null && _widgetSizes.containsKey(kind)) {
+        keptWidget = kind;
+        // Al encender el PC (app en segundo plano) sale el widget; si abres
+        // la app tú, se ve la app y el widget vuelve al cerrarla.
+        if (startedHidden) await enterWidget(kind);
+      }
+    } catch (_) {}
   }
 
   /// Fin de la nota rápida. Con [keepOpen] la ventana se queda abierta.
   Future<void> endCapture({bool keepOpen = false}) async {
     if (!_capturing) return;
     _capturing = false;
+    await _fade(1, 0);
     await windowManager.setAlwaysOnTop(false);
     await windowManager.setMinimumSize(const Size(760, 540));
     if (_bounds != null) await windowManager.setBounds(_bounds!);
     if (_wasMaximized) await windowManager.maximize();
-    if (!_wasVisible && !keepOpen) await windowManager.hide();
+    if (!_wasVisible && !keepOpen) {
+      await windowManager.hide();
+      await windowManager.setOpacity(1);
+      return;
+    }
+    await Future<void>.delayed(const Duration(milliseconds: 60));
+    await _fade(0, 1);
   }
 
   /// Cierra la app de verdad (no solo la ventana).
@@ -356,6 +446,9 @@ class DesktopIntegration with WindowListener, TrayListener {
     }
     if (choice == 'salir') {
       await quit();
+    } else if (keptWidget != null && widgetMode.value == null) {
+      // El widget sigue en el escritorio: la app vuelve a ser el widget.
+      await enterWidget(keptWidget!);
     } else {
       await windowManager.hide();
     }

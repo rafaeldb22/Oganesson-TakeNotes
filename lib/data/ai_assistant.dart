@@ -10,7 +10,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/note.dart';
 import '../ui/i18n.dart';
-import '../ui/urgency.dart' show noteColors;
+import '../ui/urgency.dart' show noteColors, nearestThemeColor;
 import 'markdown.dart';
 import 'note_attachments.dart';
 import 'note_board.dart';
@@ -2776,7 +2776,7 @@ class AiTools {
         if (name != 'ninguno' && name.isNotEmpty) {
           final m = noteColors.where((c) => c.$1.toLowerCase() == name);
           if (m.isEmpty) return {'error': 'Color desconocido: $name'};
-          color = m.first.$2;
+          color = nearestThemeColor(m.first.$2);
         }
         if (!await _ask(trf(
             'La IA quiere cambiar el color de «{0}». ¿Cambiarlo?',

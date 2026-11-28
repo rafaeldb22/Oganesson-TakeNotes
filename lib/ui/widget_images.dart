@@ -343,7 +343,7 @@ class PinnedWidgetImage extends StatelessWidget {
                           margin: const EdgeInsets.only(right: 8),
                           decoration: BoxDecoration(
                             color: n.color != null
-                                ? Color(n.color!)
+                                ? themedNoteColor(n.color!)
                                 : colors.accent.withValues(alpha: 0.6),
                             borderRadius: BorderRadius.circular(2),
                           ),

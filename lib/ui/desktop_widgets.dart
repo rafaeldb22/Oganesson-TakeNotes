@@ -6,17 +6,16 @@ import '../data/desktop_integration.dart';
 import '../data/notes_repository.dart';
 import '../models/note.dart';
 import 'anim.dart';
-import 'focus_tools.dart';
 import 'format.dart';
 import 'i18n.dart';
 import 'theme.dart';
-import 'urgency.dart' show fuseForTheme, notePalette;
+import 'urgency.dart' show fuseForTheme, notePalette, themedNoteColor;
 
 /// Color de una nota en el calendario (el suyo o el de su mecha).
 Color calendarColor(BuildContext context, Note n) => n.done
     ? Palette.secondary(context)
     : (n.color != null
-        ? Color(n.color!)
+        ? themedNoteColor(n.color!)
         : fuseForTheme(context, notePalette(n)).first);
 
 /// Las notas de la sesión abierta (las pone la pantalla principal), para
@@ -39,7 +38,6 @@ const desktopWidgets = <(String, IconData, String, String)>[
     'Calendario del mes',
     'El mes con un punto en los días con tareas'
   ),
-  ('pomodoro', Icons.timer_outlined, 'Pomodoro', 'El tomate y sus botones'),
   (
     'fijada',
     Icons.push_pin_outlined,
@@ -70,9 +68,9 @@ Future<void> showWidgetsSheet(BuildContext context) =>
             ]),
             const SizedBox(height: 6),
             Text(
-                tr('Oganesson se convierte en una ventanita siempre visible '
-                    'en el escritorio. Arrástrala donde quieras; el botón de '
-                    'abrir la devuelve a su tamaño.'),
+                tr('El widget se queda en el escritorio: cuando cierras '
+                    'Oganesson vuelve a salir, y también al encender el PC. '
+                    'Arrástralo donde quieras; la ✕ lo quita.'),
                 style: TextStyle(color: p.secondary, fontSize: 13)),
             const SizedBox(height: 14),
             for (final (i, (id, icon, name, hint)) in desktopWidgets.indexed)
@@ -138,6 +136,21 @@ class DesktopWidgetView extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(fontWeight: FontWeight.w800)),
                 ),
+                ValueListenableBuilder<bool>(
+                  valueListenable: DesktopIntegration.instance.widgetOnTop,
+                  builder: (_, top, __) => IconButton(
+                    tooltip: top
+                        ? tr('Dejar de tenerlo encima')
+                        : tr('Siempre encima de las ventanas'),
+                    visualDensity: VisualDensity.compact,
+                    icon: Icon(
+                        top ? Icons.push_pin_rounded : Icons.push_pin_outlined,
+                        size: 16,
+                        color: top ? p.accent : null),
+                    onPressed: () =>
+                        DesktopIntegration.instance.setWidgetOnTop(!top),
+                  ),
+                ),
                 IconButton(
                   tooltip: tr('Abrir Oganesson'),
                   visualDensity: VisualDensity.compact,
@@ -145,11 +158,11 @@ class DesktopWidgetView extends StatelessWidget {
                   onPressed: DesktopIntegration.instance.exitWidget,
                 ),
                 IconButton(
-                  tooltip: tr('Cerrar widget'),
+                  tooltip: tr('Quitar el widget del escritorio'),
                   visualDensity: VisualDensity.compact,
                   icon: const Icon(Icons.close_rounded, size: 18),
                   onPressed: () =>
-                      DesktopIntegration.instance.exitWidget(hide: true),
+                      DesktopIntegration.instance.exitWidget(close: true),
                 ),
               ]),
             ),
@@ -163,7 +176,6 @@ class DesktopWidgetView extends StatelessWidget {
                     listenable: repo,
                     builder: (context, _) => switch (kind) {
                       'calendario' => _MonthWidget(repo: repo),
-                      'pomodoro' => const _PomodoroWidget(),
                       'fijada' => _PinnedWidget(repo: repo),
                       _ => _TasksWidget(repo: repo),
                     },
@@ -290,44 +302,6 @@ class _MonthWidget extends StatelessWidget {
             ]),
           ),
       ]),
-    );
-  }
-}
-
-class _PomodoroWidget extends StatelessWidget {
-  const _PomodoroWidget();
-
-  @override
-  Widget build(BuildContext context) {
-    final pomo = Pomodoro.instance;
-    return ListenableBuilder(
-      listenable: pomo,
-      builder: (context, _) => Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Transform.scale(
-              scale: 1.1,
-              child: PomodoroTomato(onTap: () {}, alwaysVisible: true)),
-          const SizedBox(height: 18),
-          Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-            IconButton(
-                tooltip: tr('Reiniciar'),
-                onPressed: pomo.reset,
-                icon: const Icon(Icons.replay_rounded)),
-            IconButton.filled(
-              tooltip: pomo.running ? tr('Pausar') : tr('Empezar'),
-              onPressed: pomo.running ? pomo.pause : pomo.start,
-              icon: Icon(pomo.running
-                  ? Icons.pause_rounded
-                  : Icons.play_arrow_rounded),
-            ),
-            IconButton(
-                tooltip: tr('Saltar'),
-                onPressed: pomo.skip,
-                icon: const Icon(Icons.skip_next_rounded)),
-          ]),
-        ],
-      ),
     );
   }
 }

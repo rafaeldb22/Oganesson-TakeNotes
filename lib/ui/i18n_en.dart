@@ -1323,4 +1323,9 @@ const enStrings = <String, String>{
   'Última sincronización: {0}': 'Last sync: {0}',
   'Desconectar': 'Disconnect',
   'Sincroniza tus tareas con Google': 'Sync your tasks with Google',
+  'Dejar de tenerlo encima': 'Stop keeping it on top',
+  'Siempre encima de las ventanas': 'Always on top of windows',
+  'Quitar el widget del escritorio': 'Remove the widget from the desktop',
+  'El widget se queda en el escritorio: cuando cierras Oganesson vuelve a salir, y también al encender el PC. Arrástralo donde quieras; la ✕ lo quita.':
+      'The widget stays on your desktop: it comes back when you close Oganesson and when you turn on the PC. Drag it anywhere; the ✕ removes it.',
 };

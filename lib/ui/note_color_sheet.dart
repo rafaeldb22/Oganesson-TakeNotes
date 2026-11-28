@@ -21,7 +21,8 @@ Future<void> showNoteColorSheet(
         final current = repo.byId(noteId)?.color;
         final options = <(String, int?)>[
           (tr('Automático'), null),
-          ...noteColors
+          // Solo 6, del tema que está puesto.
+          ...themeNoteColors
         ];
         return SafeArea(
           child: Padding(

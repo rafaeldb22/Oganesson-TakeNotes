@@ -530,7 +530,7 @@ class _MonthGrid extends StatelessWidget {
         final base = n.done
             ? Palette.secondary(context)
             : (n.color != null
-                ? Color(n.color!)
+                ? themedNoteColor(n.color!)
                 : fuseForTheme(context, notePalette(n)).first);
         final alpha = n.done ? 0.6 : 0.95;
         lines.add(_WeekLine(lane, first, d, [

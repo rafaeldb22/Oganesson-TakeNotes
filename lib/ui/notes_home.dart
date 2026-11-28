@@ -174,6 +174,11 @@ class _NotesHomeState extends State<NotesHome> {
     HardwareKeyboard.instance.addHandler(_onKey);
     activeRepo = repo;
     unawaited(GoogleCalendar.instance.attach(repo));
+    // Un widget que se quedó en el escritorio vuelve al abrir la app.
+    if (!_widgetRestored) {
+      _widgetRestored = true;
+      unawaited(DesktopIntegration.instance.restoreWidget());
+    }
     SmartGroups.instance.addListener(_onGroups);
     _widgetSub = WidgetBridge.clicks.listen(_onWidgetUri);
     // Al pulsar un aviso: abrir la nota o marcarla como hecha.
@@ -763,6 +768,8 @@ class _NotesHomeState extends State<NotesHome> {
       }
     }
   }
+
+  static bool _widgetRestored = false;
 
   void _walk(int step) {
     for (var i = _visitedAt + step; i >= 0 && i < _visited.length; i += step) {

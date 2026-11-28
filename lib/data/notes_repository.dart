@@ -11,7 +11,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/note.dart';
-import '../ui/urgency.dart' show noteColors;
+import '../ui/urgency.dart' show themeNoteColors;
 import 'note_ics.dart';
 import 'note_images.dart';
 import 'note_sharing.dart';
@@ -539,10 +539,11 @@ class NotesRepository extends ChangeNotifier {
         if (c != null) used[c] = (used[c] ?? 0) + 1;
       }
     }
-    var best = noteColors.first.$2;
+    final palette = themeNoteColors;
+    var best = palette.first.$2;
     var bestUses = used[best] ?? 0;
     var bestGap = -1.0;
-    for (final (_, c) in noteColors) {
+    for (final (_, c) in palette) {
       final uses = used[c] ?? 0;
       if (uses > bestUses) continue;
       var gap = double.infinity;

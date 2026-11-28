@@ -106,18 +106,16 @@ void main() {
     });
   });
 
-  test('las primeras líneas no usan tonos casi iguales', () {
+  test('las primeras líneas usan los 6 colores del tema, sin repetir', () {
     final repo = _repo();
     for (final n in repo.notes.toList()) {
       if (n.isTemporal) repo.setSchedule(n.id);
     }
     final due = DateTime.now().toUtc().add(const Duration(days: 1));
     final colors = {
-      for (var i = 0; i < 8; i++) repo.createNote(dueAt: due).color
+      for (var i = 0; i < 6; i++) repo.createNote(dueAt: due).color
     };
-    expect(colors.length, 8);
-    const lavanda = 0xFF9F8CFF, uva = 0xFFB197FC;
-    expect(colors.contains(lavanda) && colors.contains(uva), isFalse);
+    expect(colors, {for (final (_, c) in themeNoteColors) c});
     repo.dispose();
   });
 
@@ -129,7 +127,7 @@ void main() {
         .map((n) => n.color)
         .whereType<int>()
         .toSet();
-    final free = noteColors.length - used.length;
+    final free = themeNoteColors.length - used.length;
     final fresh = [for (var i = 0; i < free; i++) repo.createNote(dueAt: due)];
     final colors = fresh.map((n) => n.color!).toSet();
     expect(colors.length, free);

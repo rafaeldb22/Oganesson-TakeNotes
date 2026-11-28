@@ -68,6 +68,87 @@ List<Color> fuseForTheme(BuildContext context, List<Color> colors) {
 /// Colores que se pueden elegir para una nota (y su mecha).
 /// Ordenados por tono. Los valores ya usados no se cambian (las notas
 /// guardan el ARGB), solo se añaden nuevos.
+/// Los 6 colores que se pueden poner a una nota temporal: salen del tema
+/// (el acento y tonos vecinos, más uno que contrasta), así combinan con él.
+List<(String, int)> get themeNoteColors {
+  final t = themeSettings.theme;
+  if (_paletteFor != t.id) {
+    _palette = noteColorsFor(t);
+    _paletteFor = t.id;
+  }
+  return _palette;
+}
+
+String? _paletteFor;
+List<(String, int)> _palette = const [];
+
+List<(String, int)> noteColorsFor(AppTheme t) {
+  final a = HSLColor.fromColor(t.light.accent);
+  // Tema gris (Grafito): una gama propia de tonos sobrios.
+  final grey = a.saturation < 0.15;
+  final base = grey ? 210.0 : a.hue;
+  const offsets = [0.0, 32.0, -32.0, 64.0, 180.0, 212.0];
+  const light = [0.50, 0.56, 0.46, 0.58, 0.52, 0.47];
+  final used = <String>{};
+  return [
+    for (var i = 0; i < 6; i++)
+      () {
+        var h = (base + offsets[i]) % 360;
+        if (h < 0) h += 360;
+        final c =
+            HSLColor.fromAHSL(1, h, grey ? 0.30 + i * 0.06 : 0.68, light[i])
+                .toColor();
+        var name = colorName(h);
+        // Dos tonos con el mismo nombre: claro / oscuro.
+        if (!used.add(name))
+          name = '$name ${light[i] < 0.5 ? 'oscuro' : 'claro'}';
+        return (name, c.toARGB32());
+      }(),
+  ];
+}
+
+/// Color con que se ve una nota: el suyo ajustado a los 6 del tema puesto
+/// (al cambiar de tema, las notas cambian con él).
+Color themedNoteColor(int argb) => Color(nearestThemeColor(argb));
+
+/// Nombre aproximado de un tono (para la lista de colores y la IA).
+String colorName(double hue) {
+  const names = [
+    (15.0, 'Rojo'),
+    (40.0, 'Naranja'),
+    (62.0, 'Ámbar'),
+    (85.0, 'Lima'),
+    (150.0, 'Verde'),
+    (185.0, 'Turquesa'),
+    (205.0, 'Cielo'),
+    (245.0, 'Azul'),
+    (275.0, 'Índigo'),
+    (305.0, 'Violeta'),
+    (335.0, 'Magenta'),
+    (360.0, 'Rosa'),
+  ];
+  for (final (limit, name) in names) {
+    if (hue < limit) return name;
+  }
+  return 'Rojo';
+}
+
+/// El color del tema más parecido a [argb] (la IA puede pedir cualquiera).
+int nearestThemeColor(int argb) {
+  int d(int a, int b) {
+    final dr = (a >> 16 & 255) - (b >> 16 & 255);
+    final dg = (a >> 8 & 255) - (b >> 8 & 255);
+    final db = (a & 255) - (b & 255);
+    return dr * dr + dg * dg + db * db;
+  }
+
+  return themeNoteColors
+      .map((c) => c.$2)
+      .reduce((x, y) => d(x, argb) <= d(y, argb) ? x : y);
+}
+
+/// Todos los nombres de color que entiende la IA (se ajustan a los 6 del
+/// tema al aplicarlos).
 const noteColors = <(String, int)>[
   ('Granate', 0xFF9F1D35),
   ('Rojo', 0xFFE5484D),
@@ -122,8 +203,9 @@ List<Color> fusePalette(int? color) {
 
 /// Paleta de una nota: las de un solo día tienen un color fijo, sin degradado.
 List<Color> notePalette(Note n) {
-  if (!n.isSingleDay) return fusePalette(n.color);
-  final c = n.color == null ? fuseStops.first : Color(n.color!);
+  final own = n.color == null ? null : nearestThemeColor(n.color!);
+  if (!n.isSingleDay) return fusePalette(own);
+  final c = own == null ? fuseStops.first : Color(own);
   return [c, c];
 }
 

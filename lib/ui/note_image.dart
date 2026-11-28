@@ -854,8 +854,13 @@ class _NoteImageViewState extends State<NoteImageView> {
         dragAnchorStrategy: pointerDragAnchorStrategy,
         feedback: _dragFeedback(),
         childWhenDragging: Opacity(opacity: 0.35, child: content),
-        onDragStarted: HapticFeedback.mediumImpact,
+        onDragStarted: () {
+          mediaDragActive.value = true;
+          HapticFeedback.mediumImpact();
+        },
+        onDragEnd: (_) => mediaDragActive.value = false,
         onDraggableCanceled: (_, __) {
+          mediaDragActive.value = false;
           final a = _downAt, b = _upAt;
           if (!isDesktopWindows &&
               a != null &&
