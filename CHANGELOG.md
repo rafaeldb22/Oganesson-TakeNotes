@@ -2,6 +2,11 @@
 
 All notable changes to Oganesson TakeNotes (formerly *Notas* / *BabuNotes*).
 
+## [3.15.1] — 2026-11-28
+
+### Changed
+- The Windows build now includes the Google Calendar key: *Connect with Google* works.
+
 ## [3.15.0] — 2026-11-28
 
 ### Added
