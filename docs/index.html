@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Oganesson TakeNotes</title>
+<meta name="description" content="Oganesson: notas, tareas y calendario para Windows y Android, sincronizados.">
+<link rel="icon" href="icon.png">
+<style>
+  :root { --bg:#141826; --card:#1d2336; --ink:#f3ecd9; --muted:#b8b2a2; --gold:#e3b75a; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: "Segoe UI", Roboto, system-ui, sans-serif; background: var(--bg); color: var(--ink); line-height: 1.55; }
+  main { max-width: 860px; margin: 0 auto; padding: 48px 20px 64px; }
+  header { display:flex; align-items:center; gap:18px; }
+  header img { width:72px; height:72px; border-radius:18px; }
+  h1 { margin:0; font-size: 2.2rem; }
+  .tag { color: var(--muted); margin: 4px 0 0; }
+  .hero { margin: 32px 0; }
+  .hero img { width:100%; border-radius:16px; box-shadow: 0 12px 40px rgba(0,0,0,.4); }
+  .grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:14px; margin: 28px 0; }
+  .card { background: var(--card); border-radius: 16px; padding: 18px; }
+  .card h3 { margin: 0 0 6px; color: var(--gold); font-size: 1.05rem; }
+  .card p { margin:0; color: var(--muted); font-size: .95rem; }
+  .btn { display:inline-block; background: var(--gold); color:#1a1408; font-weight:700; text-decoration:none; padding: 12px 20px; border-radius: 12px; margin: 6px 8px 6px 0; }
+  .btn.alt { background: transparent; color: var(--ink); border: 1px solid #3a4260; }
+  footer { margin-top: 40px; color: var(--muted); font-size: .9rem; }
+  footer a { color: var(--gold); }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <img src="icon.png" alt="Logo de Oganesson">
+    <div>
+      <h1>Oganesson TakeNotes</h1>
+      <p class="tag">Notas, tareas y calendario para Windows y Android, siempre sincronizados.</p>
+    </div>
+  </header>
+
+  <div class="hero"><img src="banner.png" alt="Oganesson en Windows"></div>
+
+  <a class="btn" href="https://github.com/rafaeldb22/Oganesson-TakeNotes/releases/latest">Descargar</a>
+  <a class="btn alt" href="privacy.html">Política de privacidad</a>
+
+  <div class="grid">
+    <div class="card"><h3>Notas con formato</h3><p>Listas, casillas, títulos, fuentes, imágenes, archivos y notas de voz.</p></div>
+    <div class="card"><h3>Calendario y avisos</h3><p>Tareas con fecha, avisos en el móvil y en el PC, y sincronización con Google Calendar.</p></div>
+    <div class="card"><h3>Pizarras</h3><p>Dibuja a mano con presión, varias pizarras por nota y exportación a imagen.</p></div>
+    <div class="card"><h3>Red de notas</h3><p>Enlaza notas entre sí (también con IA) y míralas como un mapa.</p></div>
+    <div class="card"><h3>Asistente IA</h3><p>Con tu propia clave de Gemini, ChatGPT o Claude. El Vault nunca se envía.</p></div>
+    <div class="card"><h3>Vault</h3><p>Notas protegidas con contraseña o PIN.</p></div>
+  </div>
+
+  <footer>
+    © 2026 Oganesson TakeNotes · <a href="privacy.html">Privacidad</a> ·
+    <a href="https://github.com/rafaeldb22/Oganesson-TakeNotes">Código en GitHub</a>
+  </footer>
+</main>
+</body>
+</html>
